@@ -66,14 +66,18 @@ def test_path1_migrate_produces_schema_valid_v2(
     assert sidecar.exists()
 
     data = json.loads(sidecar.read_text())
-    # The v2 schema payload was retired by Spec 013 (v3-only tool); the
-    # migrate_v1_to_v2 transform itself is unchanged and still targets v2.
-    assert data["haex_hive_version"] == "2"
+    # Spec 013 US2 chains v1 → v2 → v3, so the sidecar is the final v3 shape.
+    # The v1 → v2 leg is exercised in isolation by test_migrate_haex_hive_self.
+    assert data["haex_hive_version"] == "3"
 
-    sidecar.replace(consumer / ".haex-hive.json")
+    # Adopt every proposal the invocation produced (consumer + publisher-root
+    # + per-molecule). Only after all `.migrated` siblings replace their
+    # originals does the rerun report "already at v3".
+    for migrated in list(consumer.rglob("*.migrated")):
+        migrated.replace(migrated.with_name(migrated.name[: -len(".migrated")]))
     rerun = _run_haex(consumer, "migrate", state_root=self_migration_fixture["state_root"])
     assert rerun.returncode == 0
-    assert b"already migrated to v2" in rerun.stderr
+    assert b"already at v3" in rerun.stderr
     assert not sidecar.exists()
 
 
