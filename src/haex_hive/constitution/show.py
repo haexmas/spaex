@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import BinaryIO
 
-from haex_hive.constitution.assemble import CONSTITUTION_PATH
+from haex_hive.constitution.publish import CONSTITUTION_PATH
 from haex_hive.io import transaction
 from haex_hive.model.install_lock import InstallLock, MoleculeEntry
 from haex_hive.util.errors import (

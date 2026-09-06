@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from haex_hive.constitution import assemble
-from haex_hive.constitution.assemble import (
+from haex_hive.constitution import publish as publish_module
+from haex_hive.constitution.publish import (
     CONSTITUTION_PATH,
     _publish_constitution,
-    assemble_single_source,
+    publish_constitution,
 )
 from haex_hive.constitution.resolve import ResolvedConstitutionContribution
 from haex_hive.io import transaction
@@ -115,14 +115,92 @@ def test_single_source_assembles_all_constitution_paths(
         captured["body"] = body
         del repo_root, kwargs
 
-    monkeypatch.setattr(assemble, "_publish_constitution", capture_publish)
+    monkeypatch.setattr(publish_module, "_publish_constitution", capture_publish)
 
-    assemble_single_source(contributions, tmp_path)
+    publish_constitution(contributions, tmp_path)
 
     assert captured == {
         "molecule": _molecule(),
         "body": b"# First\n# Second",
     }
+
+
+def test_publish_constitution_with_empty_contributions_stages_lock_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An empty contribution list publishes install.lock alone with molecules=()."""
+    captured: dict[str, object] = {}
+
+    def capture_publish(molecule, body, repo_root, **kwargs) -> None:
+        captured["molecule"] = molecule
+        captured["body"] = body
+        del repo_root, kwargs
+
+    monkeypatch.setattr(publish_module, "_publish_constitution", capture_publish)
+
+    publish_constitution([], tmp_path)
+
+    assert captured == {"molecule": None, "body": None}
+
+
+def test_publish_constitution_empty_publishes_lock_without_constitution_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only install.lock is staged in the rename-swap when the state is empty."""
+    from haex_hive.io import transaction
+
+    staged_files_captured: list[str] = []
+
+    def capture_publish(live_dir, files, **kwargs) -> None:
+        staged_files_captured.extend(f.relative_path for f in files)
+        del live_dir, kwargs
+
+    monkeypatch.setattr(transaction, "publish_generation", capture_publish)
+
+    _publish_constitution(None, None, tmp_path)
+
+    assert staged_files_captured == [transaction.INSTALL_LOCK_NAME]
+
+
+def test_publish_constitution_empty_records_empty_molecules_in_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The staged install.lock for the empty state has molecules=[]."""
+    from haex_hive.io import transaction
+
+    captured_lock: dict[str, object] = {}
+
+    def capture_publish(live_dir, files, **kwargs) -> None:
+        del live_dir, kwargs
+        for staged in files:
+            if staged.relative_path == transaction.INSTALL_LOCK_NAME:
+                captured_lock.update(json.loads(staged.data))
+
+    monkeypatch.setattr(transaction, "publish_generation", capture_publish)
+
+    _publish_constitution(None, None, tmp_path)
+
+    assert captured_lock["haex_hive_version"] == "3"
+    assert captured_lock["molecules"] == []
+    assert "generation_id" in captured_lock
+
+
+def test_publish_constitution_molecule_and_body_must_agree_on_none(
+    tmp_path: Path,
+) -> None:
+    """Mixing None and non-None across (molecule, body) is a programmer error."""
+    from haex_hive.model.install_lock import MoleculeEntry
+
+    molecule = MoleculeEntry(
+        id=_SOURCE.id,
+        source=_SOURCE.source,
+        revision=_SOURCE.revision,
+        paths=(CONSTITUTION_PATH,),
+    )
+    with pytest.raises(ValueError, match="both be None or both be set"):
+        _publish_constitution(molecule, None, tmp_path)
+    with pytest.raises(ValueError, match="both be None or both be set"):
+        _publish_constitution(None, b"# body\n", tmp_path)
 
 
 def test_single_source_rejects_concealment_instruction(tmp_path: Path) -> None:
@@ -135,7 +213,7 @@ def test_single_source_rejects_concealment_instruction(tmp_path: Path) -> None:
     ]
 
     with pytest.raises(ConstitutionConcealmentInstructionError):
-        assemble_single_source(contributions, tmp_path)
+        publish_constitution(contributions, tmp_path)
 
     assert not (tmp_path / ".haex-hive").exists()
 
@@ -167,7 +245,7 @@ def test_orphan_cleanup_skips_symlinked_parent_outside_repository(tmp_path: Path
     )
     current = InstallLock("3", "g_20260102T000000Z_0000", (_molecule(),))
 
-    assemble._delete_orphaned_paths(tmp_path, previous, current)
+    publish_module._delete_orphaned_paths(tmp_path, previous, current)
 
     assert protected.read_text() == "keep me\n"
 
