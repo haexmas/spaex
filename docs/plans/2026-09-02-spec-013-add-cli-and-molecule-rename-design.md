@@ -1,6 +1,6 @@
-# Spec 013: pnpm-style `haex add` / `haex remove` and the atoms→molecules format rename (Design Preview)
+# Spec 013: pnpm-style `haex add` / `haex remove` and the atoms→molecules format rename
 
-**Status**: Design preview. Not yet a spec. Captured 2026-09-02 as the requirements source for a subsequent `/speckit-specify` invocation that creates `specs/013-add-cli-and-molecule-rename/`.
+**Status**: Landed as Spec 013 on 2026-09-06. See [`specs/013-add-cli-and-molecule-rename/`](../../specs/013-add-cli-and-molecule-rename/) for the canonical spec, plan, tasks, contracts, and quickstart. This document is retained as the original 2026-09-02 requirements capture that fed `/speckit-specify`.
 
 **Purpose**: two co-shipping changes.
 
