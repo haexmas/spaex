@@ -183,19 +183,31 @@ def run(args: argparse.Namespace) -> int:
 
     state_root = _state_root()
     outcomes: list[_InputOutcome] = []
-    for entry in walker.walk_local_manifests(repo_root):
-        try:
-            outcomes.append(_classify_input(entry, repo_root, state_root))
-        except HaexError as exc:
-            outcomes.append(
-                _InputOutcome(
-                    kind=entry.kind,
-                    source=entry.source,
-                    proposal=entry.proposal,
-                    outcome="refused",
-                    refusal=exc,
+    try:
+        for entry in walker.walk_local_manifests(repo_root):
+            try:
+                outcomes.append(_classify_input(entry, repo_root, state_root))
+            except HaexError as exc:
+                outcomes.append(
+                    _InputOutcome(
+                        kind=entry.kind,
+                        source=entry.source,
+                        proposal=entry.proposal,
+                        outcome="refused",
+                        refusal=exc,
+                    )
                 )
+    except HaexError as exc:
+        publisher_root = repo_root / "manifest.json"
+        outcomes.append(
+            _InputOutcome(
+                kind="publisher-root",
+                source=publisher_root,
+                proposal=publisher_root.with_name("manifest.json.migrated"),
+                outcome="refused",
+                refusal=exc,
             )
+        )
 
     if all(o.outcome == "noop" for o in outcomes):
         sys.stderr.write("already at v3 (nothing to migrate)\n")

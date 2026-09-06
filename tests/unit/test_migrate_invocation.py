@@ -138,3 +138,71 @@ def test_dry_run_and_check_mutually_exclusive(tmp_path: Path) -> None:
 
     rc = _run_migrate(tmp_path / "repo", dry_run=True, check=True)
     assert rc == exit_codes.USAGE
+
+
+def test_malformed_consumer_entry_is_refused_without_traceback(tmp_path: Path, capsys) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / ".haex-hive.json").write_text(
+        json.dumps(
+            {
+                "haex_hive_version": "2",
+                "identity": "com.example.project",
+                "atoms": [{}],
+            }
+        )
+    )
+
+    rc = _run_migrate(repo)
+
+    assert rc == 2
+    assert "key=migration-manifest-invalid" in capsys.readouterr().err
+    assert not (repo / ".haex-hive.json.migrated").exists()
+
+
+def test_molecule_path_escape_is_refused_without_writing_outside_repo(
+    tmp_path: Path, capsys
+) -> None:
+    repo = tmp_path / "repo"
+    _make_v3_consumer(repo)
+    (repo / "manifest.json").write_text(
+        json.dumps(
+            {
+                "haex_hive_version": "2",
+                "publisher": "com.example.publisher",
+                "atoms": {
+                    "com.example.publisher.escape": {
+                        "path": "../outside",
+                        "version": "1.0.0",
+                    }
+                },
+            }
+        )
+    )
+
+    rc = _run_migrate(repo)
+
+    assert rc == 2
+    assert "key=migration-path-outside-repository" in capsys.readouterr().err
+    assert not (repo.parent / "outside" / "manifest.json.migrated").exists()
+
+
+def test_non_mapping_publisher_molecules_is_refused_without_traceback(
+    tmp_path: Path, capsys
+) -> None:
+    repo = tmp_path / "repo"
+    _make_v3_consumer(repo)
+    (repo / "manifest.json").write_text(
+        json.dumps(
+            {
+                "haex_hive_version": "2",
+                "publisher": "com.example.publisher",
+                "atoms": ["not-a-map"],
+            }
+        )
+    )
+
+    rc = _run_migrate(repo)
+
+    assert rc == 2
+    assert "key=migration-manifest-invalid" in capsys.readouterr().err

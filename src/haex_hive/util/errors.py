@@ -73,6 +73,20 @@ class InvalidHaexHiveManifestError(HaexError):
 
 
 @dataclass
+class MigrationManifestInvalidError(HaexError):
+    diagnostic_key: str = "migration-manifest-invalid"
+    exit_code: int = exit_codes.INPUT_REFUSE
+    hint: str = "Fix the malformed v2 manifest and retry the migration."
+
+
+@dataclass
+class MigrationPathOutsideRepositoryError(HaexError):
+    diagnostic_key: str = "migration-path-outside-repository"
+    exit_code: int = exit_codes.INPUT_REFUSE
+    hint: str = "Use a repository-relative molecule path within the selected repository."
+
+
+@dataclass
 class MissingRemoteOriginError(HaexError):
     diagnostic_key: str = "missing-remote-origin"
     exit_code: int = exit_codes.IO_REFUSE
