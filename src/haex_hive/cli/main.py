@@ -72,7 +72,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    migrate = subparsers.add_parser("migrate", help="rewrite v1 `.haex-hive.json` into v2")
+    migrate = subparsers.add_parser(
+        "migrate",
+        help="rewrite v1 or v2 manifests into their v3 shape (Spec 013)",
+    )
     migrate.add_argument("--dry-run", action="store_true")
     migrate.add_argument("--check", action="store_true")
 
