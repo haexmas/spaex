@@ -15,7 +15,7 @@ from haex_hive.constitution.assemble import (
 )
 from haex_hive.constitution.resolve import ResolvedConstitutionContribution
 from haex_hive.io import transaction
-from haex_hive.model.install_lock import ConstitutionSource, MoleculeEntry
+from haex_hive.model.install_lock import ConstitutionSource, InstallLock, MoleculeEntry
 from haex_hive.util.errors import ConstitutionConcealmentInstructionError, PostWriteValidationError
 
 _SOURCE = ConstitutionSource(
@@ -138,3 +138,87 @@ def test_single_source_rejects_concealment_instruction(tmp_path: Path) -> None:
         assemble_single_source(contributions, tmp_path)
 
     assert not (tmp_path / ".haex-hive").exists()
+
+
+def test_orphan_cleanup_skips_symlinked_parent_outside_repository(tmp_path: Path) -> None:
+    """Never unlink a stale path whose parent resolves outside the repository."""
+    outside = tmp_path.parent / f"{tmp_path.name}-outside"
+    outside.mkdir()
+    protected = outside / "protected.md"
+    protected.write_text("keep me\n")
+    link = tmp_path / ".codex"
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlinks are unavailable on this platform")
+
+    previous = InstallLock(
+        haex_hive_version="3",
+        generation_id="g_20260101T000000Z_0000",
+        molecules=(
+            _molecule(),
+            MoleculeEntry(
+                id="com.example.old",
+                source=_SOURCE.source,
+                revision=_SOURCE.revision,
+                paths=(".codex/protected.md",),
+            ),
+        ),
+    )
+    current = InstallLock("3", "g_20260102T000000Z_0000", (_molecule(),))
+
+    assemble._delete_orphaned_paths(tmp_path, previous, current)
+
+    assert protected.read_text() == "keep me\n"
+
+
+def test_orphan_cleanup_restores_prior_deletions_on_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed orphan deletion restores files before publication rolls back."""
+    live = tmp_path / ".haex-hive"
+    live.mkdir()
+    old_lock = InstallLock(
+        haex_hive_version="3",
+        generation_id="g_20260101T000000Z_0000",
+        molecules=(
+            _molecule(),
+            MoleculeEntry(
+                id="com.example.old-a",
+                source=_SOURCE.source,
+                revision=_SOURCE.revision,
+                paths=(".codex/a.md",),
+            ),
+            MoleculeEntry(
+                id="com.example.old-b",
+                source=_SOURCE.source,
+                revision=_SOURCE.revision,
+                paths=(".codex/b.md",),
+            ),
+        ),
+    )
+    (live / "constitution.md").write_bytes(b"# Old\n")
+    (live / "install.lock").write_bytes(old_lock.to_json_bytes())
+    (tmp_path / ".codex").mkdir()
+    (tmp_path / ".codex" / "a.md").write_bytes(b"a\n")
+    (tmp_path / ".codex" / "b.md").write_bytes(b"b\n")
+
+    original_unlink = Path.unlink
+
+    def fail_on_b(path: Path, *args, **kwargs):
+        if path.name == "b.md":
+            raise OSError("simulated orphan cleanup failure")
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", fail_on_b)
+
+    with pytest.raises(OSError, match="simulated orphan cleanup failure"):
+        _publish_constitution(_molecule(), b"# New\n", tmp_path)
+
+    assert (live / "constitution.md").read_bytes() == b"# Old\n"
+    assert (
+        InstallLock.from_json((live / "install.lock").read_bytes()).generation_id
+        == "g_20260101T000000Z_0000"
+    )
+    assert (tmp_path / ".codex" / "a.md").read_bytes() == b"a\n"
+    assert (tmp_path / ".codex" / "b.md").read_bytes() == b"b\n"

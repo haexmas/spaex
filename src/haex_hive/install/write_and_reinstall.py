@@ -19,39 +19,15 @@ the 2026-09-04 clarification: any install failure rolls back the edit.
 from __future__ import annotations
 
 import argparse
-import os
 from pathlib import Path
 
-from haex_hive.install.manifest_lock import (
-    MANIFEST_NAME,
-    ManifestLockContext,
-)
+from haex_hive.install.manifest_lock import MANIFEST_NAME, ManifestLockContext
+from haex_hive.io import atomic
 from haex_hive.util.errors import (
     HaexError,
     InstallTransactionFailedError,
     ManifestRollbackFailedError,
 )
-
-_TMP_SUFFIX = ".tmp"
-
-
-def _atomic_write(target: Path, payload: bytes) -> None:
-    tmp = target.with_suffix(target.suffix + _TMP_SUFFIX)
-    with tmp.open("wb") as handle:
-        handle.write(payload)
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.replace(tmp, target)
-    if os.name != "posix":
-        return
-    try:
-        directory_fd = os.open(str(target.parent), os.O_RDONLY)
-    except OSError:
-        return
-    try:
-        os.fsync(directory_fd)
-    finally:
-        os.close(directory_fd)
 
 
 def _atomic_delete(target: Path) -> None:
@@ -73,7 +49,7 @@ def write_and_reinstall(
     )
 
     try:
-        _atomic_write(manifest_path, new_manifest_bytes)
+        atomic.write_replace(manifest_path, new_manifest_bytes)
         return install_cli.run(
             argparse.Namespace(repo_root=str(repo_root)),
             held_manifest_lock=held_manifest_lock,
@@ -83,7 +59,7 @@ def write_and_reinstall(
             if previous_bytes is None:
                 _atomic_delete(manifest_path)
             else:
-                _atomic_write(manifest_path, previous_bytes)
+                atomic.write_replace(manifest_path, previous_bytes)
         except OSError as rollback_exc:
             raise ManifestRollbackFailedError(
                 message=(

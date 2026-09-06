@@ -20,6 +20,7 @@ from haex_hive.install.manifest_lock import (
     MANIFEST_LOCK_NAME,
     MANIFEST_NAME,
     ManifestLockContext,
+    parse_lock_timeout,
 )
 from haex_hive.install.write_and_reinstall import write_and_reinstall
 from haex_hive.io.state import default_state_root
@@ -227,6 +228,7 @@ def _refuse_singleton_conflict(
     existing_manifest: ConsumerManifest,
     state_root: Path,
     added_set: set[str],
+    retracted_set: set[str],
 ) -> None:
     """Refuse pre-write when a singleton-category rule is violated."""
     for category, refuse_exc in (
@@ -252,7 +254,7 @@ def _refuse_singleton_conflict(
         current_owners = tuple(
             owner
             for owner in _existing_category_owners(existing_manifest, state_root, category)
-            if owner not in added_set
+            if owner not in added_set and owner not in retracted_set
         )
         if current_owners:
             raise refuse_exc(
@@ -298,6 +300,12 @@ def _mutate_compounds(
                         source=source,
                         revision=revision,
                         molecules=tuple(sorted(set(added_ids))),
+                        track=compound.track,
+                        config={
+                            molecule_id: config
+                            for molecule_id, config in compound.config.items()
+                            if molecule_id in added_ids
+                        },
                     )
                 )
             consumed = True
@@ -336,7 +344,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--lock-timeout",
         dest="lock_timeout",
-        type=float,
+        type=parse_lock_timeout,
         default=DEFAULT_LOCK_TIMEOUT_SECONDS,
         help="Manifest-lock timeout in seconds (default 30; 0 = fail-fast)",
     )
@@ -376,11 +384,18 @@ def run(args: argparse.Namespace) -> int:
         added_category_declarers = _categories_declared_by(
             molecule_ids, publisher, repo_dir, sha
         )
+        retracted_set = {
+            molecule_id
+            for compound in current_manifest.compounds
+            if compound.source == canonical_source and compound.revision != sha
+            for molecule_id in compound.molecules
+        }
         _refuse_singleton_conflict(
             added_category_declarers,
             current_manifest,
             state_root,
             added_set=set(molecule_ids),
+            retracted_set=retracted_set,
         )
 
         new_manifest = _mutate_compounds(

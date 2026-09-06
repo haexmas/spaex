@@ -2,21 +2,19 @@
 
 from __future__ import annotations
 
-import importlib
 from pathlib import Path
 
 import pytest
 
 from haex_hive.install.manifest_lock import ManifestLockContext
 from haex_hive.install.write_and_reinstall import write_and_reinstall
+from haex_hive.io import atomic
 from haex_hive.util.errors import (
     HaexError,
     InstallTransactionFailedError,
     ManifestRollbackFailedError,
     NoSourcesDeclaredError,
 )
-
-_transaction = importlib.import_module("haex_hive.install.write_and_reinstall")
 
 
 def _held_lock(tmp_path: Path) -> ManifestLockContext:
@@ -119,7 +117,7 @@ def test_initial_manifest_write_failure_is_rolled_back(
         raise AssertionError("install must not run after manifest publication failed")
 
     monkeypatch.setattr(install_cli, "run", unexpected_install)
-    original_atomic_write = _transaction._atomic_write
+    original_atomic_write = atomic.write_replace
     calls = 0
 
     def fail_after_initial_write(target: Path, payload: bytes) -> None:
@@ -130,7 +128,7 @@ def test_initial_manifest_write_failure_is_rolled_back(
             raise OSError("manifest fsync failed")
         original_atomic_write(target, payload)
 
-    monkeypatch.setattr(_transaction, "_atomic_write", fail_after_initial_write)
+    monkeypatch.setattr(atomic, "write_replace", fail_after_initial_write)
 
     lock = _held_lock(tmp_path)
     try:
@@ -154,7 +152,7 @@ def test_rollback_failure_surfaces_recovery_path_with_lock_held(
         raise NoSourcesDeclaredError(message="no constitution sources declared")
 
     monkeypatch.setattr(install_cli, "run", failing_install)
-    original_atomic_write = _transaction._atomic_write
+    original_atomic_write = atomic.write_replace
     calls = 0
 
     def fail_during_rollback(target: Path, payload: bytes) -> None:
@@ -165,7 +163,7 @@ def test_rollback_failure_surfaces_recovery_path_with_lock_held(
             return
         raise OSError("rollback storage failure")
 
-    monkeypatch.setattr(_transaction, "_atomic_write", fail_during_rollback)
+    monkeypatch.setattr(atomic, "write_replace", fail_during_rollback)
 
     lock = _held_lock(tmp_path)
     try:

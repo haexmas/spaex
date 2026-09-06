@@ -21,7 +21,6 @@ def _remove_read_only(func, path, exc_info) -> None:
     os.chmod(path, stat.S_IWRITE)
     func(path)
 
-
 def test_add_pins_non_head_revision_via_fetched_sha(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, haex_add_helpers
 ) -> None:
@@ -56,9 +55,11 @@ def test_add_pins_non_head_revision_via_fetched_sha(
 
     original_run_git = publisher_fetch._run_git
 
-    def run_git_with_local_test_remote(*args, cwd=None, capture=True):
+    def run_git_with_local_test_remote(*args, cwd=None, capture=True, timeout=None):
         mapped_args = tuple(str(advance) if arg == canonical else arg for arg in args)
-        return original_run_git(*mapped_args, cwd=cwd, capture=capture)
+        return original_run_git(
+            *mapped_args, cwd=cwd, capture=capture, timeout=timeout
+        )
 
     monkeypatch.setattr(publisher_fetch, "_run_git", run_git_with_local_test_remote)
 

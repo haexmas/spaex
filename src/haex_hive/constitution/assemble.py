@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
+from stat import S_IMODE
 
 from haex_hive.constitution.resolve import ResolvedConstitutionContribution
 from haex_hive.constitution.safety import (
@@ -16,11 +17,53 @@ from haex_hive.constitution.safety import (
     validate_no_plaintext_secrets,
 )
 from haex_hive.install.generation import allocate_generation_id
-from haex_hive.io import transaction
+from haex_hive.io import atomic, transaction
 from haex_hive.model.install_lock import InstallLock, MoleculeEntry
 from haex_hive.util.errors import HaexError, PostWriteValidationError
 
 CONSTITUTION_PATH = f"{transaction.HAEX_HIVE_DIR}/{transaction.CONSTITUTION_NAME}"
+
+
+def _delete_orphaned_paths(
+    repo_root: Path,
+    previous_lock: InstallLock | None,
+    current_lock: InstallLock,
+) -> None:
+    """Delete recorded files no longer owned by the newly published lock.
+
+    Files are backed up in memory until the publication callback returns. If a
+    later unlink fails, earlier deletions are restored before the exception
+    reaches ``publish_generation``, which then rolls the generation back too.
+    Symlinked targets and paths resolving outside ``repo_root`` are ignored.
+    """
+    if previous_lock is None:
+        return
+    resolved_root = repo_root.resolve()
+    previous_paths = {
+        path for molecule in previous_lock.molecules for path in molecule.paths
+    }
+    current_paths = {path for molecule in current_lock.molecules for path in molecule.paths}
+    deleted: list[tuple[Path, bytes, int]] = []
+    try:
+        for path in sorted(previous_paths - current_paths):
+            if path.startswith(f"{transaction.HAEX_HIVE_DIR}/"):
+                continue
+            target = resolved_root / path
+            if target.is_symlink() or not target.exists():
+                continue
+            resolved_target = target.resolve()
+            try:
+                resolved_target.relative_to(resolved_root)
+            except ValueError:
+                continue
+            mode = S_IMODE(target.stat().st_mode)
+            deleted.append((target, target.read_bytes(), mode))
+            target.unlink()
+    except OSError:
+        for target, data, mode in reversed(deleted):
+            atomic.write_replace(target, data)
+            target.chmod(mode)
+        raise
 
 
 def _read_existing_lock(repo_root: Path) -> InstallLock | None:
@@ -93,6 +136,7 @@ def _publish_constitution(
             raise PostWriteValidationError(
                 message="published install.lock does not match the assembled generation",
             )
+        _delete_orphaned_paths(repo_root, existing_lock, lock)
 
     live_dir = repo_root / transaction.HAEX_HIVE_DIR
     transaction.publish_generation(
