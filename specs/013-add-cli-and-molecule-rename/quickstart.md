@@ -64,7 +64,7 @@ Once your project is on v3, adopting a molecule is a single command:
 haex add https://github.com/haexmas/atoms com.github.haexmas.atoms.graphify-first-authoring
 ```
 
-> **Note (2026-09-06):** the real `haexmas/atoms` repository's publisher-root `manifest.json` is still on v2 at HEAD, so this exact command refuses today with `publisher-manifest-invalid` at the publisher-manifest gate. Migrating `haexmas/atoms` to v3 is a follow-up on that repo itself. Substitute any v3-native publisher URL to exercise the flow end to end; the CLI shape is identical.
+The `haexmas/atoms` publisher-root `manifest.json` was migrated to v3 alongside Spec 013's landing (atoms#1, merged 2026-09-06); this command works end to end against the real remote at any SHA at or past `2a27a5e`.
 
 The command:
 
