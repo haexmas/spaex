@@ -42,7 +42,7 @@ def atoms_repo_fixture(tmp_path: Path, haex_add_helpers):
                 "path": "graphify-first-authoring",
                 "version": "1.0.0",
                 "priority": 20,
-                "atoms": {"constitution": ["constitution.md"]},
+                "atoms": {"constitution": ["constitution.md", "annex.md"]},
             },
         },
         publisher="com.github.haexmas.atoms",
@@ -86,7 +86,8 @@ def test_add_graphify_from_atoms_repo_installs_end_to_end(
     published_constitution = consumer / ".haex-hive" / "constitution.md"
     assert published_constitution.exists()
     assert published_constitution.read_bytes() == (
-        f"# {_GRAPHIFY_ID} constitution constitution.md\n".encode()
+        f"# {_GRAPHIFY_ID} constitution constitution.md\n\n"
+        f"# {_GRAPHIFY_ID} constitution annex.md\n".encode()
     )
 
     # install.lock records exactly one molecule with the exact
@@ -111,7 +112,7 @@ def test_second_add_invocation_is_idempotent(
     """A repeat `haex add` at the same SHA is a no-op end to end."""
     consumer = haex_add_helpers["make_consumer"](tmp_path)
 
-    haex_add_helpers["run_add"](
+    first_rc = haex_add_helpers["run_add"](
         consumer,
         atoms_repo_fixture["state_root"],
         monkeypatch,
@@ -119,6 +120,7 @@ def test_second_add_invocation_is_idempotent(
         molecule_ids=_GRAPHIFY_ID,
         revision=atoms_repo_fixture["head"],
     )
+    assert first_rc == 0
     first_lock_bytes = (consumer / ".haex-hive" / "install.lock").read_bytes()
 
     rc = haex_add_helpers["run_add"](
