@@ -133,10 +133,13 @@ The `haex remove` step drops the current constitution molecule from `.haex-hive.
 If you want to keep the previous constitution's content locally for review before removing it, copy it out first:
 
 ```bash
-cp .haex-hive/constitution.md /tmp/previous-constitution.md
+umask 077
+previous_constitution="$(mktemp)"
+cp -- .haex-hive/constitution.md "$previous_constitution"
 haex remove <currently-adopted-constitution-id>
-# ...review /tmp/previous-constitution.md, decide what to adopt next...
+# ...review "$previous_constitution", decide what to adopt next...
 haex add <source-url> <new-constitution-molecule-id>
+rm -f -- "$previous_constitution"
 ```
 
 `.haex-hive/` is tool-owned; the file will be deleted by the remove step's install pass.
