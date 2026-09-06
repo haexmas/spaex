@@ -121,45 +121,27 @@ error: exit=2 key=constitution-already-adopted category=constitution adopted_by=
   hint: Adopt only one constitution-contributing molecule, or combine the constitutions externally.
 ```
 
-The replacement must keep one constitution adopted throughout. If the new
-molecule is published by the **same source at a different revision**, use the
-atomic replace path already provided by `haex add`:
+**How to swap constitutions.** Whether the replacement is a new revision of the same publisher's molecule, a different molecule from a different publisher, or an externally-combined atom, the recipe is the same two-step flow:
 
 ```bash
-# Replace the current constitution atom without removing it first
-haex add <source-url> <new-molecule-id> --revision=<new-full-40-hex-sha>
+haex remove <currently-adopted-constitution-id>
+haex add <source-url> <new-constitution-molecule-id>
 ```
 
-After validating the new publisher revision, `haex add` replaces that source's
-compound atomically and runs `haex install` while holding the manifest lock;
-the old constitution remains in place until the replacement is ready. If the
-install fails, the manifest edit is rolled back. Do **not** run `haex remove`
-first: removing the last constitution is rejected with `no-sources-declared`.
+The `haex remove` step drops the current constitution molecule from `.haex-hive.json` and runs `haex install`, which publishes an empty-state generation (`install.lock` with `molecules: []`, no `.haex-hive/constitution.md`). The follow-on `haex add` adopts the new constitution and re-publishes. Between the two commands the consumer is transiently in the empty-constitution state; that is a legitimate state, not a failure mode.
 
-If the replacement comes from a different source, Spec 013 has no atomic
-cross-source replacement command yet. Keep the current molecule adopted while
-preparing the replacement, then make one reviewed edit to `.haex-hive.json`
-that swaps the old compound for the new one and run:
+If you want to keep the previous constitution's content locally for review before removing it, copy it out first:
 
 ```bash
-haex install
+cp .haex-hive/constitution.md /tmp/previous-constitution.md
+haex remove <currently-adopted-constitution-id>
+# ...review /tmp/previous-constitution.md, decide what to adopt next...
+haex add <source-url> <new-constitution-molecule-id>
 ```
 
-Review the manifest diff before running `haex install`; the candidate must
-contain exactly one constitution-contributing molecule. If the install fails,
-restore the original manifest from version control and retry; the install
-transaction leaves the previously published generation intact.
+`.haex-hive/` is tool-owned; the file will be deleted by the remove step's install pass.
 
-Alternatively:
-
-```text
-# Option B: combine the two constitutions into one prose atom externally,
-# publish it in the current source at a new revision, then use the atomic
-# `haex add` command above. The two original molecules can be dropped by that
-# replacement.
-```
-
-haex-hive does not merge constitutions and ships no `--llm=file` or `--accept-merged` path in Spec 013. Merging two rule sets is an editorial decision the operator makes outside the tool.
+**haex-hive does not merge constitutions.** Combining two rule sets into one document is an editorial decision the operator makes outside the tool. The result is published as a normal atom in the source of your choice and adopted through the recipe above; no `--llm=file`, `--accept-merged`, or in-tool merge command exists.
 
 The workflow category obeys the same singleton rule: `workflow-molecule-already-adopted` refuses the second one; recovery is `haex remove <current-workflow-molecule-id>` first.
 
@@ -190,7 +172,7 @@ All-or-nothing: `haex remove <present>,<absent>` refuses at the preflight step w
 
 If the retracted molecule was the currently adopted workflow molecule, the ensuing install runs without it. A tool-side bundled fallback for the `speckit` workflow is planned under Spec 011 amendment FR-008 and lands separately; today the retraction simply leaves the consumer without a workflow molecule until another `haex add` restores one.
 
-If retracting the last constitution-contributing molecule would leave the consumer with no constitution, the follow-on install refuses with `no-sources-declared` and `haex remove` rolls the manifest edit back atomically. Use the same-source replacement path above, or prepare a reviewed one-constitution manifest candidate; adding a different source first is refused while the current constitution is adopted.
+Retracting the last constitution-contributing molecule is a legitimate outcome: the follow-on install publishes an empty generation (`install.lock` with `molecules: []`) and `.haex-hive/constitution.md` disappears with the rename-swap of `.haex-hive/`. The consumer sits in the empty-constitution state until a subsequent `haex add` restores one; that state is valid at read time (Spec 013, 2026-09-06 empty-state landing).
 
 ---
 
