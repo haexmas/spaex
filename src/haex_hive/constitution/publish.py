@@ -1,8 +1,25 @@
-"""Constitution assembly: single-source straight-copy (US2).
+"""Constitution publication: join the declared source files and rename-swap.
 
-The multi-source LLM-merge path (US3) was retired by ADR 0010: a repository
-adopts exactly one non-negotiable prose atom, so `haex install` never needs
-to reconcile multiple constitution contributions into one document.
+`haex install`'s constitution-side terminal step. Two duties:
+
+- **Join**: when a molecule declares `atoms.constitution: [a.md, b.md, ...]`
+  the tool concatenates those file bytes (in the resolver's declared order,
+  newline-separated) into the single effective constitution written to
+  `.haex-hive/constitution.md`. That splitting exists purely for authoring
+  maintainability; there is still only ever ONE effective constitution per
+  adopted molecule set (ADR 0010).
+- **Atomic publish**: writes the joined constitution plus install.lock as
+  one rename-swap generation with post-write verification.
+
+Post-ADR-0010 the module is single-branch: the LLM merge subsystem is
+gone. What remains is joining N files that belong to the same molecule and
+publishing the generation.
+
+The empty case is also legitimate: an operator who ran `haex remove` on
+their last constitution-contributing molecule adopts the empty state. In
+that case only `install.lock` is staged (with `molecules=()` after orphan
+cleanup) and the pre-existing `constitution.md` disappears with the
+rename-swap of `.haex-hive/` (delete-orphans via full-directory swap).
 """
 
 from __future__ import annotations
@@ -85,8 +102,8 @@ def _read_existing_lock(repo_root: Path) -> InstallLock | None:
 
 
 def _publish_constitution(
-    molecule: MoleculeEntry,
-    body: bytes,
+    molecule: MoleculeEntry | None,
+    body: bytes | None,
     repo_root: Path,
     *,
     state_root: Path | None = None,
@@ -94,28 +111,43 @@ def _publish_constitution(
     """Publish the effective constitution and install.lock atomically.
 
     Preserves unknown top-level lock fields from any existing lock and
-    publishes all output files as one rename-swap generation with post-write
-    verification of the published outputs.
+    publishes every output file as one rename-swap generation with
+    post-write verification.
+
+    When ``molecule`` is ``None`` (empty state), ``body`` must also be
+    ``None``: only ``install.lock`` is staged with ``molecules=()`` and
+    any pre-existing ``constitution.md`` disappears with the rename-swap
+    of ``.haex-hive/`` (delete-orphans via full-directory swap).
 
     Args:
-        molecule: The single installed molecule this generation records.
-        body: Effective constitution content to publish.
+        molecule: The installed molecule this generation records, or None
+            for the empty state.
+        body: Effective constitution content, or None for the empty state.
         repo_root: Repository root path.
 
     Raises:
         PostWriteValidationError: If the published files disagree.
     """
+    if (molecule is None) != (body is None):
+        raise ValueError("molecule and body must both be None or both be set")
+
     existing_lock = _read_existing_lock(repo_root)
     unknown_top_level = (
         dict(existing_lock.unknown_top_level) if existing_lock is not None else {}
     )
 
     existing_generation_id = existing_lock.generation_id if existing_lock is not None else None
-    generation_id = allocate_generation_id(body, existing_generation_id)
+    # For the empty state, allocate against an empty payload so the ID still
+    # advances deterministically past any prior generation.
+    generation_seed = body if body is not None else b""
+    generation_id = allocate_generation_id(generation_seed, existing_generation_id)
+    molecules_tuple: tuple[MoleculeEntry, ...] = (
+        () if molecule is None else (molecule,)
+    )
     lock = InstallLock(
         haex_hive_version="3",
         generation_id=generation_id,
-        molecules=(molecule,),
+        molecules=molecules_tuple,
         unknown_top_level=unknown_top_level,
     )
     lock_bytes = lock.to_json_bytes()
@@ -130,53 +162,64 @@ def _publish_constitution(
         """
         lock_path = repo_root / transaction.HAEX_HIVE_DIR / transaction.INSTALL_LOCK_NAME
         published_lock = InstallLock.from_json(lock_path.read_bytes())
-        if published_lock.generation_id != generation_id or published_lock.molecules != (
-            molecule,
+        if (
+            published_lock.generation_id != generation_id
+            or published_lock.molecules != molecules_tuple
         ):
             raise PostWriteValidationError(
                 message="published install.lock does not match the assembled generation",
             )
         _delete_orphaned_paths(repo_root, existing_lock, lock)
 
+    staged_files: list[transaction.StagedFile] = []
+    if body is not None:
+        staged_files.append(transaction.StagedFile(transaction.CONSTITUTION_NAME, body))
+    staged_files.append(transaction.StagedFile(transaction.INSTALL_LOCK_NAME, lock_bytes))
+
     live_dir = repo_root / transaction.HAEX_HIVE_DIR
     transaction.publish_generation(
         live_dir,
-        [
-            transaction.StagedFile(transaction.CONSTITUTION_NAME, body),
-            transaction.StagedFile(transaction.INSTALL_LOCK_NAME, lock_bytes),
-        ],
+        staged_files,
         post_write_verify=post_write_verify,
         state_root=state_root,
         repo_root=repo_root,
     )
 
 
-def assemble_single_source(
+def publish_constitution(
     contributions: Sequence[ResolvedConstitutionContribution],
     repo_root: Path,
     *,
     state_root: Path | None = None,
 ) -> None:
-    """Publish all constitution files from one molecule without merging sources.
+    """Join all declared constitution files from one molecule and publish.
 
-    The v3 constitution category may contain multiple files. They retain the
-    resolver's deterministic order and are separated by one newline in the
-    generated constitution. The lock records the molecule only once, with
-    `.haex-hive/constitution.md` as its sole contributed path.
+    The v3 ``atoms.constitution`` list may hold one file or several; when
+    several, the tool concatenates them in the resolver's declared order
+    (newline-separated) into the single effective constitution. The lock
+    records that molecule once, with ``.haex-hive/constitution.md`` as
+    its sole contributed path.
+
+    When ``contributions`` is empty the empty state is published:
+    ``install.lock`` alone with ``molecules=()`` and any pre-existing
+    ``constitution.md`` disappears via the rename-swap of ``.haex-hive/``.
     """
     if not contributions:
-        raise ValueError("at least one constitution contribution is required")
+        _publish_constitution(None, None, repo_root, state_root=state_root)
+        return
 
     source = contributions[0].source
     if any(contribution.source != source for contribution in contributions[1:]):
-        raise ValueError("single-source assembly received multiple molecule sources")
+        raise ValueError(
+            "constitution publication received contributions from multiple molecules"
+        )
 
     for contribution in contributions:
         validate_no_plaintext_secrets(
             contribution.body, location=f"constitution source {contribution.source.id}"
         )
-        # Principle VIII (ADR 0010): retained on the single-source path even
-        # though there is no adapter-produced candidate to police anymore.
+        # Principle VIII (ADR 0010): retained even without an adapter-produced
+        # candidate to police.
         validate_no_concealment_instructions(contribution.body)
 
     molecule = MoleculeEntry(

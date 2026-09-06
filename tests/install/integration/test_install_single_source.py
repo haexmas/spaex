@@ -155,7 +155,12 @@ def test_contribution_file_absent_refuses(tmp_path: Path, git_binary: str) -> No
     assert not (consumer / ".haex-hive" / "constitution.md").exists()
 
 
-def test_no_sources_declared_refuses(tmp_path: Path) -> None:
+def test_empty_compounds_publishes_empty_generation(tmp_path: Path) -> None:
+    """An empty consumer publishes an empty install.lock instead of refusing.
+
+    Post-`haex remove` recovery: the operator is allowed to retract every
+    molecule and land in the empty state without a follow-up install failure.
+    """
     consumer = tmp_path / "consumer"
     consumer.mkdir()
     (consumer / ".haex-hive.json").write_text(
@@ -168,5 +173,16 @@ def test_no_sources_declared_refuses(tmp_path: Path) -> None:
         )
     )
     proc = _run_haex(consumer, state_root=tmp_path / "state")
-    assert proc.returncode == 2
-    assert "key=no-sources-declared" in proc.stderr
+    assert proc.returncode == 0, proc.stderr
+    assert "installed empty generation" in proc.stdout
+    assert not (consumer / ".haex-hive" / "constitution.md").exists()
+
+    lock_bytes = (consumer / ".haex-hive" / "install.lock").read_bytes()
+    lock_data = json.loads(lock_bytes)
+    assert lock_data["molecules"] == []
+
+    # Re-invocation is a no-op.
+    proc2 = _run_haex(consumer, state_root=tmp_path / "state")
+    assert proc2.returncode == 0
+    assert "no changes" in proc2.stdout
+    assert (consumer / ".haex-hive" / "install.lock").read_bytes() == lock_bytes

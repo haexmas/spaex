@@ -14,7 +14,7 @@ _SKILL_ID = "com.example.publisher.skill"
 def test_orphan_paths_are_deleted_after_remove(
     tmp_path: Path, haex_add_helpers, monkeypatch
 ) -> None:
-    """Files the retracted molecule wrote must be gone; survivor's files stay."""
+    """Retracting the sole constitution lands the empty state and drops its files."""
     canonical, head, state_root = haex_add_helpers["make_publisher"](
         tmp_path,
         {
@@ -40,21 +40,18 @@ def test_orphan_paths_are_deleted_after_remove(
     for rel in published_paths:
         assert (consumer / rel).exists(), f"expected {rel} to exist after add"
 
-    # Retracting the sole constitution molecule leaves install with nothing to
-    # publish. Under Spec 013 (2026-09-04 clarification) the manifest edit rolls
-    # back on any install failure; assert the survivor state is preserved.
-    import pytest
-
-    from haex_hive.util.errors import InstallTransactionFailedError
-
-    with pytest.raises(InstallTransactionFailedError):
-        haex_add_helpers["run_remove"](
-            consumer, state_root, monkeypatch, molecule_ids=_CONST_ID
-        )
+    rc = haex_add_helpers["run_remove"](
+        consumer, state_root, monkeypatch, molecule_ids=_CONST_ID
+    )
+    assert rc == 0
     written = json.loads((consumer / ".haex-hive.json").read_text())
-    assert written["compounds"][0]["molecules"] == [_CONST_ID]
+    assert written["compounds"] == []
     for rel in published_paths:
-        assert (consumer / rel).exists(), f"survivor {rel} must remain"
+        assert not (consumer / rel).exists(), (
+            f"retracted molecule's path {rel} should be gone after empty publish"
+        )
+    lock_after = InstallLock.from_json(lock_path.read_bytes())
+    assert lock_after.molecules == ()
 
 
 def test_survivor_files_untouched_when_one_of_many_retracted(

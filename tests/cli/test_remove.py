@@ -64,23 +64,22 @@ def test_single_id_retraction(adopted_repo, haex_add_helpers, monkeypatch) -> No
 def test_multi_id_comma_separated_retraction(
     adopted_repo, haex_add_helpers, monkeypatch
 ) -> None:
-    # Retracting both molecules empties the sole compound. Install then has no
-    # constitution and refuses with `install-transaction-failed`; the manifest
-    # edit is rolled back atomically.
-    from haex_hive.util.errors import InstallTransactionFailedError
-
+    """Retracting every adopted molecule lands the consumer in the empty state."""
     consumer = adopted_repo["consumer"]
-    with pytest.raises(InstallTransactionFailedError):
-        haex_add_helpers["run_remove"](
-            consumer,
-            adopted_repo["state_root"],
-            monkeypatch,
-            molecule_ids=f"{_CONST_ID},{_SKILL_ID}",
-        )
+    rc = haex_add_helpers["run_remove"](
+        consumer,
+        adopted_repo["state_root"],
+        monkeypatch,
+        molecule_ids=f"{_CONST_ID},{_SKILL_ID}",
+    )
+    assert rc == 0
     written = json.loads((consumer / ".haex-hive.json").read_text())
-    assert len(written["compounds"]) == 1
-    # Manifest was restored, both molecules still adopted.
-    assert set(written["compounds"][0]["molecules"]) == {_CONST_ID, _SKILL_ID}
+    assert written["compounds"] == []
+    # `.haex-hive/constitution.md` disappears with the rename-swap of the
+    # live directory; `install.lock` records an empty molecules[] array.
+    assert not (consumer / ".haex-hive" / "constitution.md").exists()
+    lock_data = json.loads((consumer / ".haex-hive" / "install.lock").read_text())
+    assert lock_data["molecules"] == []
 
 
 def test_empty_compound_dropped_after_retraction(

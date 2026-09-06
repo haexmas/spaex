@@ -12,7 +12,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from haex_hive.constitution.assemble import CONSTITUTION_PATH, assemble_single_source
+from haex_hive.constitution.publish import CONSTITUTION_PATH, publish_constitution
 from haex_hive.constitution.resolve import resolve_constitution_contributions
 from haex_hive.install import inflight
 from haex_hive.install.lock import OwnerToken
@@ -28,11 +28,7 @@ from haex_hive.io.writer_lock import ConstitutionWriterLock
 from haex_hive.model.consumer_manifest import ConsumerManifest
 from haex_hive.model.install_lock import InstallLock
 from haex_hive.util import exit_codes
-from haex_hive.util.errors import (
-    ConstitutionAlreadyAdoptedError,
-    HaexError,
-    NoSourcesDeclaredError,
-)
+from haex_hive.util.errors import ConstitutionAlreadyAdoptedError, HaexError
 
 
 def _load_consumer_manifest(repo_root: Path) -> ConsumerManifest:
@@ -113,6 +109,25 @@ def _is_no_op_single_source(
     return recorded.paths == (CONSTITUTION_PATH,)
 
 
+def _is_no_op_empty(repo_root: Path) -> bool:
+    """True when the on-disk state is already the empty-constitution state.
+
+    Empty state on disk means: no constitution.md file present AND an
+    install.lock whose molecules list is empty. Either condition failing
+    means publication is required to reach the empty state.
+    """
+    live_root = repo_root / transaction.HAEX_HIVE_DIR
+    constitution_path = live_root / transaction.CONSTITUTION_NAME
+    lock_path = live_root / transaction.INSTALL_LOCK_NAME
+    if not lock_path.exists() or constitution_path.exists():
+        return False
+    try:
+        lock = InstallLock.from_json(lock_path.read_bytes())
+    except (OSError, ValueError, HaexError):
+        return False
+    return len(lock.molecules) == 0
+
+
 def run(
     args: argparse.Namespace,
     *,
@@ -151,8 +166,25 @@ def run(
 
             manifest = _load_consumer_manifest(repo_root)
             contributions = resolve_constitution_contributions(manifest, state_root)
+
             if not contributions:
-                raise NoSourcesDeclaredError(message="no constitution sources declared")
+                # Empty-constitution state: valid post-`haex remove` outcome.
+                # If the on-disk state is already empty, skip publication;
+                # otherwise publish install.lock alone so orphan-cleanup via
+                # the rename-swap removes any stale constitution.md.
+                if _is_no_op_empty(repo_root):
+                    inflight.clean_stale_siblings(
+                        repo_root / transaction.HAEX_HIVE_DIR,
+                        remove_prev=True,
+                    )
+                    sys.stdout.write("no changes\n")
+                    return exit_codes.SUCCESS
+                publish_constitution([], repo_root, state_root=state_root)
+                new_generation_id = _live_generation_id(repo_root)
+                sys.stdout.write(
+                    f"installed empty generation {new_generation_id}\n"
+                )
+                return exit_codes.SUCCESS
 
             molecule_ids = sorted(
                 {contribution.source.id for contribution in contributions}
@@ -184,7 +216,7 @@ def run(
                 sys.stdout.write("no changes\n")
                 return exit_codes.SUCCESS
 
-            assemble_single_source(
+            publish_constitution(
                 contributions,
                 repo_root,
                 state_root=state_root,

@@ -214,7 +214,7 @@ def test_install_allows_multiple_paths_from_one_molecule(
     monkeypatch.setattr(install_cli, "_live_generation_id", lambda root: "generation")
     monkeypatch.setattr(
         install_cli,
-        "assemble_single_source",
+        "publish_constitution",
         lambda resolved, root, **kwargs: captured.append(list(resolved)),
     )
 
