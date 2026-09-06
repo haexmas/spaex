@@ -127,6 +127,7 @@ def haex_add_helpers() -> dict:
         *,
         publisher: str = "com.example.publisher",
         name: str = "publisher",
+        canonical: str | None = None,
     ) -> tuple[str, str, _P]:
         working = tmp_path / f"{name}-working"
         working.mkdir()
@@ -166,14 +167,14 @@ def haex_add_helpers() -> dict:
         _local_git(working, "commit", "-q", "-m", "publisher")
         head = _local_git(working, "rev-parse", "HEAD")
 
-        canonical = f"https://example.com/{name}"
+        canonical_url = canonical or f"https://example.com/{name}"
         state_root = tmp_path / "state"
-        target = clone_dir(state_root, canonical)
+        target = clone_dir(state_root, canonical_url)
         target.parent.mkdir(parents=True, exist_ok=True)
         subprocess.run(
             ["git", "clone", "--bare", "-q", str(working), str(target)], check=True
         )
-        return canonical, head, state_root
+        return canonical_url, head, state_root
 
     def make_consumer(
         tmp_path: _P, identity: str = "com.example.project"
