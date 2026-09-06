@@ -14,7 +14,7 @@ If your project's `.haex-hive.json` still says `"haex_hive_version": "2"`, the t
 haex migrate --check
 ```
 
-The command scans `.haex-hive.json`, `manifest.json` (if this repo is also a publisher), and every per-molecule `manifest.json` under the paths declared by that publisher manifest. It prints one unified diff per input file. Nothing is written. Review the diffs.
+The command scans `.haex-hive.json`, `manifest.json` (if this repo is also a publisher), and every per-molecule `manifest.json` under the paths declared by that publisher manifest. For each input, it prints a unified diff when a migration proposal is produced, a diagnostic when the input is refused, or `already at v3 (nothing to migrate)` when no migration is needed. Nothing is written. Review the proposals and diagnostics.
 
 When the diffs look right, run:
 
@@ -47,7 +47,7 @@ haex install
 
 A clean install on the newly adopted v3 manifests confirms the transition. A re-invocation on an already-v3 repository is a no-op:
 
-```
+```console
 $ haex migrate
 already at v3 (nothing to migrate)
 ```
@@ -115,25 +115,48 @@ haex-hive enforces the invariant from ADR 0010: a repository adopts **exactly on
 
 When you try to adopt a second molecule that also contributes a constitution and `.haex-hive.json` already resolves to a different constitution-contributing molecule, `haex add` refuses at the CLI boundary. Example stderr:
 
-```
+```console
 error: exit=2 key=constitution-already-adopted category=constitution adopted_by=<currently-adopted-id> adding=<new-id>
   add refuses: category 'constitution' already adopted by ...
   hint: Adopt only one constitution-contributing molecule, or combine the constitutions externally.
 ```
 
-Recovery is either:
+The replacement must keep one constitution adopted throughout. If the new
+molecule is published by the **same source at a different revision**, use the
+atomic replace path already provided by `haex add`:
 
 ```bash
-# Option A: replace the current constitution atom with the new one
-haex remove <currently-adopted-id>
-haex add <source-url> <new-molecule-id>
+# Replace the current constitution atom without removing it first
+haex add <source-url> <new-molecule-id> --revision=<new-full-40-hex-sha>
 ```
 
-or:
+After validating the new publisher revision, `haex add` replaces that source's
+compound atomically and runs `haex install` while holding the manifest lock;
+the old constitution remains in place until the replacement is ready. If the
+install fails, the manifest edit is rolled back. Do **not** run `haex remove`
+first: removing the last constitution is rejected with `no-sources-declared`.
 
+If the replacement comes from a different source, Spec 013 has no atomic
+cross-source replacement command yet. Keep the current molecule adopted while
+preparing the replacement, then make one reviewed edit to `.haex-hive.json`
+that swaps the old compound for the new one and run:
+
+```bash
+haex install
 ```
+
+Review the manifest diff before running `haex install`; the candidate must
+contain exactly one constitution-contributing molecule. If the install fails,
+restore the original manifest from version control and retry; the install
+transaction leaves the previously published generation intact.
+
+Alternatively:
+
+```text
 # Option B: combine the two constitutions into one prose atom externally,
-# adopt that single atom, and drop the two originals.
+# publish it in the current source at a new revision, then use the atomic
+# `haex add` command above. The two original molecules can be dropped by that
+# replacement.
 ```
 
 haex-hive does not merge constitutions and ships no `--llm=file` or `--accept-merged` path in Spec 013. Merging two rule sets is an editorial decision the operator makes outside the tool.
@@ -167,7 +190,7 @@ All-or-nothing: `haex remove <present>,<absent>` refuses at the preflight step w
 
 If the retracted molecule was the currently adopted workflow molecule, the ensuing install runs without it. A tool-side bundled fallback for the `speckit` workflow is planned under Spec 011 amendment FR-008 and lands separately; today the retraction simply leaves the consumer without a workflow molecule until another `haex add` restores one.
 
-If retracting the last constitution-contributing molecule would leave the consumer with no constitution, the follow-on install refuses with `no-sources-declared` and `haex remove` rolls the manifest edit back atomically. Restore state by adopting a different constitution-contributing molecule first.
+If retracting the last constitution-contributing molecule would leave the consumer with no constitution, the follow-on install refuses with `no-sources-declared` and `haex remove` rolls the manifest edit back atomically. Use the same-source replacement path above, or prepare a reviewed one-constitution manifest candidate; adding a different source first is refused while the current constitution is adopted.
 
 ---
 
