@@ -264,6 +264,15 @@ class PublisherManifestInvalidError(HaexError):
 
 
 @dataclass
+class PublisherManifestMissingError(HaexError):
+    diagnostic_key: str = "publisher-manifest-missing"
+    exit_code: int = exit_codes.INPUT_REFUSE
+    hint: str = (
+        "The resolved revision has no manifest.json at the publisher repo root."
+    )
+
+
+@dataclass
 class MoleculeIdNotInSourceError(HaexError):
     diagnostic_key: str = "molecule-id-not-in-source"
     exit_code: int = exit_codes.INPUT_REFUSE

@@ -212,7 +212,8 @@ The lock file is created once by the tool on first use and never renamed or dele
 |---|---|---|---|
 | `source-url-invalid` | `git ls-remote <source-url>` failed with a non-transient error. | 2 | Check the URL, network, and any auth. |
 | `revision-not-found` | `--revision=<SHA>` is not a full 40-hex SHA, or the remote does not have that SHA. | 2 | Verify the SHA or drop the flag to resolve HEAD. |
-| `publisher-manifest-invalid` | The publisher-root `manifest.json` at the resolved SHA is missing, non-JSON, or does not validate against `publisher-manifest.v3.schema.json` (schema violation or `haex_hive_version` not `"3"`). | 2 | Confirm the source is a v3 haex-hive publisher; pick a different revision if the publisher moved. See note below on the contract's `publisher-manifest-missing` key. |
+| `publisher-manifest-missing` | The resolved SHA has no `manifest.json` at the publisher repo root. | 2 | Confirm the source is a haex-hive publisher; pick a revision that actually publishes one. |
+| `publisher-manifest-invalid` | The publisher-root `manifest.json` at the resolved SHA is present but non-JSON, or does not validate against `publisher-manifest.v3.schema.json` (schema violation or `haex_hive_version` not `"3"`). | 2 | Confirm the publisher has migrated to v3; pick a different revision if the publisher moved. |
 | `molecule-id-not-in-source` | A named molecule id is not in the publisher manifest at that SHA. | 2 | Check spelling and case; the publisher may have renamed. |
 | `interactive-selection-unavailable` | No molecule ids, no `--all`, and stdin is not a TTY. | 2 | Pass explicit molecule ids or `--all`. |
 | `workflow-molecule-already-adopted` | The added set includes a workflow molecule while a different one is already adopted. | 2 | `haex remove <current-workflow-molecule-id>` first. |
@@ -225,4 +226,3 @@ The lock file is created once by the tool on first use and never renamed or dele
 | `migration-manifest-invalid` | `haex migrate` found a structurally malformed v2 manifest (non-object shape, missing required field). | 2 | Fix the manifest and retry. |
 | `migration-path-outside-repository` | A v2 publisher's `molecules[].path` resolves outside the repository root. | 2 | Fix the publisher's declared path. |
 
-> **Contract vs implementation note:** the `haex-add.cli.md` contract distinguishes `publisher-manifest-missing` (no `manifest.json` at the resolved SHA) from `publisher-manifest-invalid` (schema failure). The current implementation collapses both into `publisher-manifest-invalid` with a message that names the missing case. Splitting the two keys is tracked as a small follow-up.

@@ -35,6 +35,7 @@ from haex_hive.util.errors import (
     InteractiveSelectionUnavailableError,
     MoleculeIdNotInSourceError,
     PublisherManifestInvalidError,
+    PublisherManifestMissingError,
     UsageError,
     WorkflowMoleculeAlreadyAdoptedError,
 )
@@ -44,15 +45,19 @@ _CONSTITUTION_CATEGORY = "constitution"
 
 
 def _load_publisher_manifest(repo_dir: Path, sha: str, source: str) -> PublisherManifest:
+    # The contract distinguishes:
+    #   publisher-manifest-missing -> no manifest.json at the resolved SHA
+    #   publisher-manifest-invalid -> present, but non-JSON, wrong schema, or
+    #                                 haex_hive_version != "3"
     try:
         publisher_bytes = git_show.show_bytes(
             repo_dir,
             sha,
             "manifest.json",
-            not_found_error=PublisherManifestInvalidError,
+            not_found_error=PublisherManifestMissingError,
         )
-    except PublisherManifestInvalidError as exc:
-        raise PublisherManifestInvalidError(
+    except PublisherManifestMissingError as exc:
+        raise PublisherManifestMissingError(
             message=f"publisher manifest missing at {source}@{sha[:12]}",
             context={"source": source, "revision": sha},
         ) from exc
