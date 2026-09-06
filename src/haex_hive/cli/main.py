@@ -72,9 +72,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    migrate_help = "rewrite v1 or v2 manifests into their v3 shape (Spec 013)"
     migrate = subparsers.add_parser(
         "migrate",
-        help="rewrite v1 or v2 manifests into their v3 shape (Spec 013)",
+        help=migrate_help,
+        description=migrate_help,
     )
     migrate.add_argument("--dry-run", action="store_true")
     migrate.add_argument("--check", action="store_true")
