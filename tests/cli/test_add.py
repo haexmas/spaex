@@ -15,6 +15,8 @@ from haex_hive.util.errors import (
     ConstitutionAlreadyAdoptedError,
     InteractiveSelectionUnavailableError,
     MoleculeIdNotInSourceError,
+    PublisherManifestInvalidError,
+    PublisherManifestMissingError,
     UsageError,
     WorkflowMoleculeAlreadyAdoptedError,
 )
@@ -464,3 +466,123 @@ def test_all_with_positional_ids_is_usage_error(
             revision=head,
             all=True,
         )
+
+
+def _make_publisher_without_root_manifest(
+    tmp_path: Path, haex_add_helpers
+) -> tuple[str, str, Path]:
+    """Build a publisher whose resolved SHA has NO manifest.json at root.
+
+    Uses the shared fixture to lay down the tree, then rewrites HEAD to a
+    commit whose tree omits manifest.json entirely. This exercises the
+    `publisher-manifest-missing` path distinct from `publisher-manifest-invalid`.
+    """
+    import subprocess
+
+    canonical, _initial_head, state_root = haex_add_helpers["make_publisher"](
+        tmp_path,
+        {
+            _HELLO_ID: {
+                "path": "hello",
+                "version": "1.0.0",
+                "atoms": {"constitution": ["constitution.md"]},
+            },
+        },
+    )
+    bare = haex_add_helpers["clone_dir"](state_root, canonical)
+    working = tmp_path / "no-root-working"
+    subprocess.run(["git", "clone", "-q", str(bare), str(working)], check=True)
+    haex_add_helpers["git"](working, "config", "user.email", "t@e")
+    haex_add_helpers["git"](working, "config", "user.name", "t")
+    haex_add_helpers["git"](working, "config", "commit.gpgsign", "false")
+    haex_add_helpers["git"](working, "rm", "-q", "manifest.json")
+    haex_add_helpers["git"](working, "commit", "-q", "-m", "drop root manifest")
+    haex_add_helpers["git"](working, "push", "-q", "origin", "HEAD:main")
+    new_head = haex_add_helpers["git"](working, "rev-parse", "HEAD")
+    return canonical, new_head, state_root
+
+
+def test_missing_publisher_root_manifest_refuses_with_missing_key(
+    tmp_path, monkeypatch, haex_add_helpers
+) -> None:
+    """The resolved SHA has no manifest.json at root -> publisher-manifest-missing.
+
+    Distinct from `publisher-manifest-invalid`, which fires when the file is
+    present but malformed or wrong-schema. Contract requires the two to be
+    surfaced with different diagnostic keys.
+    """
+    canonical, head, state_root = _make_publisher_without_root_manifest(
+        tmp_path, haex_add_helpers
+    )
+    consumer = haex_add_helpers["make_consumer"](tmp_path)
+
+    with pytest.raises(PublisherManifestMissingError) as exc_info:
+        haex_add_helpers["run_add"](
+            consumer,
+            state_root,
+            monkeypatch,
+            source_url=canonical,
+            molecule_ids=_HELLO_ID,
+            revision=head,
+        )
+    assert exc_info.value.diagnostic_key == "publisher-manifest-missing"
+    assert exc_info.value.context["source"] == canonical
+    assert exc_info.value.context["revision"] == head
+    # Manifest untouched.
+    assert json.loads((consumer / ".haex-hive.json").read_text())["compounds"] == []
+
+
+def test_malformed_publisher_root_manifest_refuses_with_invalid_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, haex_add_helpers
+) -> None:
+    """Present but schema-invalid publisher manifest -> publisher-manifest-invalid.
+
+    Uses a v2 publisher manifest (top-level `atoms:` instead of `molecules:`)
+    at the resolved SHA to exercise the schema-mismatch branch. Confirms it
+    stays on the -invalid key, not the -missing one.
+    """
+    import subprocess
+
+    canonical, _initial_head, state_root = haex_add_helpers["make_publisher"](
+        tmp_path,
+        {
+            _HELLO_ID: {
+                "path": "hello",
+                "version": "1.0.0",
+                "atoms": {"constitution": ["constitution.md"]},
+            },
+        },
+    )
+    bare = haex_add_helpers["clone_dir"](state_root, canonical)
+    working = tmp_path / "v2-root-working"
+    subprocess.run(["git", "clone", "-q", str(bare), str(working)], check=True)
+    haex_add_helpers["git"](working, "config", "user.email", "t@e")
+    haex_add_helpers["git"](working, "config", "user.name", "t")
+    haex_add_helpers["git"](working, "config", "commit.gpgsign", "false")
+    (working / "manifest.json").write_text(
+        json.dumps(
+            {
+                "haex_hive_version": "2",
+                "publisher": "com.example.publisher",
+                "atoms": {
+                    _HELLO_ID: {"path": "hello", "version": "1.0.0"},
+                },
+            },
+            indent=2,
+        )
+    )
+    haex_add_helpers["git"](working, "commit", "-q", "-am", "regress root to v2")
+    haex_add_helpers["git"](working, "push", "-q", "origin", "HEAD:main")
+    v2_head = haex_add_helpers["git"](working, "rev-parse", "HEAD")
+
+    consumer = haex_add_helpers["make_consumer"](tmp_path)
+    with pytest.raises(PublisherManifestInvalidError) as exc_info:
+        haex_add_helpers["run_add"](
+            consumer,
+            state_root,
+            monkeypatch,
+            source_url=canonical,
+            molecule_ids=_HELLO_ID,
+            revision=v2_head,
+        )
+    assert exc_info.value.diagnostic_key == "publisher-manifest-invalid"
