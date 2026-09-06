@@ -129,6 +129,7 @@ def haex_add_helpers() -> dict:
         name: str = "publisher",
         canonical: str | None = None,
     ) -> tuple[str, str, _P]:
+        """Create a bare publisher clone with the supplied molecule manifests."""
         working = tmp_path / f"{name}-working"
         working.mkdir()
         _local_git(working, "init", "-q", "-b", "main")
@@ -194,6 +195,7 @@ def haex_add_helpers() -> dict:
         return consumer
 
     def run_add(consumer, state_root, monkeypatch, **kwargs) -> int:
+        """Run `haex add` against a fixture publisher state root."""
         monkeypatch.setenv("HAEX_HIVE_STATE", str(state_root))
         ns = SimpleNamespace(
             repo_root=str(consumer),
