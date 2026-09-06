@@ -10,6 +10,10 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from haex_hive.cli.diagnostics import emit_refuse
+from haex_hive.install.manifest_lock import (
+    DEFAULT_LOCK_TIMEOUT_SECONDS,
+    parse_lock_timeout,
+)
 from haex_hive.model.version_constraint import VersionConstraint
 from haex_hive.util import exit_codes
 from haex_hive.util.errors import HaexError, VersionBelowMinError
@@ -78,9 +82,16 @@ def _build_parser() -> argparse.ArgumentParser:
     show = constitution_sub.add_parser("show", help="print effective constitution")
     show.add_argument("--no-preface", action="store_true")
 
-    subparsers.add_parser(
+    install = subparsers.add_parser(
         "install",
         help="resolve `.haex-hive.json` molecules and publish a new generation (Spec 008)",
+    )
+    install.add_argument(
+        "--lock-timeout",
+        dest="lock_timeout",
+        type=parse_lock_timeout,
+        default=DEFAULT_LOCK_TIMEOUT_SECONDS,
+        help="Manifest-lock timeout in seconds (default 30; 0 = fail-fast)",
     )
 
     from haex_hive.cli import add as add_cli
@@ -90,6 +101,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help="adopt one or more molecules from a source repository (Spec 013)",
     )
     add_cli.add_arguments(add_parser)
+
+    from haex_hive.cli import remove as remove_cli
+
+    remove_parser = subparsers.add_parser(
+        "remove",
+        help="retract one or more molecules from .haex-hive.json (Spec 013)",
+    )
+    remove_cli.add_arguments(remove_parser)
 
     return parser
 
@@ -123,6 +142,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             from haex_hive.cli import add as add_cli
 
             return add_cli.run(args)
+        if args.command == "remove":
+            from haex_hive.cli import remove as remove_cli
+
+            return remove_cli.run(args)
     except HaexError as exc:
         emit_refuse(exc)
         return exc.exit_code

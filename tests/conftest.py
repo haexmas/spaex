@@ -204,10 +204,22 @@ def haex_add_helpers() -> dict:
         )
         return add_cli.run(ns)
 
+    def run_remove(consumer, state_root, monkeypatch, molecule_ids: str, **kwargs) -> int:
+        from haex_hive.cli import remove as remove_cli
+
+        monkeypatch.setenv("HAEX_HIVE_STATE", str(state_root))
+        ns = SimpleNamespace(
+            repo_root=str(consumer),
+            molecule_ids=molecule_ids,
+            lock_timeout=kwargs.get("lock_timeout", 1.0),
+        )
+        return remove_cli.run(ns)
+
     return {
         "make_publisher": make_publisher,
         "make_consumer": make_consumer,
         "run_add": run_add,
+        "run_remove": run_remove,
         "git": _local_git,
         "clone_dir": clone_dir,
     }

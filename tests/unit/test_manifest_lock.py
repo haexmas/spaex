@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import argparse
 import multiprocessing
 import time
 from pathlib import Path
 
 import pytest
 
-from haex_hive.install.manifest_lock import ManifestLockContext
+from haex_hive.install.manifest_lock import ManifestLockContext, parse_lock_timeout
 from haex_hive.util.errors import ManifestLockContendedError
 
 
@@ -20,16 +21,19 @@ def _hold_lock(lock_path: str, seconds: float, ready_file: str) -> None:
         time.sleep(seconds)
 
 
-def _await_ready(
-    ready: Path, child: multiprocessing.Process, timeout: float = 10.0
-) -> None:
-    """Wait for a lock-holder child, failing if it exits or stalls."""
-    deadline = time.monotonic() + timeout
-    while not ready.exists():
+def _await_ready(ready_file: Path, child: multiprocessing.Process) -> None:
+    """Wait for a child-process readiness signal without polling forever."""
+    deadline = time.monotonic() + 5.0
+    while not ready_file.exists():
         if not child.is_alive():
-            raise AssertionError("lock-holder child exited before signalling ready")
+            child.join()
+            raise AssertionError(
+                f"lock child exited before readiness signal (exitcode={child.exitcode})"
+            )
         if time.monotonic() >= deadline:
-            raise AssertionError("lock-holder child did not signal ready in time")
+            child.terminate()
+            child.join()
+            raise AssertionError("lock child did not signal readiness in time")
         time.sleep(0.02)
 
 
@@ -48,6 +52,17 @@ def test_lock_file_not_renamed_or_deleted_on_exit(tmp_path: Path) -> None:
         pass
     assert lock_path.exists()
     assert lock_path.read_bytes() == b"pre-existing"
+
+
+@pytest.mark.parametrize("raw", ["nan", "inf", "-inf", "-1"])
+def test_lock_timeout_parser_rejects_unsafe_values(raw: str) -> None:
+    with pytest.raises(argparse.ArgumentTypeError):
+        parse_lock_timeout(raw)
+
+
+def test_lock_timeout_parser_accepts_finite_values() -> None:
+    assert parse_lock_timeout("0") == 0.0
+    assert parse_lock_timeout("1.5") == 1.5
 
 
 def test_bounded_wait_succeeds_when_lock_frees_in_time(tmp_path: Path) -> None:

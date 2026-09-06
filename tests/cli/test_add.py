@@ -12,6 +12,7 @@ import pytest
 
 from haex_hive.cli import add as add_cli
 from haex_hive.util.errors import (
+    ConstitutionAlreadyAdoptedError,
     InteractiveSelectionUnavailableError,
     MoleculeIdNotInSourceError,
     UsageError,
@@ -114,6 +115,14 @@ def test_replace_compound_when_same_source_different_revision(
         molecule_ids=_HELLO_ID,
         revision=head1,
     )
+    existing = json.loads((consumer / ".haex-hive.json").read_text())
+    existing["compounds"][0]["molecules"] = [_HELLO_ID, _WORLD_ID]
+    existing["compounds"][0]["track"] = "stable"
+    existing["compounds"][0]["config"] = {
+        _HELLO_ID: {"priority": 7, "values": {"mode": "strict"}},
+        _WORLD_ID: {"priority": 3, "values": {"mode": "legacy"}},
+    }
+    (consumer / ".haex-hive.json").write_text(json.dumps(existing))
 
     bare = haex_add_helpers["clone_dir"](state_root, canonical)
     advance = tmp_path / "advance-working"
@@ -137,6 +146,116 @@ def test_replace_compound_when_same_source_different_revision(
     written = json.loads((consumer / ".haex-hive.json").read_text())
     assert len(written["compounds"]) == 1
     assert written["compounds"][0]["revision"] == head2
+    assert written["compounds"][0]["track"] == "stable"
+    assert written["compounds"][0]["config"] == {
+        _HELLO_ID: {"priority": 7, "values": {"mode": "strict"}}
+    }
+
+
+def test_replace_compound_allows_renamed_singleton_molecule(
+    tmp_path, monkeypatch, haex_add_helpers
+) -> None:
+    import subprocess
+
+    canonical, head1, state_root = haex_add_helpers["make_publisher"](
+        tmp_path,
+        {
+            _HELLO_ID: {
+                "path": "hello",
+                "version": "1.0.0",
+                "atoms": {"constitution": ["constitution.md"]},
+            },
+        },
+    )
+    consumer = haex_add_helpers["make_consumer"](tmp_path)
+    haex_add_helpers["run_add"](
+        consumer,
+        state_root,
+        monkeypatch,
+        source_url=canonical,
+        molecule_ids=_HELLO_ID,
+        revision=head1,
+    )
+
+    bare = haex_add_helpers["clone_dir"](state_root, canonical)
+    advance = tmp_path / "advance-renamed-working"
+    subprocess.run(["git", "clone", "-q", str(bare), str(advance)], check=True)
+    haex_add_helpers["git"](advance, "config", "user.email", "t@e")
+    haex_add_helpers["git"](advance, "config", "user.name", "t")
+    haex_add_helpers["git"](advance, "config", "commit.gpgsign", "false")
+    manifest_path = advance / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["molecules"] = {
+        _WORLD_ID: {
+            "path": "world",
+            "version": "1.0.0",
+        }
+    }
+    manifest_path.write_text(json.dumps(manifest))
+    (advance / "world").mkdir()
+    (advance / "world" / "manifest.json").write_text(
+        json.dumps(
+            {
+                "haex_hive_version": "3",
+                "id": _WORLD_ID,
+                "version": "1.0.0",
+                "priority": 100,
+                "atoms": {"constitution": ["constitution.md"]},
+            }
+        )
+    )
+    (advance / "world" / "constitution.md").write_text("# renamed\n")
+    haex_add_helpers["git"](advance, "add", "manifest.json", "world")
+    haex_add_helpers["git"](
+        advance, "commit", "-q", "-m", "rename constitution molecule"
+    )
+    haex_add_helpers["git"](advance, "push", "-q", "origin", "HEAD:main")
+    head2 = haex_add_helpers["git"](advance, "rev-parse", "HEAD")
+
+    haex_add_helpers["run_add"](
+        consumer,
+        state_root,
+        monkeypatch,
+        source_url=canonical,
+        molecule_ids=_WORLD_ID,
+        revision=head2,
+    )
+    written = json.loads((consumer / ".haex-hive.json").read_text())
+    assert written["compounds"] == [
+        {"source": canonical, "revision": head2, "molecules": [_WORLD_ID]}
+    ]
+
+
+def test_all_rejects_multiple_singleton_declarers(
+    tmp_path, monkeypatch, haex_add_helpers
+) -> None:
+    canonical, head, state_root = haex_add_helpers["make_publisher"](
+        tmp_path,
+        {
+            "com.example.publisher.const-a": {
+                "path": "const-a",
+                "version": "1.0.0",
+                "atoms": {"constitution": ["constitution.md"]},
+            },
+            "com.example.publisher.const-b": {
+                "path": "const-b",
+                "version": "1.0.0",
+                "atoms": {"constitution": ["constitution.md"]},
+            },
+        },
+    )
+    consumer = haex_add_helpers["make_consumer"](tmp_path)
+
+    with pytest.raises(ConstitutionAlreadyAdoptedError):
+        haex_add_helpers["run_add"](
+            consumer,
+            state_root,
+            monkeypatch,
+            source_url=canonical,
+            revision=head,
+            all=True,
+        )
+    assert json.loads((consumer / ".haex-hive.json").read_text())["compounds"] == []
 
 
 def test_non_tty_without_ids_or_all_refuses(

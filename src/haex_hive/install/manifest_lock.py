@@ -18,7 +18,9 @@ delegating to `haex install`) can pass the context down without a re-lock.
 
 from __future__ import annotations
 
+import argparse
 import errno
+import math
 import os
 import sys
 import time
@@ -34,6 +36,19 @@ _WINDOWS_LOCK_LENGTH = 1
 _POLL_INTERVAL_SECONDS = 0.05
 
 DEFAULT_LOCK_TIMEOUT_SECONDS = 30.0
+
+
+def parse_lock_timeout(raw: str) -> float:
+    """Parse a finite, non-negative manifest-lock timeout for argparse."""
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("lock timeout must be a number") from exc
+    if not math.isfinite(value) or value < 0:
+        raise argparse.ArgumentTypeError(
+            "lock timeout must be a finite number greater than or equal to zero"
+        )
+    return value
 MANIFEST_NAME = ".haex-hive.json"
 MANIFEST_LOCK_NAME = ".haex-hive.json.lock"
 

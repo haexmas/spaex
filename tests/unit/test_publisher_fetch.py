@@ -92,6 +92,42 @@ def test_ensure_object_refuses_missing_sha(tmp_path: Path) -> None:
         publisher_fetch.ensure_object(str(bare), "0" * 40, state_root)
 
 
+def test_ensure_object_refuses_unreachable_source_and_cleans_cache(
+    tmp_path: Path,
+) -> None:
+    state_root = tmp_path / "state"
+    source = str(tmp_path / "does-not-exist.git")
+
+    with pytest.raises(SourceUrlInvalidError):
+        publisher_fetch.ensure_object(source, "0" * 40, state_root)
+
+    repo_dir = clone_dir(state_root, source)
+    assert repo_dir.is_dir()
+    assert not list(repo_dir.parent.glob(f".{repo_dir.name}.*"))
+
+
+def test_failed_cache_initialization_is_removed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = str(tmp_path / "publisher.git")
+    state_root = tmp_path / "state"
+    calls: list[tuple[str, ...]] = []
+
+    def fake_run(*args: str, **kwargs):
+        calls.append(args)
+        if args[:2] == ("remote", "add"):
+            return subprocess.CompletedProcess(
+                ["git", *args], 1, "", "remote setup failed"
+            )
+        return subprocess.CompletedProcess(["git", *args], 0, "", "")
+
+    monkeypatch.setattr(publisher_fetch, "_run_git", fake_run)
+
+    with pytest.raises(SourceUrlInvalidError):
+        publisher_fetch.ensure_object(source, "0" * 40, state_root)
+
+    assert calls[:2] == [("init", "-q", "--bare"), ("remote", "add", "origin", source)]
+    assert not clone_dir(state_root, source).exists()
 def test_ensure_object_maps_non_ref_fetch_failure_to_source_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -165,3 +201,13 @@ def test_ensure_object_is_idempotent_for_present_sha(tmp_path: Path) -> None:
     repo_dir = publisher_fetch.ensure_object(str(bare), head, state_root)
     repo_dir_again = publisher_fetch.ensure_object(str(bare), head, state_root)
     assert repo_dir == repo_dir_again
+
+
+def test_git_timeout_is_a_typed_source_refusal(monkeypatch: pytest.MonkeyPatch) -> None:
+    def timeout(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=args[0], timeout=kwargs["timeout"])
+
+    monkeypatch.setattr(publisher_fetch.subprocess, "run", timeout)
+
+    with pytest.raises(SourceUrlInvalidError):
+        publisher_fetch._run_git("fetch", "origin", "0" * 40)
