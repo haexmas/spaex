@@ -111,11 +111,18 @@ def test_fixture_v2_repo_yields_v3_proposals_for_every_manifest(
 def test_originals_are_never_touched(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     _make_v2_repo(repo)
-    consumer_before = (repo / ".haex-hive.json").read_bytes()
-    root_before = (repo / "manifest.json").read_bytes()
+    originals = {
+        path: path.read_bytes()
+        for path in (
+            repo / ".haex-hive.json",
+            repo / "manifest.json",
+            repo / "hello" / "manifest.json",
+            repo / "world" / "manifest.json",
+        )
+    }
 
     ns = SimpleNamespace(repo_root=str(repo), dry_run=False, check=False)
     migrate_cli.run(ns)
 
-    assert (repo / ".haex-hive.json").read_bytes() == consumer_before
-    assert (repo / "manifest.json").read_bytes() == root_before
+    for path, before in originals.items():
+        assert path.read_bytes() == before, f"{path} was modified"

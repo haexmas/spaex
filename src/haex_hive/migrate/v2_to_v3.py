@@ -19,11 +19,11 @@ three shapes); the field-presence heuristic above is what routes each input.
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, NoReturn
 
 from haex_hive.io import json_deterministic
 from haex_hive.util import exit_codes
-from haex_hive.util.errors import HaexError
+from haex_hive.util.errors import HaexError, MigrationManifestInvalidError
 
 _MIN_VERSION_RE = re.compile(r"^(>=)?(\d+)\.(\d+)\.(\d+)$")
 
@@ -53,6 +53,119 @@ class UnrecognizedManifestShapeError(HaexError):
         "Input does not look like a v2 consumer, publisher, or molecule "
         "manifest."
     )
+
+
+def _invalid_manifest(message: str, *, field: str) -> NoReturn:
+    """Raise a typed refusal for a structurally malformed v2 manifest."""
+    raise MigrationManifestInvalidError(message=message, context={"field": field})
+
+
+def _validate_consumer(data: dict[str, Any]) -> None:
+    """Validate the fields required by the v2 consumer transform."""
+    if not isinstance(data.get("identity"), str):
+        _invalid_manifest("consumer manifest identity must be a string", field="identity")
+    if "haex_hive_min_version" in data and not isinstance(
+        data["haex_hive_min_version"], str
+    ):
+        _invalid_manifest(
+            "consumer manifest haex_hive_min_version must be a string",
+            field="haex_hive_min_version",
+        )
+    compounds_key = "compounds" if "compounds" in data else "atoms"
+    compounds = data.get(compounds_key, [])
+    if not isinstance(compounds, list):
+        _invalid_manifest(
+            f"consumer manifest {compounds_key} must be an array",
+            field=compounds_key,
+        )
+    for index, entry in enumerate(compounds):
+        if not isinstance(entry, dict):
+            _invalid_manifest(
+                f"consumer manifest {compounds_key}[{index}] must be an object",
+                field=f"{compounds_key}[{index}]",
+            )
+        for required in ("source", "revision"):
+            if not isinstance(entry.get(required), str):
+                _invalid_manifest(
+                    f"consumer manifest entry is missing string {required}",
+                    field=f"{compounds_key}[{index}].{required}",
+                )
+        molecules_key = "molecules" if "molecules" in entry else "includes"
+        molecules = entry.get(molecules_key)
+        if not isinstance(molecules, list) or not all(
+            isinstance(molecule_id, str) for molecule_id in molecules
+        ):
+            _invalid_manifest(
+                f"consumer manifest entry {molecules_key} must be a string array",
+                field=f"{compounds_key}[{index}].{molecules_key}",
+            )
+
+
+def _validate_publisher(data: dict[str, Any]) -> None:
+    """Validate the fields required by the v2 publisher transform."""
+    if not isinstance(data.get("publisher"), str):
+        _invalid_manifest("publisher manifest publisher must be a string", field="publisher")
+    molecules_key = "molecules" if "molecules" in data else "atoms"
+    molecules = data.get(molecules_key, {})
+    if not isinstance(molecules, dict):
+        _invalid_manifest(
+            f"publisher manifest {molecules_key} must be an object",
+            field=molecules_key,
+        )
+    for molecule_id, entry in molecules.items():
+        if not isinstance(entry, dict):
+            _invalid_manifest(
+                f"publisher manifest entry {molecule_id!r} must be an object",
+                field=f"{molecules_key}.{molecule_id}",
+            )
+        for required in ("path", "version"):
+            if not isinstance(entry.get(required), str):
+                _invalid_manifest(
+                    f"publisher manifest entry is missing string {required}",
+                    field=f"{molecules_key}.{molecule_id}.{required}",
+                )
+
+
+def _validate_molecule(data: dict[str, Any]) -> None:
+    """Validate the fields required by the v2 molecule transform."""
+    for required in ("id", "version"):
+        if not isinstance(data.get(required), str):
+            _invalid_manifest(
+                f"molecule manifest is missing string {required}", field=required
+            )
+    if "priority" in data and (
+        not isinstance(data["priority"], int) or isinstance(data["priority"], bool)
+    ):
+        _invalid_manifest("molecule manifest priority must be an integer", field="priority")
+
+    if "atoms" in data:
+        atoms = data["atoms"]
+        if not isinstance(atoms, dict):
+            _invalid_manifest("molecule manifest atoms must be an object", field="atoms")
+        for category, paths in atoms.items():
+            if not isinstance(paths, list) or not all(
+                isinstance(path, str) for path in paths
+            ):
+                _invalid_manifest(
+                    "molecule manifest atoms values must be string arrays",
+                    field=f"atoms.{category}",
+                )
+        return
+
+    contributes = data.get("contributes")
+    if not isinstance(contributes, dict):
+        _invalid_manifest(
+            "molecule manifest contributes must be an object", field="contributes"
+        )
+    for category, paths in contributes.items():
+        if isinstance(paths, str):
+            continue
+        if isinstance(paths, list) and all(isinstance(path, str) for path in paths):
+            continue
+        _invalid_manifest(
+            "molecule manifest contributes values must be strings or string arrays",
+            field=f"contributes.{category}",
+        )
 
 
 def rewrite_min_version(value: str) -> str:
@@ -104,13 +217,15 @@ def _v2_consumer_to_v3(data: dict[str, Any]) -> dict[str, Any]:
         result["haex_hive_min_version"] = rewrite_min_version(
             data["haex_hive_min_version"]
         )
-    old_compounds = data.get("compounds") or data.get("atoms") or []
+    old_compounds = data["compounds"] if "compounds" in data else data.get("atoms", [])
     new_compounds: list[dict[str, Any]] = []
     for entry in old_compounds:
         new_entry: dict[str, Any] = {
             "source": entry["source"],
             "revision": entry["revision"],
-            "molecules": list(entry.get("molecules") or entry.get("includes") or []),
+            "molecules": list(
+                entry.get("molecules") if "molecules" in entry else entry.get("includes", [])
+            ),
         }
         if "track" in entry:
             new_entry["track"] = entry["track"]
@@ -126,7 +241,7 @@ def _v2_consumer_to_v3(data: dict[str, Any]) -> dict[str, Any]:
 
 def _v2_publisher_to_v3(data: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {"haex_hive_version": "3", "publisher": data["publisher"]}
-    old_molecules = data.get("molecules") or data.get("atoms") or {}
+    old_molecules = data["molecules"] if "molecules" in data else data.get("atoms", {})
     new_molecules: dict[str, Any] = {}
     for mid, entry in old_molecules.items():
         new_entry: dict[str, Any] = {
@@ -188,13 +303,18 @@ def _v2_molecule_to_v3(data: dict[str, Any]) -> dict[str, Any]:
 
 def v2_to_v3(data: dict[str, Any]) -> dict[str, Any]:
     """Route a parsed v2 manifest object through the correct sub-transform."""
+    if not isinstance(data, dict):
+        _invalid_manifest("manifest root must be an object", field="/")
     if is_v3(data):
         return data
     if _looks_like_consumer(data):
+        _validate_consumer(data)
         return _v2_consumer_to_v3(data)
     if _looks_like_publisher(data):
+        _validate_publisher(data)
         return _v2_publisher_to_v3(data)
     if _looks_like_molecule(data):
+        _validate_molecule(data)
         return _v2_molecule_to_v3(data)
     raise UnrecognizedManifestShapeError(
         message="input does not match any known v2 manifest shape"
