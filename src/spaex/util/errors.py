@@ -239,7 +239,7 @@ class UsageError(HaexError):
     hint: str = ""
 
 
-# --- Spec 013 haex add / haex remove boundary --------------------------------
+# --- Spec 013 spaex add / spaex remove boundary --------------------------------
 
 
 @dataclass
@@ -247,7 +247,7 @@ class ManifestLockContendedError(HaexError):
     diagnostic_key: str = "manifest-lock-contended"
     exit_code: int = exit_codes.WRITER_BUSY
     hint: str = (
-        "Another `haex add`/`haex remove`/`haex install` holds the manifest "
+        "Another `spaex add`/`spaex remove`/`spaex install` holds the manifest "
         "lock; retry, or override with `--lock-timeout=<sec>`."
     )
 

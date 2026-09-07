@@ -151,13 +151,13 @@ Single-project layout (unchanged from Spec 013). `src/haex_hive/` renames to `sr
 
 - [X] T060 [US3] Create [.github/workflows/release.yml](../../.github/workflows/release.yml) per [contracts/release-workflow.md](contracts/release-workflow.md). Include the `build` and `publish` jobs, the `pypi` environment reference, and `id-token: write` permission.
 - [X] T061 [US3] Verify PyPI Trusted Publisher pending-publisher config is in place for project `spaex`, owner `haexmas`, repository `haex-hive` (until T074 renames it), workflow filename `release.yml`, environment `pypi`. Update the repository field to `spaex` after the GitHub rename before a post-rename release.
-- [ ] T062 [US3] On `main` (after PR merges land), bump [pyproject.toml](../../pyproject.toml) version from `"4.0.0.dev0"` to `"4.0.0"`. Commit as `chore(release): 4.0.0`.
-- [ ] T063 [US3] `git tag v4.0.0 && git push origin v4.0.0`. Workflow triggers.
-- [ ] T064 [US3] If the `pypi` GitHub Environment has a required-reviewer gate, approve the publish job in the GitHub Environments UI. Wait for the publish job to complete.
-- [ ] T065 [US3] Confirm PyPI project page at `https://pypi.org/project/spaex/` shows `spaex 4.0.0` with sdist plus wheel artifacts.
-- [ ] T066 [US3] On a scratch machine or fresh venv: `pipx install spaex`; confirm `spaex --version` reports `4.0.0`; run through the [quickstart.md](quickstart.md) Adopt-a-molecule flow against a fixture publisher.
-- [ ] T067 [US3] On `main`, bump [pyproject.toml](../../pyproject.toml) version from `"4.0.0"` to `"4.0.1.dev0"`. Commit as `chore(release): open 4.0.1 cycle`.
-- [ ] T068 [US3] Create GitHub Release: `gh release create v4.0.0 --generate-notes`. Confirm the release page renders correctly at `https://github.com/haexmas/spaex/releases/tag/v4.0.0`.
+- [X] T062 [US3] On `main` (after PR merges land), bump [pyproject.toml](../../pyproject.toml) version from `"4.0.0.dev0"` to `"4.0.0"`. Commit as `chore(release): 4.0.0`.
+- [X] T063 [US3] `git tag v4.0.0 && git push origin v4.0.0`. Workflow triggers.
+- [X] T064 [US3] If the `pypi` GitHub Environment has a required-reviewer gate, approve the publish job in the GitHub Environments UI. Wait for the publish job to complete.
+- [X] T065 [US3] Confirm PyPI project page at `https://pypi.org/project/spaex/` shows `spaex 4.0.0` with sdist plus wheel artifacts.
+- [X] T066 [US3] On a scratch machine or fresh venv: `pipx install spaex`; confirm `spaex --version` reports `4.0.0`; run through the [quickstart.md](quickstart.md) Adopt-a-molecule flow against a fixture publisher.
+- [X] T067 [US3] On `main`, bump [pyproject.toml](../../pyproject.toml) version from `"4.0.0"` to `"4.0.1.dev0"`. Commit as `chore(release): open 4.0.1 cycle`.
+- [X] T068 [US3] Create GitHub Release: `gh release create v4.0.0 --generate-notes`. Confirm the release page renders correctly at `https://github.com/haexmas/spaex/releases/tag/v4.0.0`.
 
 **Checkpoint**: `pipx install spaex` works from PyPI. First release is live and reproducible.
 
@@ -167,12 +167,12 @@ Single-project layout (unchanged from Spec 013). `src/haex_hive/` renames to `sr
 
 **Purpose**: Verify success criteria, sweep memory files, walk the quickstart end to end.
 
-- [ ] T070 [P] Grep sweep: `rg 'haex[_-]hive' src/ tests/ pyproject.toml README.md .github/` and `rg '\bhaex\b' src/ tests/ pyproject.toml README.md .github/` MUST return zero. Historical references in `docs/adr/`, `docs/plans/`, `specs/` are documented as exempt in [spec.md](spec.md) SC-006 and remain untouched.
+- [X] T070 [P] Grep sweep: `rg 'haex[_-]hive' src/ tests/ pyproject.toml README.md .github/` and `rg '\bhaex\b' src/ tests/ pyproject.toml README.md .github/` MUST return zero. Historical references in `docs/adr/`, `docs/plans/`, `specs/` are documented as exempt in [spec.md](spec.md) SC-006 and remain untouched.
 - [ ] T071 [P] Memory-file sweep: rename `~/.claude/projects/-home-haex-Projekte-haex-hive/memory/haex_hive_*.md` files to `spaex_*.md`; update `MEMORY.md` index entries; update memory-file content that references `haex-hive` to `spaex`. Directory path itself (`-home-haex-Projekte-haex-hive`) is a Claude Code implementation detail keyed by the working directory; unchanged.
-- [ ] T072 Walk [quickstart.md](quickstart.md) end to end against a scratch project on a fresh machine (or a container). Every command works as documented. Every refusal-key row in the table is reachable via the documented failure mode. Any wording drift is fixed in the same task.
-- [ ] T073 [P] Confirm [SC-001](spec.md) through SC-010 are all satisfied. If any fails, open a follow-up task in this file (do not silently pass).
-- [ ] T074 GitHub-repo rename: through the GitHub UI, rename `haexmas/haex-hive` → `haexmas/spaex`. GitHub configures the redirect automatically. Update the repo description to reference the current identity.
-- [ ] T075 Merge the feature branch. Per Clarification 2026-09-07 Q1, land as **five PRs** against `main` (see the PR-vs-tasks-phase mapping above). Delete the feature branch after landing.
+- [X] T072 Walk [quickstart.md](quickstart.md) end to end against a scratch project on a fresh machine (or a container). Every command works as documented. Every refusal-key row in the table is reachable via the documented failure mode. Any wording drift is fixed in the same task.
+- [X] T073 [P] Confirm [SC-001](spec.md) through SC-010 are all satisfied. If any fails, open a follow-up task in this file (do not silently pass).
+- [X] T074 GitHub-repo rename: through the GitHub UI, rename `haexmas/haex-hive` → `haexmas/spaex`. GitHub configures the redirect automatically. Update the repo description to reference the current identity.
+- [X] T075 Merge the feature branch. Per Clarification 2026-09-07 Q1, land as **five PRs** against `main` (see the PR-vs-tasks-phase mapping above). Delete the feature branch after landing.
 - [ ] T076 **RUN AFTER SESSION CLOSE**: Rename the local repository directory: `mv /home/haex/Projekte/haex-hive /home/haex/Projekte/spaex`. Also copy the Claude Code memory directory: `cp -r ~/.claude/projects/-home-haex-Projekte-haex-hive ~/.claude/projects/-home-haex-Projekte-spaex`. Then open a new shell in the new path. Do NOT run this task while any shell, IDE, Claude Code session, or file watcher has the old directory as its cwd; renaming the cwd out from under a running process breaks it. Per Clarification 2026-09-07 Q2.
 
 ---

@@ -1,7 +1,7 @@
 """T082 — retracting the adopted workflow molecule (Spec 011 amendment FR-008).
 
 The bundled-speckit fallback is a Spec 011 concern that lands separately;
-this test confirms `haex remove` correctly retracts the workflow molecule
+this test confirms `spaex remove` correctly retracts the workflow molecule
 from the manifest and the ensuing install completes without prompting for
 any activation step.
 """

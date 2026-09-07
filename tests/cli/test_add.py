@@ -1,4 +1,4 @@
-"""T063 — CLI tests for `haex add` (Spec 013)."""
+"""T063 — CLI tests for `spaex add` (Spec 013)."""
 
 from __future__ import annotations
 

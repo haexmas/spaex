@@ -1,4 +1,4 @@
-"""T080 — CLI tests for `haex remove` (Spec 013)."""
+"""T080 — CLI tests for `spaex remove` (Spec 013)."""
 
 from __future__ import annotations
 
@@ -156,7 +156,7 @@ def test_unknown_molecule_id_refuses_absent(
 def test_preflight_refuses_mixed_request_without_touching_manifest(
     adopted_repo, haex_add_helpers, monkeypatch
 ) -> None:
-    """`haex remove <present>,<absent>` names every missing id and writes nothing."""
+    """`spaex remove <present>,<absent>` names every missing id and writes nothing."""
     consumer = adopted_repo["consumer"]
     baseline = (consumer / ".spaex.json").read_bytes()
     with pytest.raises(UnknownMoleculeIdError) as exc_info:
