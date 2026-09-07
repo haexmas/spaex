@@ -11,7 +11,15 @@
 
 Full Layer-3 rebrand from `haex-hive` to `spaex`. Every user-visible surface renames in one coordinated feature: PyPI package, Python package, CLI binary, config file, output directory, schema version field, min-version field, environment variable, GitHub repo. Schema bumps from v3 to v4 (structural shape unchanged, only version-field name and value change). Migrate chain extended with `v3_to_v4`. Repo self-adopts. Constitution amended for prose references only (PATCH 1.4.0 → 1.4.1). First PyPI release under the new name at `4.0.0`, published via GitHub Actions and OIDC Trusted Publishing.
 
-Ships as six sequential phases, each a separate PR against `main`. Full technical detail in the design source; this plan restates it in Speckit shape.
+Ships as **five sequential PRs against `main`** (revised per Clarification 2026-09-07 Q1). The task-file's six phases map onto the PRs as:
+
+1. PR #1: tasks-Phase 1 (schema payloads v4, dead code).
+2. PR #2: tasks-Phase 3 (v3→v4 migrate transform, promoted ahead of the foundational rename so the self-adopt step can use it).
+3. PR #3: tasks-Phase 2 + tasks-Phase 4 combined (foundational rename + self-adoption + docs sweep). Bundled to keep `main` coherent at every merge boundary.
+4. PR #4: tasks-Phase 5 (release workflow, first PyPI push at `v4.0.0`).
+5. PR #5: tasks-Phase 6 (polish, GitHub-repo rename, memory sweep, local-directory rename as the very last step).
+
+Full technical detail in the design source; this plan restates it in Speckit shape.
 
 ## Technical Context
 
