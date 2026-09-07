@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/haexmas/spaex/schemas/consumer-manifest.v4.schema.json",
+  "title": "spaex Consumer Manifest v4",
+  "description": "Schema for a consumer repository's `.spaex.json` v4 file. Structurally identical to v3; only the version-field name (`haex_hive_version` -> `spaex_version`) and value (`3` -> `4`), and the min-version-field name (`haex_hive_min_version` -> `spaex_min_version`), change. See Spec 014.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["spaex_version", "identity", "compounds"],
+  "properties": {
+    "spaex_version": {
+      "const": "4",
+      "description": "Schema version. Must be the exact string \"4\"."
+    },
+    "spaex_min_version": {
+      "$ref": "#/$defs/versionConstraint",
+      "description": "Minimum CLI version required. Grammar: X.Y.Z or >=X.Y.Z."
+    },
+    "identity": {
+      "$ref": "#/$defs/moleculeId",
+      "description": "Consumer's own reverse-DNS project ID."
+    },
+    "compounds": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/compoundEntry" },
+      "description": "The explicit allowlist of source-pinned molecule bundles this project inherits. Empty allowed; per Principle V, an empty list inherits no external content."
+    },
+    "groups": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "v1 carry-over; not consumed by v4 commands."
+    },
+    "active_feature": {
+      "type": ["string", "null"],
+      "description": "v1 carry-over."
+    },
+    "identity_note": {
+      "type": "string",
+      "description": "v1 carry-over free-text operator note."
+    }
+  },
+  "$defs": {
+    "moleculeId": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$",
+      "minLength": 3,
+      "maxLength": 253,
+      "description": "Reverse-DNS identifier for a molecule."
+    },
+    "versionConstraint": {
+      "type": "string",
+      "pattern": "^(?:>=)?(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "description": "Exact X.Y.Z or lower-bound >=X.Y.Z."
+    },
+    "canonicalSourceUrl": {
+      "type": "string",
+      "pattern": "^(?!.*\\.git$)(?:https|ssh):\\/\\/[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[0-9]+)?(?:\\/[A-Za-z0-9._~!$&'()*+,;=:%-]+)+$",
+      "description": "Credential-free canonical https:// or ssh:// URL: lowercase host, non-empty path, no trailing slash, and no terminal .git."
+    },
+    "fullSha40": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "Full 40-character lowercase git commit SHA."
+    },
+    "compoundEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "revision", "molecules"],
+      "properties": {
+        "source": { "$ref": "#/$defs/canonicalSourceUrl" },
+        "revision": { "$ref": "#/$defs/fullSha40" },
+        "track": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional non-authoritative branch annotation. Never overrides revision."
+        },
+        "molecules": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/moleculeId" },
+          "description": "Reverse-DNS molecule ids adopted from this source at this revision."
+        },
+        "config": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/configEntry" },
+          "propertyNames": { "$ref": "#/$defs/moleculeId" },
+          "description": "Per-molecule-id config overrides. Keys must be molecule-ids listed in this entry's molecules array."
+        }
+      }
+    },
+    "configEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "priority": {
+          "type": "integer",
+          "description": "Consumer-owned priority override. Publisher config_schema MUST NOT declare a top-level priority property."
+        },
+        "values": {
+          "type": "object",
+          "description": "Deep-merged onto publisher defaults; validated against publisher config_schema after merge."
+        }
+      }
+    }
+  }
+}
