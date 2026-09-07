@@ -11,7 +11,7 @@ The maintainer registered these on 2026-09-07:
 - PyPI **project** `spaex` exists (via pending-publisher registration; the first successful publish creates the project record).
 - PyPI **Trusted Publisher** entry pointing at:
   - Owner: `haexmas`
-  - Repository: `spaex` (after GitHub-repo rename)
+  - Repository: `haex-hive` until the GitHub-repo rename; update it to `spaex` before a post-rename release
   - Workflow filename: `release.yml`
   - Environment: `pypi`
 - GitHub **Environment** `pypi` in `haexmas/spaex` repo settings. Optionally with a required-reviewer gate for manual approval before publish.
@@ -34,6 +34,10 @@ jobs:
         with:
           python-version: '3.10'
       - run: python -m pip install --upgrade pip build
+      - name: verify tag matches package version
+        run: |
+          package_version="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          test "$package_version" = "${GITHUB_REF_NAME#v}"
       - run: python -m build
       - uses: actions/upload-artifact@v4
         with:
@@ -59,6 +63,7 @@ jobs:
 
 - `python -m build` produces `dist/spaex-<version>.tar.gz` (sdist) and `dist/spaex-<version>-py3-none-any.whl` (pure-Python wheel).
 - The `<version>` MUST match `pyproject.toml`'s `[project].version` at the tagged commit. The tag itself is `v<version>` (e.g., tag `v4.0.0` → version `4.0.0`).
+- Before building, the workflow MUST read `[project].version` and fail unless it exactly matches `${GITHUB_REF_NAME#v}`. Prerelease and development versions may build for verification but MUST NOT reach the PyPI publish step.
 - No cross-platform wheels; `spaex` is pure Python. If a native extension is ever added, this contract expands.
 
 ## Publish contract

@@ -18,6 +18,7 @@ from spaex.model.molecule_id import MoleculeId
 from spaex.model.source_url import canonicalize
 from spaex.model.version_constraint import VersionConstraint
 from spaex.schema import validator as schema_validator
+from spaex.util.errors import SpaexVersionUnsupportedError
 
 _SHA40_RE = re.compile(r"^[0-9a-f]{40}$")
 
@@ -50,6 +51,20 @@ class ConsumerManifest:
     @staticmethod
     def from_json(raw: bytes) -> ConsumerManifest:
         data = json.loads(raw.decode("utf-8"))
+        if isinstance(data, dict):
+            if "haex_hive_version" in data:
+                raise SpaexVersionUnsupportedError(
+                    message="legacy haex_hive_version is not supported by the v4 read gate",
+                    context={"version": str(data["haex_hive_version"])},
+                )
+            if "spaex_version" in data and data["spaex_version"] != "4":
+                raise SpaexVersionUnsupportedError(
+                    message=(
+                        f"unsupported spaex_version {data['spaex_version']!r}; "
+                        'the consumer manifest must declare "4"'
+                    ),
+                    context={"version": str(data["spaex_version"])},
+                )
         schema_validator.validate(data, "consumer-manifest.v4.schema.json")
 
         MoleculeId.parse_identity(data["identity"])

@@ -48,7 +48,7 @@ def _load_publisher_manifest(repo_dir: Path, sha: str, source: str) -> Publisher
     # The contract distinguishes:
     #   publisher-manifest-missing -> no manifest.json at the resolved SHA
     #   publisher-manifest-invalid -> present, but non-JSON, wrong schema, or
-    #                                 spaex_version != "3"
+    #                                 spaex_version != "4"
     try:
         publisher_bytes = git_show.show_bytes(
             repo_dir,
@@ -363,12 +363,12 @@ def run(args: argparse.Namespace) -> int:
     if not manifest_path.exists():
         raise HaexError(
             message=(
-                f"{manifest_path} is missing; run `haex init` before `haex add`"
+                f"{manifest_path} is missing; create it before running `spaex add`"
             ),
             context={"path": str(manifest_path)},
             diagnostic_key="spaex-json-missing",
             exit_code=exit_codes.INCOMPLETE_TRANSACTION,
-            hint="Create a v3 .spaex.json first.",
+            hint="Create a v4 .spaex.json first.",
         )
 
     lock = ManifestLockContext(

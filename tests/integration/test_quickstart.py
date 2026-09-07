@@ -37,7 +37,7 @@ def test_path1_migrate_produces_schema_valid_v4(
     and the consumer sidecar lives at `.spaex.json.migrated`."""
     consumer = tmp_path / "consumer"
     shutil.copytree(self_migration_fixture["publisher"], consumer)
-    (consumer / ".spaex.json").write_text(
+    (consumer / ".haex-hive.json").write_text(
         json.dumps(
             {
                 "haex_hive_version": "1",
@@ -70,13 +70,13 @@ def test_path1_migrate_produces_schema_valid_v4(
     assert data["spaex_version"] == "4"
     assert "haex_hive_version" not in data
 
-    # Adopt every proposal (consumer becomes .spaex.json + delete .spaex.json;
+    # Adopt every proposal (consumer becomes .spaex.json + delete .haex-hive.json;
     # publisher-root + per-molecule manifest.json.migrated overwrite their
     # originals). Only after all `.migrated` siblings replace their originals
     # does the rerun report "already at v4".
     for migrated in list(consumer.rglob("*.migrated")):
         if migrated.name == ".spaex.json.migrated":
-            (consumer / ".spaex.json").unlink(missing_ok=True)
+            (consumer / ".haex-hive.json").unlink(missing_ok=True)
             migrated.replace(consumer / ".spaex.json")
         else:
             migrated.replace(migrated.with_name(migrated.name[: -len(".migrated")]))
@@ -84,6 +84,7 @@ def test_path1_migrate_produces_schema_valid_v4(
     assert rerun.returncode == 0
     assert b"already at v4" in rerun.stderr
     assert not sidecar.exists()
+    assert not (consumer / ".haex-hive.json").exists()
 
 
 def test_path2_single_source_assemble_and_show(

@@ -36,6 +36,7 @@ from spaex.util.errors import (
     MissingAtomManifestError,
     MissingPublisherManifestError,
     PlaintextSecretDetectedError,
+    SpaexVersionUnsupportedError,
     TerminalUnsafeContributionError,
 )
 
@@ -248,6 +249,33 @@ def test_models_freeze_nested_json_values() -> None:
     )
     with pytest.raises(TypeError):
         publisher.molecules["com.example.other"] = publisher.molecules["com.example.atom"]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"haex_hive_version": "3"},
+        {"spaex_version": "3"},
+        {"spaex_version": "5"},
+    ],
+)
+def test_consumer_manifest_rejects_legacy_and_unsupported_versions(
+    payload: dict[str, str],
+) -> None:
+    with pytest.raises(SpaexVersionUnsupportedError) as exc_info:
+        ConsumerManifest.from_json(json.dumps(payload).encode())
+
+    assert exc_info.value.diagnostic_key == "spaex-version-unsupported"
+    assert "spaex migrate" in exc_info.value.hint
+
+
+def test_molecule_manifest_rejects_negative_priority() -> None:
+    with pytest.raises(ValueError):
+        MoleculeManifest.from_json(
+            b'{"spaex_version":"4","id":"com.example.atom",'
+            b'"version":"1.0.0","priority":-1,"atoms":{"constitution":['
+            b'"constitution.md"]}}'
+        )
 
 
 def test_json_pointer_escapes_tokens() -> None:

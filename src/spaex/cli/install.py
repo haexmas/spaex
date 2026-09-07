@@ -32,7 +32,7 @@ from spaex.util.errors import ConstitutionAlreadyAdoptedError, HaexError
 
 
 def _load_consumer_manifest(repo_root: Path) -> ConsumerManifest:
-    """Load and validate the consumer's v3 harness manifest."""
+    """Load and validate the consumer's v4 harness manifest."""
     manifest_path = repo_root / MANIFEST_NAME
     if not manifest_path.exists():
         raise HaexError(
@@ -41,8 +41,8 @@ def _load_consumer_manifest(repo_root: Path) -> ConsumerManifest:
             diagnostic_key="spaex-json-missing",
             exit_code=exit_codes.INCOMPLETE_TRANSACTION,
             hint=(
-                "A v3 .spaex.json is required; v2-to-v3 migration is not "
-                "available yet."
+                "Run `spaex migrate`, review `.spaex.json.migrated`, and adopt "
+                "it as `.spaex.json`."
             ),
         )
     raw = manifest_path.read_bytes()
@@ -50,12 +50,12 @@ def _load_consumer_manifest(repo_root: Path) -> ConsumerManifest:
         return ConsumerManifest.from_json(raw)
     except (ValueError, KeyError) as exc:
         raise HaexError(
-            message=f".spaex.json is not a valid v3 manifest: {exc}",
+            message=f".spaex.json is not a valid v4 manifest: {exc}",
             diagnostic_key="spaex-json-invalid",
             exit_code=exit_codes.INCOMPLETE_TRANSACTION,
             hint=(
-                "A v3 .spaex.json is required; v2-to-v3 migration is not "
-                "available yet."
+                "Run `spaex migrate`, review `.spaex.json.migrated`, and adopt "
+                "it as `.spaex.json`."
             ),
         ) from exc
 

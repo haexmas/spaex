@@ -1,4 +1,4 @@
-"""`haex` CLI root: argparse dispatch + version gate."""
+"""`spaex` CLI root: argparse dispatch + version gate."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ INSTALLED_VERSION_STRING = ".".join(str(n) for n in INSTALLED_VERSION)
 
 
 def _check_min_version(repo_root: Path) -> None:
-    """Refuse execution when the repository requires a newer haex version."""
+    """Refuse execution when the repository requires a newer spaex version."""
     manifest_path = repo_root / ".spaex.json"
     if not manifest_path.exists():
         return
@@ -61,18 +61,18 @@ def _check_min_version(repo_root: Path) -> None:
     if not constraint.satisfied_by(INSTALLED_VERSION):
         installed = ".".join(str(n) for n in INSTALLED_VERSION)
         raise VersionBelowMinError(
-            message=f"installed haex {installed} does not satisfy {min_version_raw!r}",
+            message=f"installed spaex {installed} does not satisfy {min_version_raw!r}",
             context={"installed": installed, "required": min_version_raw},
         )
 
 
 def _build_parser() -> argparse.ArgumentParser:
     """Build the top-level command-line parser."""
-    parser = argparse.ArgumentParser(prog="haex")
+    parser = argparse.ArgumentParser(prog="spaex")
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    migrate_help = "rewrite v1 or v2 manifests into their v3 shape (Spec 013)"
+    migrate_help = "rewrite v1, v2, or v3 manifests into their v4 shape (Spec 014)"
     migrate = subparsers.add_parser(
         "migrate",
         help=migrate_help,

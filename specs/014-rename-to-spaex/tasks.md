@@ -150,7 +150,7 @@ Single-project layout (unchanged from Spec 013). `src/haex_hive/` renames to `sr
 **Independent Test**: On a machine with `pipx` and Python 3.10+, run `pipx install spaex`. Confirm `spaex --version` reports `4.0.0`. Run `spaex --help`. In an empty directory, create a minimal `.spaex.json` and run `spaex install`. Confirm normal end-to-end behavior.
 
 - [X] T060 [US3] Create [.github/workflows/release.yml](../../.github/workflows/release.yml) per [contracts/release-workflow.md](contracts/release-workflow.md). Include the `build` and `publish` jobs, the `pypi` environment reference, and `id-token: write` permission.
-- [X] T061 [US3] Verify PyPI Trusted Publisher pending-publisher config is in place for project `spaex`, owner `haexmas`, repository `spaex`, workflow filename `release.yml`, environment `pypi`. (Maintainer confirmed 2026-09-07; T061 is a spot-check before tagging.)
+- [X] T061 [US3] Verify PyPI Trusted Publisher pending-publisher config is in place for project `spaex`, owner `haexmas`, repository `haex-hive` (until T074 renames it), workflow filename `release.yml`, environment `pypi`. Update the repository field to `spaex` after the GitHub rename before a post-rename release.
 - [ ] T062 [US3] On `main` (after PR merges land), bump [pyproject.toml](../../pyproject.toml) version from `"4.0.0.dev0"` to `"4.0.0"`. Commit as `chore(release): 4.0.0`.
 - [ ] T063 [US3] `git tag v4.0.0 && git push origin v4.0.0`. Workflow triggers.
 - [ ] T064 [US3] If the `pypi` GitHub Environment has a required-reviewer gate, approve the publish job in the GitHub Environments UI. Wait for the publish job to complete.
@@ -182,8 +182,8 @@ Single-project layout (unchanged from Spec 013). `src/haex_hive/` renames to `sr
 ### Phase dependencies
 
 - **Setup (Phase 1)**: no dependencies; can start immediately.
-- **Foundational (Phase 2)**: depends on Setup; blocks all user-story work.
-- **US2 (Phase 3)**: depends on Foundational.
+- **Foundational (Phase 2)**: depends on Setup; ships together with US1 after US2.
+- **US2 (Phase 3)**: depends on Setup and the Phase 1 schema payloads, but must land before the Phase 2 + Phase 4 bundle.
 - **US1 (Phase 4)**: depends on Foundational AND on US2 (because T050 uses `spaex migrate`). This is a deliberate deviation from strict story-independence; the rename is inherently structural and the self-adopt step needs the migrate to exist.
 - **US3 (Phase 5)**: depends on US1 (release cannot ship until the repo is coherent under the new name). Also depends on the previous PRs having landed on `main`.
 - **Polish (Phase 6)**: depends on US1, US2, US3.
@@ -200,7 +200,9 @@ Single-project layout (unchanged from Spec 013). `src/haex_hive/` renames to `sr
 
 - Tests are written before implementation and MUST fail against the pre-implementation tree (Phase 3 tests fail without T030-T035; Phase 4 tests fail without T050-T057).
 - Contracts before adoption: schemas (Phase 1) exist before Phase 2's loader change.
-- Foundational rename before any user story: Phase 2 completes fully before Phase 3 starts.
+- Shipping order: Phase 1 schemas land first, Phase 3 migration lands second,
+  and the Phase 2 + Phase 4 rename/self-adoption bundle lands only after the
+  migration is available. Release and polish follow that bundle.
 
 ## Implementation Strategy
 
@@ -208,14 +210,13 @@ Single-project layout (unchanged from Spec 013). `src/haex_hive/` renames to `sr
 
 **Phase 1 + Phase 2 + Phase 3 + Phase 4** deliver the MVP: renamed, self-adopted, migrate available. `pipx install .` from a checkout works even if PyPI is not yet published.
 
-### Suggested PR sequence (six phase-PRs per design source)
+### Suggested PR sequence (five PRs per the clarified shipping order)
 
-1. Phase 1 tasks (T001-T005) → PR #1.
-2. Phase 2 tasks (T010-T019) → PR #2.
-3. Phase 3 tasks (T020-T035) → PR #3.
-4. Phase 4 tasks (T040-T058) → PR #4. This is the "brand end to end" PR.
-5. Phase 5 tasks (T060-T068) → PR #5 (release setup + first push).
-6. Phase 6 tasks (T070-T075) → PR #6 (polish, memory sweep, GH repo rename).
+1. Phase 1 tasks (T001-T005) → PR #1 (schemas).
+2. Phase 3 tasks (T020-T035) → PR #2 (migration).
+3. Phase 2 + Phase 4 + docs tasks (T010-T019, T040-T058) → PR #3 (bundled rename, self-adoption, and docs).
+4. Phase 5 tasks (T060-T068) → PR #4 (release setup + first push).
+5. Phase 6 tasks (T070-T076) → PR #5 (polish, memory sweep, repository rename, and local-directory rename).
 
 Each PR targets `main`, not the previous phase branch (memory `pr_strategy_stacked_phases`).
 

@@ -130,6 +130,6 @@ Unset uses the built-in default under the operator's XDG state dir.
 | `revision-not-found` | The SHA passed to `--revision` does not exist at the remote. | Check the SHA. |
 | `publisher-manifest-missing` | The remote resolved but there is no `manifest.json` at the root of the fetched commit. | Confirm the publisher publishes a v4 `manifest.json`. |
 | `publisher-manifest-invalid` | The `manifest.json` is present but does not validate against the v4 schema. | The publisher is on v3 or older; either wait for them to migrate, or (if you own it) run `spaex migrate` in their repo. |
-| `unknown-molecule-id` | `spaex remove` was asked to retract an id that is not adopted. | Check `spaex.json` for the correct id spelling. |
+| `unknown-molecule-id` | `spaex remove` was asked to retract an id that is not adopted. | Check `.spaex.json` for the correct id spelling. |
 | `atoms-category-overlap` | A molecule declares the same path under two atom categories. | Fix the molecule manifest; each path belongs to exactly one category. |
 | `workflow-molecule-already-adopted` | Attempted to adopt a second workflow molecule. | Retract the current workflow molecule first. |

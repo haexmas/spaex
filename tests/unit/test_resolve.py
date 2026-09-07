@@ -61,7 +61,7 @@ def _clone(state_root: Path, canonical: str, publisher: Path) -> None:
 
 def _manifest(compounds: list[CompoundEntry]) -> ConsumerManifest:
     return ConsumerManifest(
-        spaex_version="3",
+        spaex_version="4",
         identity="com.github.example.consumer",
         compounds=tuple(compounds),
     )

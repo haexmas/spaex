@@ -132,7 +132,7 @@ def run(args: argparse.Namespace) -> int:
             current = ConsumerManifest.from_json(manifest_path.read_bytes())
         except (ValueError, KeyError) as exc:
             raise HaexError(
-                message=f".spaex.json is not a valid v3 manifest: {exc}",
+                message=f".spaex.json is not a valid v4 manifest: {exc}",
                 context={"path": str(manifest_path)},
                 diagnostic_key="spaex-json-invalid",
                 exit_code=exit_codes.INCOMPLETE_TRANSACTION,

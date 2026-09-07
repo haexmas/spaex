@@ -1,4 +1,4 @@
-"""T025 — `haex install` refuses v2 input with a `haex migrate` hint (Spec 013)."""
+"""T025 — `spaex install` refuses legacy input with a `spaex migrate` hint."""
 
 from __future__ import annotations
 
@@ -32,8 +32,8 @@ def _run_install(repo_root: Path, state_root: Path) -> subprocess.CompletedProce
     )
 
 
-def test_v2_consumer_refuses_with_unavailable_migration_hint(tmp_path: Path) -> None:
-    """A v2 consumer is refused because v2-to-v3 migration is not available yet."""
+def test_legacy_consumer_refuses_with_migrate_hint(tmp_path: Path) -> None:
+    """A legacy consumer is refused with the supported migration command."""
     consumer = tmp_path / "consumer"
     consumer.mkdir()
     (consumer / ".spaex.json").write_text(
@@ -48,7 +48,7 @@ def test_v2_consumer_refuses_with_unavailable_migration_hint(tmp_path: Path) -> 
 
     proc = _run_install(consumer, tmp_path / "state")
     assert proc.returncode != 0
-    assert "v2-to-v3 migration is not available yet" in proc.stderr
+    assert "spaex migrate" in proc.stderr
     assert not (consumer / ".spaex").exists()
 
 

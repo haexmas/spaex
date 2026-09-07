@@ -1,4 +1,4 @@
-"""Typed exception hierarchy for every diagnostic emitted by `haex`.
+"""Typed exception hierarchy for every diagnostic emitted by `spaex`.
 
 Each subclass carries its canonical diagnostic key (used by `emit_refuse`) and
 its canonical exit code from `spaex.util.exit_codes`. Every CLI contract
@@ -129,6 +129,16 @@ class VersionBelowMinError(HaexError):
 
 
 @dataclass
+class SpaexVersionUnsupportedError(HaexError):
+    diagnostic_key: str = "spaex-version-unsupported"
+    exit_code: int = exit_codes.INPUT_REFUSE
+    hint: str = (
+        "Run `spaex migrate`, review `.spaex.json.migrated`, and adopt it as "
+        "`.spaex.json`."
+    )
+
+
+@dataclass
 class NoSourcesDeclaredError(HaexError):
     diagnostic_key: str = "no-sources-declared"
     exit_code: int = exit_codes.INPUT_REFUSE
@@ -149,21 +159,21 @@ class ConstitutionAlreadyAdoptedError(HaexError):
 class ConstitutionNotAssembledError(HaexError):
     diagnostic_key: str = "constitution-not-assembled"
     exit_code: int = exit_codes.INPUT_REFUSE
-    hint: str = "Run `haex install` first."
+    hint: str = "Run `spaex install` first."
 
 
 @dataclass
 class InstallLockMissingError(HaexError):
     diagnostic_key: str = "install-lock-missing"
     exit_code: int = exit_codes.IO_REFUSE
-    hint: str = "Run `haex install` to (re)generate install.lock."
+    hint: str = "Run `spaex install` to (re)generate install.lock."
 
 
 @dataclass
 class InstallLockSchemaInvalidError(HaexError):
     diagnostic_key: str = "install-lock-schema-invalid"
     exit_code: int = exit_codes.VALIDATION_REFUSE
-    hint: str = "Regenerate install.lock via `haex install`."
+    hint: str = "Regenerate install.lock via `spaex install`."
 
 
 @dataclass
@@ -198,7 +208,7 @@ class PostWriteValidationError(HaexError):
 class ConstitutionWriterBusyError(HaexError):
     diagnostic_key: str = "constitution-writer-busy"
     exit_code: int = exit_codes.WRITER_BUSY
-    hint: str = "Another `haex install` is running; retry after it releases the lock."
+    hint: str = "Another `spaex install` is running; retry after it releases the lock."
 
 
 @dataclass
@@ -260,7 +270,7 @@ class RevisionNotFoundError(HaexError):
 class PublisherManifestInvalidError(HaexError):
     diagnostic_key: str = "publisher-manifest-invalid"
     exit_code: int = exit_codes.INPUT_REFUSE
-    hint: str = "The publisher's manifest.json does not validate against the v3 schema."
+    hint: str = "The relevant manifest.json must exist and validate against its v4 schema."
 
 
 @dataclass
@@ -290,7 +300,7 @@ class InteractiveSelectionUnavailableError(HaexError):
 class WorkflowMoleculeAlreadyAdoptedError(HaexError):
     diagnostic_key: str = "workflow-molecule-already-adopted"
     exit_code: int = exit_codes.INPUT_REFUSE
-    hint: str = "Retract the current workflow molecule with `haex remove` before adopting another."
+    hint: str = "Retract the current workflow molecule with `spaex remove` before adopting another."
 
 
 @dataclass
@@ -305,7 +315,7 @@ class InstallTransactionFailedError(HaexError):
     diagnostic_key: str = "install-transaction-failed"
     exit_code: int = exit_codes.INPUT_REFUSE
     hint: str = (
-        "The follow-on `haex install` failed; the manifest edit was rolled back."
+        "The follow-on `spaex install` failed; the manifest edit was rolled back."
     )
 
 
@@ -314,5 +324,5 @@ class ManifestRollbackFailedError(HaexError):
     diagnostic_key: str = "manifest-rollback-failed"
     exit_code: int = exit_codes.POST_WRITE_VALIDATION
     hint: str = (
-        "Restore `.spaex.json` from version control, then run `haex install` again."
+        "Restore `.spaex.json` from version control, then run `spaex install` again."
     )

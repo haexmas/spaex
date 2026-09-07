@@ -19,6 +19,7 @@
     },
     "priority": {
       "type": "integer",
+      "minimum": 0,
       "description": "Publisher's default priority. Consumer configuration may override it."
     },
     "atoms": {
