@@ -1,4 +1,4 @@
-"""T024 — `spaex install` against a fully v3 consumer + publisher (Spec 013)."""
+"""T044 - `spaex install` produces byte-identical v4 install.lock across runs (Spec 014)."""
 
 from __future__ import annotations
 
@@ -25,10 +25,10 @@ def _run_install(repo_root: Path, state_root: Path) -> subprocess.CompletedProce
     )
 
 
-def test_v3_consumer_and_publisher_produce_byte_identical_lock_across_runs(
+def test_install_produces_byte_identical_v4_lock_across_runs(
     single_source_constitution_fixture: dict,
 ) -> None:
-    """Installing a v3 consumer against a v3 publisher is v3-shaped and idempotent."""
+    """`spaex install` twice on a v4 fixture repo yields byte-identical `.spaex/install.lock`."""
     consumer: Path = single_source_constitution_fixture["consumer"]
     state_root: Path = single_source_constitution_fixture["state_root"]
 
