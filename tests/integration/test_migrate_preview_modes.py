@@ -64,13 +64,19 @@ def test_dry_run_and_check_produce_identical_stdout(
 
 
 def test_write_mode_invalidates_stale_sidecar(self_migration_fixture: dict, tmp_path: Path) -> None:
+    """Write mode invalidates BOTH the legacy .haex-hive.json.migrated and any
+    existing .spaex.json.migrated sidecars, then writes a fresh v4 proposal at
+    .spaex.json.migrated (Spec 014)."""
     consumer = _prepare_consumer(self_migration_fixture, tmp_path)
-    stale = consumer / ".haex-hive.json.migrated"
-    stale.write_bytes(b"{}")
+    legacy_stale = consumer / ".haex-hive.json.migrated"
+    new_stale = consumer / ".spaex.json.migrated"
+    legacy_stale.write_bytes(b"{}")
+    new_stale.write_bytes(b"{\"stale\": true}")
     proc = _run_haex(consumer, "migrate", state_root=self_migration_fixture["state_root"])
     assert proc.returncode == 0
-    assert stale.exists()
-    assert stale.read_bytes() != b"{}"
+    assert not legacy_stale.exists()
+    assert new_stale.exists()
+    assert new_stale.read_bytes() != b"{\"stale\": true}"
 
 
 def test_preview_mode_preserves_existing_sidecar(

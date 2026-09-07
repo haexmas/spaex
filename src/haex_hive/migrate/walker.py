@@ -82,14 +82,28 @@ def _molecule_dir(repo_root: Path, path_value: str) -> Path:
 
 
 def walk_local_manifests(repo_root: Path) -> Iterator[MigrationInput]:
-    """Yield every local manifest that could be a migration input."""
-    consumer = repo_root / ".haex-hive.json"
-    if consumer.exists():
+    """Yield every local manifest that could be a migration input.
+
+    Under Spec 014 the consumer proposal filename becomes ``.spaex.json.migrated``
+    regardless of whether the source is a legacy ``.haex-hive.json`` or the v4
+    ``.spaex.json`` file (idempotency case).
+    """
+    v4_target_proposal = repo_root / ".spaex.json.migrated"
+    consumer_legacy = repo_root / ".haex-hive.json"
+    consumer_v4 = repo_root / ".spaex.json"
+    if consumer_legacy.exists():
         yield MigrationInput(
             kind="consumer",
-            source=consumer,
-            proposal=_sibling_proposal(consumer),
-            raw=consumer.read_bytes(),
+            source=consumer_legacy,
+            proposal=v4_target_proposal,
+            raw=consumer_legacy.read_bytes(),
+        )
+    elif consumer_v4.exists():
+        yield MigrationInput(
+            kind="consumer",
+            source=consumer_v4,
+            proposal=v4_target_proposal,
+            raw=consumer_v4.read_bytes(),
         )
 
     publisher_root = repo_root / "manifest.json"

@@ -1,4 +1,9 @@
-"""T043 — invocation-level behavior for chained `haex migrate` (Spec 013)."""
+"""T043/T023 - invocation-level behavior for chained `haex migrate`.
+
+Originally Spec 013 T043 (v2->v3 chain). Under Spec 014 (T023) the chain
+extends to v4, so the consumer sidecar becomes `.spaex.json.migrated` and
+`.spaex.json` is the idempotent-no-op target filename.
+"""
 
 from __future__ import annotations
 
@@ -10,12 +15,12 @@ from haex_hive.cli import migrate as migrate_cli
 from haex_hive.migrate.registry import ProposalRegistry
 
 
-def _make_v3_consumer(root: Path) -> None:
+def _make_v4_consumer(root: Path) -> None:
     root.mkdir(parents=True, exist_ok=True)
-    (root / ".haex-hive.json").write_text(
+    (root / ".spaex.json").write_text(
         json.dumps(
             {
-                "haex_hive_version": "3",
+                "spaex_version": "4",
                 "identity": "com.example.project",
                 "compounds": [],
             },
@@ -78,11 +83,11 @@ def _run_migrate(repo_root: Path, *, dry_run: bool = False, check: bool = False)
     return migrate_cli.run(ns)
 
 
-def test_idempotency_on_all_v3_inputs(tmp_path: Path) -> None:
-    _make_v3_consumer(tmp_path / "repo")
+def test_idempotency_on_all_v4_inputs(tmp_path: Path) -> None:
+    _make_v4_consumer(tmp_path / "repo")
     rc = _run_migrate(tmp_path / "repo")
     assert rc == 0
-    assert not (tmp_path / "repo" / ".haex-hive.json.migrated").exists()
+    assert not (tmp_path / "repo" / ".spaex.json.migrated").exists()
 
 
 def test_dry_run_does_not_touch_filesystem(tmp_path: Path) -> None:
@@ -104,7 +109,7 @@ def test_write_mode_emits_all_proposals(tmp_path: Path) -> None:
     _make_v2_consumer_and_molecules(repo)
     rc = _run_migrate(repo)
     assert rc == 0
-    assert (repo / ".haex-hive.json.migrated").exists()
+    assert (repo / ".spaex.json.migrated").exists()
     assert (repo / "manifest.json.migrated").exists()
     assert (repo / "hello" / "manifest.json.migrated").exists()
 
@@ -157,14 +162,14 @@ def test_malformed_consumer_entry_is_refused_without_traceback(tmp_path: Path, c
 
     assert rc == 2
     assert "key=migration-manifest-invalid" in capsys.readouterr().err
-    assert not (repo / ".haex-hive.json.migrated").exists()
+    assert not (repo / ".spaex.json.migrated").exists()
 
 
 def test_molecule_path_escape_is_refused_without_writing_outside_repo(
     tmp_path: Path, capsys
 ) -> None:
     repo = tmp_path / "repo"
-    _make_v3_consumer(repo)
+    _make_v4_consumer(repo)
     (repo / "manifest.json").write_text(
         json.dumps(
             {
@@ -191,7 +196,7 @@ def test_non_mapping_publisher_molecules_is_refused_without_traceback(
     tmp_path: Path, capsys
 ) -> None:
     repo = tmp_path / "repo"
-    _make_v3_consumer(repo)
+    _make_v4_consumer(repo)
     (repo / "manifest.json").write_text(
         json.dumps(
             {

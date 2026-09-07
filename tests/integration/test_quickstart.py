@@ -30,10 +30,11 @@ def _run_haex(
     )
 
 
-def test_path1_migrate_produces_schema_valid_v2(
+def test_path1_migrate_produces_schema_valid_v4(
     self_migration_fixture: dict, tmp_path: Path
 ) -> None:
-    """quickstart.md Path 1 — SC-001."""
+    """quickstart.md Path 1 - SC-001. Under Spec 014 the chain reaches v4
+    and the consumer sidecar lives at `.spaex.json.migrated`."""
     consumer = tmp_path / "consumer"
     shutil.copytree(self_migration_fixture["publisher"], consumer)
     (consumer / ".haex-hive.json").write_text(
@@ -62,22 +63,26 @@ def test_path1_migrate_produces_schema_valid_v2(
 
     write = _run_haex(consumer, "migrate", state_root=self_migration_fixture["state_root"])
     assert write.returncode == 0, write.stderr.decode()
-    sidecar = consumer / ".haex-hive.json.migrated"
+    sidecar = consumer / ".spaex.json.migrated"
     assert sidecar.exists()
 
     data = json.loads(sidecar.read_text())
-    # Spec 013 US2 chains v1 → v2 → v3, so the sidecar is the final v3 shape.
-    # The v1 → v2 leg is exercised in isolation by test_migrate_haex_hive_self.
-    assert data["haex_hive_version"] == "3"
+    assert data["spaex_version"] == "4"
+    assert "haex_hive_version" not in data
 
-    # Adopt every proposal the invocation produced (consumer + publisher-root
-    # + per-molecule). Only after all `.migrated` siblings replace their
-    # originals does the rerun report "already at v3".
+    # Adopt every proposal (consumer becomes .spaex.json + delete .haex-hive.json;
+    # publisher-root + per-molecule manifest.json.migrated overwrite their
+    # originals). Only after all `.migrated` siblings replace their originals
+    # does the rerun report "already at v4".
     for migrated in list(consumer.rglob("*.migrated")):
-        migrated.replace(migrated.with_name(migrated.name[: -len(".migrated")]))
+        if migrated.name == ".spaex.json.migrated":
+            (consumer / ".haex-hive.json").unlink(missing_ok=True)
+            migrated.replace(consumer / ".spaex.json")
+        else:
+            migrated.replace(migrated.with_name(migrated.name[: -len(".migrated")]))
     rerun = _run_haex(consumer, "migrate", state_root=self_migration_fixture["state_root"])
     assert rerun.returncode == 0
-    assert b"already at v3" in rerun.stderr
+    assert b"already at v4" in rerun.stderr
     assert not sidecar.exists()
 
 

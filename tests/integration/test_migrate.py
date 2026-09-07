@@ -55,32 +55,32 @@ def test_dry_run_prints_diff_no_sidecar(self_migration_fixture: dict, tmp_path: 
     )
     assert proc.returncode == 0, proc.stderr
     assert "@@" in proc.stdout
-    assert not (consumer / ".haex-hive.json.migrated").exists()
+    assert not (consumer / ".spaex.json.migrated").exists()
 
 
 def test_write_mode_creates_sidecar(self_migration_fixture: dict, tmp_path: Path) -> None:
-    """v1 input chains v1→v2→v3; the sidecar lands as the final v3 proposal."""
+    """v1 input chains v1->v2->v3->v4; the sidecar lands as the final v4 proposal."""
     consumer = _prepare_consumer(self_migration_fixture, tmp_path)
     proc = _run_haex(consumer, "migrate", state_root=self_migration_fixture["state_root"])
     assert proc.returncode == 0, proc.stderr
-    sidecar = consumer / ".haex-hive.json.migrated"
+    sidecar = consumer / ".spaex.json.migrated"
     assert sidecar.exists()
     data = json.loads(sidecar.read_text())
-    assert data["haex_hive_version"] == "3"
+    assert data["spaex_version"] == "4"
+    assert "haex_hive_version" not in data
     assert data["identity"] == "com.github.haexmas.haex-hive"
-    # v2's `atoms[]` has been renamed to `compounds[]` per Spec 013.
     assert "compounds" in data
     assert "atoms" not in data
 
 
-def test_already_v3_is_noop(self_migration_fixture: dict, tmp_path: Path) -> None:
-    """A repo whose manifests are all already v3 emits no proposals."""
+def test_already_v4_is_noop(self_migration_fixture: dict, tmp_path: Path) -> None:
+    """A repo whose manifests are all already v4 emits no proposals."""
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-    (consumer / ".haex-hive.json").write_text(
+    (consumer / ".spaex.json").write_text(
         json.dumps(
             {
-                "haex_hive_version": "3",
+                "spaex_version": "4",
                 "identity": "com.github.haexmas.haex-hive",
                 "compounds": [],
             },
@@ -89,14 +89,14 @@ def test_already_v3_is_noop(self_migration_fixture: dict, tmp_path: Path) -> Non
     )
     proc = _run_haex(consumer, "migrate", state_root=self_migration_fixture["state_root"])
     assert proc.returncode == 0
-    assert "already at v3" in proc.stderr
-    assert not (consumer / ".haex-hive.json.migrated").exists()
+    assert "already at v4" in proc.stderr
+    assert not (consumer / ".spaex.json.migrated").exists()
 
 
-def test_v2_consumer_chains_to_v3(
+def test_v2_consumer_chains_to_v4(
     self_migration_fixture: dict, tmp_path: Path
 ) -> None:
-    """A v2 consumer emits a v3 proposal via the v2→v3 leg of the chain."""
+    """A v2 consumer emits a v4 proposal via the v2->v3->v4 chain."""
     consumer = tmp_path / "consumer"
     shutil.copytree(self_migration_fixture["publisher"], consumer)
     (consumer / ".haex-hive.json").write_text(
@@ -119,10 +119,10 @@ def test_v2_consumer_chains_to_v3(
     )
     proc = _run_haex(consumer, "migrate", state_root=self_migration_fixture["state_root"])
     assert proc.returncode == 0, proc.stderr
-    sidecar = consumer / ".haex-hive.json.migrated"
+    sidecar = consumer / ".spaex.json.migrated"
     assert sidecar.exists()
     data = json.loads(sidecar.read_text())
-    assert data["haex_hive_version"] == "3"
+    assert data["spaex_version"] == "4"
     assert data["compounds"][0]["molecules"] == [
         "com.github.haexmas.haex-hive.constitution"
     ]

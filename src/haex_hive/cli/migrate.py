@@ -25,6 +25,7 @@ from haex_hive.io import json_deterministic
 from haex_hive.migrate import sidecar, transform, walker
 from haex_hive.migrate.registry import ProposalRegistry
 from haex_hive.migrate.v2_to_v3 import v2_to_v3
+from haex_hive.migrate.v3_to_v4 import is_v4, v3_to_v4
 from haex_hive.util import exit_codes
 from haex_hive.util.errors import HaexError, UsageError
 
@@ -53,13 +54,15 @@ def _detect_version(raw: bytes) -> int | None:
         return None
     if not isinstance(data, dict):
         return None
+    if data.get("spaex_version") == "4":
+        return 4
     version = data.get("haex_hive_version")
     if version in ("1", "2", "3"):
         return int(version)
     return None
 
 
-def _unified_diff(before: bytes, after: bytes, name: str) -> str:
+def _unified_diff(before: bytes, after: bytes, name: str, tofile: str | None = None) -> str:
     def normalize_line_endings(raw: bytes) -> str:
         return raw.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
 
@@ -69,7 +72,7 @@ def _unified_diff(before: bytes, after: bytes, name: str) -> str:
         before_lines,
         after_lines,
         fromfile=name,
-        tofile=name + ".migrated",
+        tofile=tofile if tofile is not None else name + ".migrated",
         lineterm="",
     )
     return "".join(line if line.endswith("\n") else line + "\n" for line in diff)
@@ -79,7 +82,7 @@ def _classify_input(
     entry: walker.MigrationInput, repo_root: Path, state_root: Path
 ) -> _InputOutcome:
     version = _detect_version(entry.raw)
-    if version == 3:
+    if version == 4:
         return _InputOutcome(
             kind=entry.kind,
             source=entry.source,
@@ -96,7 +99,8 @@ def _classify_input(
         else:
             data = json.loads(entry.raw.decode("utf-8"))
             v3_data = v2_to_v3(data)
-        proposal_bytes = json_deterministic.dumps(v3_data)
+        v4_data = v3_to_v4(v3_data) if not is_v4(v3_data) else v3_data
+        proposal_bytes = json_deterministic.dumps(v4_data)
     except HaexError as exc:
         return _InputOutcome(
             kind=entry.kind,
@@ -120,7 +124,10 @@ def _classify_input(
         )
 
     diff = _unified_diff(
-        entry.raw, proposal_bytes, str(entry.source.relative_to(repo_root))
+        entry.raw,
+        proposal_bytes,
+        str(entry.source.relative_to(repo_root)),
+        tofile=str(entry.proposal.relative_to(repo_root)),
     )
     return _InputOutcome(
         kind=entry.kind,
@@ -164,16 +171,23 @@ def run(args: argparse.Namespace) -> int:
 
     repo_root = Path(args.repo_root).resolve()
     write_mode = not (args.dry_run or args.check)
-    v1_path = repo_root / ".haex-hive.json"
+    legacy_consumer = repo_root / ".haex-hive.json"
+    v4_consumer = repo_root / ".spaex.json"
 
-    if not v1_path.exists():
+    if not legacy_consumer.exists() and not v4_consumer.exists():
         emit_refuse(
             HaexError(
-                message=f".haex-hive.json not found in {repo_root}",
-                context={"path": str(v1_path)},
-                diagnostic_key="haex-hive-json-missing",
+                message=(
+                    "no consumer manifest found in "
+                    f"{repo_root} (checked .haex-hive.json and .spaex.json)"
+                ),
+                context={"path": str(legacy_consumer)},
+                diagnostic_key="consumer-manifest-missing",
                 exit_code=exit_codes.SYSTEM_REFUSE,
-                hint="Run this command inside a repo containing .haex-hive.json.",
+                hint=(
+                    "Run this command inside a repo containing a "
+                    "consumer manifest."
+                ),
             )
         )
         return exit_codes.SYSTEM_REFUSE
@@ -210,7 +224,7 @@ def run(args: argparse.Namespace) -> int:
         )
 
     if all(o.outcome == "noop" for o in outcomes):
-        sys.stderr.write("already at v3 (nothing to migrate)\n")
+        sys.stderr.write("already at v4 (nothing to migrate)\n")
         return exit_codes.SUCCESS
 
     if write_mode:
