@@ -51,11 +51,11 @@ Single-project layout (unchanged from Spec 013). `src/haex_hive/` renames to `sr
 
 **Purpose**: Add v4 schema payloads as dead code and bump the dev version. No behavior change; loader continues to dispatch on v3.
 
-- [ ] T001 Copy [specs/014-rename-to-spaex/contracts/consumer-manifest.v4.schema.json](contracts/consumer-manifest.v4.schema.json) to `src/haex_hive/schema/data/consumer-manifest.v4.schema.json` verbatim.
-- [ ] T002 [P] Copy [specs/014-rename-to-spaex/contracts/molecule-manifest.v4.schema.json](contracts/molecule-manifest.v4.schema.json) to `src/haex_hive/schema/data/molecule-manifest.v4.schema.json` verbatim.
-- [ ] T003 [P] Copy [specs/014-rename-to-spaex/contracts/publisher-manifest.v4.schema.json](contracts/publisher-manifest.v4.schema.json) to `src/haex_hive/schema/data/publisher-manifest.v4.schema.json` verbatim.
-- [ ] T004 [P] Copy [specs/014-rename-to-spaex/contracts/install-lock.v4.schema.json](contracts/install-lock.v4.schema.json) to `src/haex_hive/schema/data/install-lock.v4.schema.json` verbatim.
-- [ ] T005 Bump [pyproject.toml](../../pyproject.toml) version from `"3.0.0.dev0"` to `"4.0.0.dev0"` and update the `description` field to reference spaex 4.0 vocabulary. Package `name` stays `"haex-hive"` at this point.
+- [X] T001 Copy [specs/014-rename-to-spaex/contracts/consumer-manifest.v4.schema.json](contracts/consumer-manifest.v4.schema.json) to `src/haex_hive/schema/data/consumer-manifest.v4.schema.json` verbatim.
+- [X] T002 [P] Copy [specs/014-rename-to-spaex/contracts/molecule-manifest.v4.schema.json](contracts/molecule-manifest.v4.schema.json) to `src/haex_hive/schema/data/molecule-manifest.v4.schema.json` verbatim.
+- [X] T003 [P] Copy [specs/014-rename-to-spaex/contracts/publisher-manifest.v4.schema.json](contracts/publisher-manifest.v4.schema.json) to `src/haex_hive/schema/data/publisher-manifest.v4.schema.json` verbatim.
+- [X] T004 [P] Copy [specs/014-rename-to-spaex/contracts/install-lock.v4.schema.json](contracts/install-lock.v4.schema.json) to `src/haex_hive/schema/data/install-lock.v4.schema.json` verbatim.
+- [X] T005 Bump [pyproject.toml](../../pyproject.toml) version from `"3.0.0.dev0"` to `"4.0.0.dev0"` and update the `description` field to reference spaex 4.0 vocabulary. Package `name` stays `"haex-hive"` at this point.
 
 **Checkpoint**: v4 schemas are in the package payload; loader still on v3; tests remain green.
 

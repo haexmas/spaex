@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "haex-hive"
-version = "3.0.0.dev0"
-description = "v3 vocabulary CLI for haex-hive: haex add/remove, migrate, constitution assemble/show."
+version = "4.0.0.dev0"
+description = "v4 vocabulary CLI (spaex 4.0-in-development, PyPI name and package rename land in a later phase of Spec 014): add/remove, migrate, constitution assemble/show."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
