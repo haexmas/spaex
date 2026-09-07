@@ -130,7 +130,7 @@ Single-project layout (unchanged from Spec 013). `src/haex_hive/` renames to `sr
 - [X] T051 [US1] Rewrite `.specify/memory/constitution.md`: change the title from `# haex-hive Constitution` to `# spaex Constitution`; update all 18 prose references to `haex-hive`, `haex`, and `.haex-hive.json` to the new names. Principle text (invariants) MUST be byte-identical to the pre-rename version except for prose references. Diff review confirms.
 - [X] T052 [US1] Bump constitution version in the file's version line at the bottom from `**Version**: 1.4.0` to `**Version**: 1.4.1` and update `**Last Amended**`. Update the Sync Impact Report block at the top of the constitution with an entry: version change 1.4.0 → 1.4.1 (PATCH: rename to spaex prose amendment); modified sections list; ADR reference to `docs/adr/0011-rename-to-spaex.md`.
 - [X] T053 [US1] Delete legacy `.haex-hive/` directory in the repo root (runtime state). Run `spaex install` locally.
-- [ ] T054 [US1] Run `spaex install` a second time. Confirm byte-identical `.spaex/install.lock` output vs. the first run. Commit the resulting `.spaex/install.lock`.
+- [X] T054 [US1] Run `spaex install` a second time. Confirm byte-identical `.spaex/install.lock` output vs. the first run. Commit the resulting `.spaex/install.lock`.
 
 ### Implementation for User Story 1 (docs sweep)
 
