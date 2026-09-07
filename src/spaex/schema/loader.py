@@ -17,6 +17,7 @@ _KNOWN_SCHEMAS = frozenset(
 
 
 def load(name: str) -> dict[str, Any]:
+    """Load a known bundled v4 JSON schema by filename."""
     if name not in _KNOWN_SCHEMAS:
         raise KeyError(f"unknown schema name: {name!r}")
     resource = files("spaex.schema.data").joinpath(name)

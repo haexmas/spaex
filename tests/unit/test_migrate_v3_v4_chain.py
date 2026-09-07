@@ -17,24 +17,29 @@ from spaex.migrate.v3_to_v4 import (
 
 
 def test_is_v4_true_on_v4_input() -> None:
+    """Verify v4 manifests are recognized by their schema-version field."""
     assert is_v4({"spaex_version": "4"}) is True
 
 
 def test_is_v4_false_on_v3_input() -> None:
+    """Verify v3 manifests are not mistaken for v4 input."""
     assert is_v4({"haex_hive_version": "3"}) is False
 
 
 def test_idempotent_on_v4_consumer() -> None:
+    """Verify dispatch returns an already-v4 consumer unchanged."""
     v4 = {"spaex_version": "4", "identity": "com.x.y", "compounds": []}
     assert v3_to_v4(v4) is v4
 
 
 def test_dispatch_refuses_unrecognized_shape() -> None:
+    """Verify dispatch rejects objects without a known manifest shape."""
     with pytest.raises(UnrecognizedManifestShapeError):
         v3_to_v4({"haex_hive_version": "3", "unknown_shape": True})
 
 
 def test_v2_then_v3_chain_reaches_v4() -> None:
+    """Verify the chained migration advances a v2 consumer through v4."""
     v2 = {
         "haex_hive_version": "2",
         "identity": "com.example.project",
@@ -55,6 +60,7 @@ def test_v2_then_v3_chain_reaches_v4() -> None:
 
 
 def test_deterministic_bytes() -> None:
+    """Verify repeated v3-to-v4 serialization is byte-identical."""
     v3 = {
         "haex_hive_version": "3",
         "identity": "com.example.project",

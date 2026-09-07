@@ -15,6 +15,7 @@ from spaex.cli import migrate as migrate_cli
 
 
 def _make_v3_repo(root: Path) -> None:
+    """Create a representative v3 consumer and publisher repository."""
     root.mkdir(parents=True, exist_ok=True)
     (root / ".haex-hive.json").write_text(
         json.dumps(
@@ -66,6 +67,7 @@ def _make_v3_repo(root: Path) -> None:
 
 
 def test_v3_repo_migrates_to_v4_end_to_end(tmp_path: Path) -> None:
+    """Verify write mode creates schema-valid v4 sidecar proposals."""
     repo = tmp_path / "repo"
     _make_v3_repo(repo)
 
@@ -100,6 +102,7 @@ def test_v3_repo_migrates_to_v4_end_to_end(tmp_path: Path) -> None:
 
 
 def test_v3_repo_originals_untouched(tmp_path: Path) -> None:
+    """Verify migration never mutates the original v3 manifests."""
     repo = tmp_path / "repo"
     _make_v3_repo(repo)
     originals = {

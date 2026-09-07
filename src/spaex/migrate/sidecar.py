@@ -22,14 +22,17 @@ def sidecar_path(repo_root: Path) -> Path:
 
 
 def legacy_sidecar_path(repo_root: Path) -> Path:
+    """Return the obsolete v1-v3 consumer sidecar path."""
     return repo_root / (".haex-hive.json" + SIDECAR_SUFFIX)
 
 
 def invalidate_stale_sidecar(repo_root: Path) -> None:
+    """Remove current and legacy consumer sidecars left by earlier runs."""
     for candidate in (sidecar_path(repo_root), legacy_sidecar_path(repo_root)):
         with suppress(FileNotFoundError):
             candidate.unlink()
 
 
 def publish_sidecar(repo_root: Path, proposal_bytes: bytes) -> None:
+    """Atomically publish the v4 consumer migration proposal."""
     atomic.write_replace(sidecar_path(repo_root), proposal_bytes)

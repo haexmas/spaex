@@ -31,6 +31,7 @@ from spaex.util.errors import HaexError, UsageError
 
 
 def _state_root() -> Path:
+    """Return the configured state root or the platform-independent default."""
     if os.environ.get("SPAEX_STATE"):
         return Path(os.environ["SPAEX_STATE"])
     return Path.home() / ".local" / "share" / "spaex"
@@ -48,6 +49,7 @@ class _InputOutcome:
 
 
 def _detect_version(raw: bytes) -> int | None:
+    """Return the recognized manifest version, or ``None`` for invalid input."""
     try:
         data = json.loads(raw.decode("utf-8"))
     except (UnicodeError, ValueError):
@@ -63,7 +65,9 @@ def _detect_version(raw: bytes) -> int | None:
 
 
 def _unified_diff(before: bytes, after: bytes, name: str, tofile: str | None = None) -> str:
+    """Render a line-ending-normalized unified diff for a migration proposal."""
     def normalize_line_endings(raw: bytes) -> str:
+        """Decode UTF-8 bytes and normalize all line endings to LF."""
         return raw.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
 
     before_lines = normalize_line_endings(before).splitlines(keepends=True)
@@ -81,6 +85,7 @@ def _unified_diff(before: bytes, after: bytes, name: str, tofile: str | None = N
 def _classify_input(
     entry: walker.MigrationInput, repo_root: Path, state_root: Path
 ) -> _InputOutcome:
+    """Classify one manifest as unchanged, migratable, or refused."""
     version = _detect_version(entry.raw)
     if version == 4:
         return _InputOutcome(
@@ -140,6 +145,7 @@ def _classify_input(
 
 
 def _invocation_exit_code(outcomes: list[_InputOutcome]) -> int:
+    """Derive the command exit code from all per-manifest outcomes."""
     has_refusal = any(o.outcome == "refused" for o in outcomes)
     has_proposal = any(o.outcome == "proposal" for o in outcomes)
     if has_refusal and not has_proposal:
@@ -150,6 +156,7 @@ def _invocation_exit_code(outcomes: list[_InputOutcome]) -> int:
 
 
 def _emit_proposals(outcomes: list[_InputOutcome], registry: ProposalRegistry) -> None:
+    """Publish successful proposals and register them for rollback."""
     try:
         for outcome in outcomes:
             if outcome.outcome != "proposal":
@@ -165,6 +172,7 @@ def _emit_proposals(outcomes: list[_InputOutcome], registry: ProposalRegistry) -
 
 
 def run(args: argparse.Namespace) -> int:
+    """Migrate local manifests in preview, check, or sidecar-write mode."""
     if args.dry_run and args.check:
         emit_refuse(UsageError(message="--dry-run and --check are mutually exclusive"))
         return exit_codes.USAGE

@@ -262,6 +262,7 @@ def test_models_freeze_nested_json_values() -> None:
 def test_consumer_manifest_rejects_legacy_and_unsupported_versions(
     payload: dict[str, str],
 ) -> None:
+    """Verify the consumer read gate rejects legacy and unknown versions."""
     with pytest.raises(SpaexVersionUnsupportedError) as exc_info:
         ConsumerManifest.from_json(json.dumps(payload).encode())
 
@@ -270,6 +271,7 @@ def test_consumer_manifest_rejects_legacy_and_unsupported_versions(
 
 
 def test_molecule_manifest_rejects_negative_priority() -> None:
+    """Verify negative molecule priority fails schema validation."""
     with pytest.raises(ValueError):
         MoleculeManifest.from_json(
             b'{"spaex_version":"4","id":"com.example.atom",'

@@ -45,6 +45,7 @@ _CONSTITUTION_CATEGORY = "constitution"
 
 
 def _load_publisher_manifest(repo_dir: Path, sha: str, source: str) -> PublisherManifest:
+    """Load the pinned publisher manifest and map failures to typed refusals."""
     # The contract distinguishes:
     #   publisher-manifest-missing -> no manifest.json at the resolved SHA
     #   publisher-manifest-invalid -> present, but non-JSON, wrong schema, or
@@ -356,6 +357,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def run(args: argparse.Namespace) -> int:
+    """Adopt the requested molecules and reinstall the resulting manifest."""
     repo_root = Path(args.repo_root).resolve()
     state_root = default_state_root()
 

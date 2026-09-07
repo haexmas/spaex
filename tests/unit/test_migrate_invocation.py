@@ -16,6 +16,7 @@ from spaex.migrate.registry import ProposalRegistry
 
 
 def _make_v4_consumer(root: Path) -> None:
+    """Write a minimal v4 consumer manifest for invocation tests."""
     root.mkdir(parents=True, exist_ok=True)
     (root / ".spaex.json").write_text(
         json.dumps(
@@ -84,6 +85,7 @@ def _run_migrate(repo_root: Path, *, dry_run: bool = False, check: bool = False)
 
 
 def test_idempotency_on_all_v4_inputs(tmp_path: Path) -> None:
+    """Verify an all-v4 repository exits successfully without proposals."""
     _make_v4_consumer(tmp_path / "repo")
     rc = _run_migrate(tmp_path / "repo")
     assert rc == 0
@@ -105,6 +107,7 @@ def test_check_does_not_touch_filesystem(tmp_path: Path) -> None:
 
 
 def test_write_mode_emits_all_proposals(tmp_path: Path) -> None:
+    """Verify write mode publishes every discovered migration proposal."""
     repo = tmp_path / "repo"
     _make_v2_consumer_and_molecules(repo)
     rc = _run_migrate(repo)
@@ -138,6 +141,7 @@ def test_registry_commit_keeps_files(tmp_path: Path) -> None:
 
 
 def test_dry_run_and_check_mutually_exclusive(tmp_path: Path) -> None:
+    """Verify mutually exclusive preview modes produce a usage error."""
     _make_v2_consumer_and_molecules(tmp_path / "repo")
     from spaex.util import exit_codes
 
@@ -146,6 +150,7 @@ def test_dry_run_and_check_mutually_exclusive(tmp_path: Path) -> None:
 
 
 def test_malformed_consumer_entry_is_refused_without_traceback(tmp_path: Path, capsys) -> None:
+    """Verify malformed consumer data produces a clean typed refusal."""
     repo = tmp_path / "repo"
     repo.mkdir()
     (repo / ".haex-hive.json").write_text(
@@ -168,6 +173,7 @@ def test_malformed_consumer_entry_is_refused_without_traceback(tmp_path: Path, c
 def test_molecule_path_escape_is_refused_without_writing_outside_repo(
     tmp_path: Path, capsys
 ) -> None:
+    """Verify escaping molecule paths cannot create proposals outside the repo."""
     repo = tmp_path / "repo"
     _make_v4_consumer(repo)
     (repo / "manifest.json").write_text(
@@ -195,6 +201,7 @@ def test_molecule_path_escape_is_refused_without_writing_outside_repo(
 def test_non_mapping_publisher_molecules_is_refused_without_traceback(
     tmp_path: Path, capsys
 ) -> None:
+    """Verify a malformed publisher index produces a clean typed refusal."""
     repo = tmp_path / "repo"
     _make_v4_consumer(repo)
     (repo / "manifest.json").write_text(
