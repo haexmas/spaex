@@ -55,6 +55,7 @@ class UnrecognizedManifestShapeError(HaexError):
 
 
 def _invalid_manifest(message: str, *, field: str) -> NoReturn:
+    """Raise a typed invalid-manifest refusal for ``field``."""
     raise MigrationManifestInvalidError(message=message, context={"field": field})
 
 
@@ -93,16 +94,19 @@ def is_v4(data: dict[str, Any]) -> bool:
 
 
 def _looks_like_consumer(data: dict[str, Any]) -> bool:
+    """Return whether the object has the consumer-manifest discriminator fields."""
     return "identity" in data and "compounds" in data
 
 
 def _looks_like_publisher(data: dict[str, Any]) -> bool:
+    """Return whether the object has the publisher-manifest shape."""
     return "publisher" in data and "molecules" in data and isinstance(
         data.get("molecules"), dict
     )
 
 
 def _looks_like_molecule(data: dict[str, Any]) -> bool:
+    """Return whether the object has the molecule-manifest shape."""
     return (
         "id" in data
         and "atoms" in data
@@ -111,10 +115,12 @@ def _looks_like_molecule(data: dict[str, Any]) -> bool:
 
 
 def _looks_like_install_lock(data: dict[str, Any]) -> bool:
+    """Return whether the object has the install-lock shape."""
     return "generation_id" in data and isinstance(data.get("molecules"), list)
 
 
 def _validate_consumer(data: dict[str, Any]) -> None:
+    """Validate fields needed by the consumer v3-to-v4 transform."""
     if not isinstance(data.get("identity"), str):
         _invalid_manifest("consumer manifest identity must be a string", field="identity")
     if "haex_hive_min_version" in data and not isinstance(
@@ -132,6 +138,7 @@ def _validate_consumer(data: dict[str, Any]) -> None:
 
 
 def _validate_publisher(data: dict[str, Any]) -> None:
+    """Validate fields needed by the publisher v3-to-v4 transform."""
     if not isinstance(data.get("publisher"), str):
         _invalid_manifest("publisher manifest publisher must be a string", field="publisher")
     if not isinstance(data.get("molecules"), dict):
@@ -141,6 +148,7 @@ def _validate_publisher(data: dict[str, Any]) -> None:
 
 
 def _validate_molecule(data: dict[str, Any]) -> None:
+    """Validate fields needed by the molecule v3-to-v4 transform."""
     for required in ("id", "version"):
         if not isinstance(data.get(required), str):
             _invalid_manifest(
@@ -157,6 +165,7 @@ def _validate_molecule(data: dict[str, Any]) -> None:
 
 
 def _v3_consumer_to_v4(data: dict[str, Any]) -> dict[str, Any]:
+    """Rename consumer version fields while preserving all v3 payload data."""
     result: dict[str, Any] = {"spaex_version": "4", "identity": data["identity"]}
     if "haex_hive_min_version" in data:
         result["spaex_min_version"] = rewrite_min_version(data["haex_hive_min_version"])
@@ -170,6 +179,7 @@ def _v3_consumer_to_v4(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _v3_publisher_to_v4(data: dict[str, Any]) -> dict[str, Any]:
+    """Rename the publisher schema-version field and preserve its declarations."""
     return {
         "spaex_version": "4",
         "publisher": data["publisher"],
@@ -178,6 +188,7 @@ def _v3_publisher_to_v4(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _v3_molecule_to_v4(data: dict[str, Any]) -> dict[str, Any]:
+    """Rename the molecule schema-version field and preserve its payload."""
     result: dict[str, Any] = {
         "spaex_version": "4",
         "id": data["id"],
@@ -195,6 +206,7 @@ def _v3_molecule_to_v4(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _v3_install_lock_to_v4(data: dict[str, Any]) -> dict[str, Any]:
+    """Rename the defensive install-lock schema-version field."""
     return {
         "spaex_version": "4",
         "generation_id": data["generation_id"],

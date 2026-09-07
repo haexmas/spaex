@@ -50,6 +50,7 @@ class ConsumerManifest:
 
     @staticmethod
     def from_json(raw: bytes) -> ConsumerManifest:
+        """Parse and validate a canonical v4 consumer manifest."""
         data = json.loads(raw.decode("utf-8"))
         if isinstance(data, dict):
             if "haex_hive_version" in data:
@@ -117,6 +118,7 @@ class ConsumerManifest:
         )
 
     def to_json_bytes(self) -> bytes:
+        """Serialize the manifest to deterministic canonical JSON bytes."""
         obj: dict[str, Any] = {
             "spaex_version": self.spaex_version,
             "identity": self.identity,

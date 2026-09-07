@@ -6,6 +6,7 @@ from spaex.migrate.v3_to_v4 import v3_to_v4
 
 
 def test_publisher_root_version_field_renamed() -> None:
+    """Verify the publisher schema-version key is renamed and bumped."""
     v3 = {
         "haex_hive_version": "3",
         "publisher": "com.example.publisher",
@@ -23,6 +24,7 @@ def test_publisher_root_version_field_renamed() -> None:
 
 
 def test_molecules_map_preserved_byte_for_byte() -> None:
+    """Verify publisher molecule declarations survive migration unchanged."""
     v3 = {
         "haex_hive_version": "3",
         "publisher": "com.example.publisher",
@@ -43,6 +45,7 @@ def test_molecules_map_preserved_byte_for_byte() -> None:
 
 
 def test_v4_publisher_input_is_returned_unchanged() -> None:
+    """Verify the transform preserves an already-v4 publisher object."""
     v4 = {
         "spaex_version": "4",
         "publisher": "com.example.publisher",

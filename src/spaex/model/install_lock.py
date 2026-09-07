@@ -93,6 +93,7 @@ class InstallLock:
 
     @staticmethod
     def from_json(raw: bytes) -> InstallLock:
+        """Parse an install lock while preserving unknown top-level fields."""
         try:
             data = json.loads(raw.decode("utf-8"))
             if isinstance(data, dict):
@@ -158,6 +159,7 @@ class InstallLock:
         )
 
     def to_json_bytes(self) -> bytes:
+        """Serialize the install lock and retained extension fields deterministically."""
         obj: dict[str, Any] = {
             "spaex_version": self.spaex_version,
             "generation_id": self.generation_id,

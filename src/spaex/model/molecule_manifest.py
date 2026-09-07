@@ -33,6 +33,7 @@ class MoleculeManifest:
 
     @staticmethod
     def from_json(raw: bytes) -> MoleculeManifest:
+        """Parse and validate a v4 molecule manifest and its contributed paths."""
         data = json.loads(raw.decode("utf-8"))
         schema_validator.validate(data, "molecule-manifest.v4.schema.json")
 

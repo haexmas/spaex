@@ -9,6 +9,7 @@ from spaex.util.errors import MigrationManifestInvalidError
 
 
 def test_molecule_version_field_renamed() -> None:
+    """Verify the molecule schema-version key is renamed and bumped."""
     v3 = {
         "haex_hive_version": "3",
         "id": "com.example.publisher.hello",
@@ -25,6 +26,7 @@ def test_molecule_version_field_renamed() -> None:
 
 
 def test_atoms_category_map_preserved_byte_for_byte() -> None:
+    """Verify the molecule category map survives migration unchanged."""
     v3 = {
         "haex_hive_version": "3",
         "id": "com.example.publisher.hello",
@@ -42,6 +44,7 @@ def test_atoms_category_map_preserved_byte_for_byte() -> None:
 
 
 def test_optional_defaults_and_config_schema_preserved() -> None:
+    """Verify optional molecule defaults and config schema are preserved."""
     v3 = {
         "haex_hive_version": "3",
         "id": "com.example.publisher.hello",
@@ -57,6 +60,7 @@ def test_optional_defaults_and_config_schema_preserved() -> None:
 
 
 def test_v4_molecule_input_returned_unchanged() -> None:
+    """Verify the transform preserves an already-v4 molecule object."""
     v4 = {
         "spaex_version": "4",
         "id": "com.example.publisher.hello",
@@ -68,6 +72,7 @@ def test_v4_molecule_input_returned_unchanged() -> None:
 
 
 def test_scalar_atom_path_is_rejected_instead_of_split_into_characters() -> None:
+    """Verify scalar atom paths are refused instead of treated as iterables."""
     v3 = {
         "haex_hive_version": "3",
         "id": "com.example.publisher.hello",

@@ -21,6 +21,7 @@ class MoleculeId:
 
     @staticmethod
     def parse(value: str) -> str:
+        """Validate and return a canonical reverse-DNS molecule identifier."""
         if not isinstance(value, str):
             raise ValueError(f"molecule-id must be a string, got {type(value).__name__}")
         length = len(value)

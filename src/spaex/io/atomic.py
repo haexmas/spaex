@@ -53,6 +53,7 @@ def _write_replace_posix(target: Path, data: bytes) -> None:
 
 
 def _write_replace_windows(target: Path, data: bytes) -> None:
+    """Atomically replace a file on Windows with write-through semantics."""
     import ctypes
     import msvcrt
     from ctypes import wintypes

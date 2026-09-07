@@ -79,6 +79,7 @@ def _make_v2_repo(root: Path) -> None:
 def test_fixture_v2_repo_yields_v4_proposals_for_every_manifest(
     tmp_path: Path,
 ) -> None:
+    """Verify an entire v2 fixture produces v4 proposals for every manifest."""
     repo = tmp_path / "repo"
     _make_v2_repo(repo)
 

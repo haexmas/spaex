@@ -62,6 +62,7 @@ def _preflight_ids_present(
 def _apply_removal(
     manifest: ConsumerManifest, remove_ids: tuple[str, ...]
 ) -> ConsumerManifest:
+    """Return a manifest without the requested molecules or empty compounds."""
     removal_set = set(remove_ids)
     new_compounds: list[CompoundEntry] = []
     for compound in manifest.compounds:
@@ -110,6 +111,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def run(args: argparse.Namespace) -> int:
+    """Retract requested molecules and reinstall the resulting manifest."""
     repo_root = Path(args.repo_root).resolve()
     manifest_path = repo_root / ".spaex.json"
     if not manifest_path.exists():

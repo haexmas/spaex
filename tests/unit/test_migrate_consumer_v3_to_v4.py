@@ -12,6 +12,7 @@ from spaex.migrate.v3_to_v4 import (
 
 
 def test_haex_hive_version_renamed_to_spaex_version() -> None:
+    """Verify the consumer schema-version key is renamed and bumped."""
     v3 = {
         "haex_hive_version": "3",
         "identity": "com.example.project",
@@ -31,6 +32,7 @@ def test_haex_hive_version_renamed_to_spaex_version() -> None:
 
 
 def test_min_version_field_renamed_and_bumped() -> None:
+    """Verify the consumer minimum-version field follows the v4 contract."""
     v3 = {
         "haex_hive_version": "3",
         "identity": "com.example.project",
@@ -43,6 +45,7 @@ def test_min_version_field_renamed_and_bumped() -> None:
 
 
 def test_optional_fields_preserved() -> None:
+    """Verify optional consumer fields survive migration unchanged."""
     v3 = {
         "haex_hive_version": "3",
         "identity": "com.example.project",
@@ -82,6 +85,7 @@ def test_optional_fields_preserved() -> None:
     ],
 )
 def test_min_version_rewrite_supported(v3_value: str, v4_value: str) -> None:
+    """Verify supported exact and lower-bound constraints are rewritten."""
     assert rewrite_min_version(v3_value) == v4_value
 
 
@@ -90,11 +94,13 @@ def test_min_version_rewrite_supported(v3_value: str, v4_value: str) -> None:
     ["2.0.0", "4.0.0", ">=2.0.0", ">=4.0.0", "~2.0.0", "invalid", "3.0", ""],
 )
 def test_min_version_rewrite_refuses_unsupported(value: str) -> None:
+    """Verify unsupported minimum-version constraints are typed refusals."""
     with pytest.raises(UnsupportedMinVersionConstraintError):
         rewrite_min_version(value)
 
 
 def test_v4_input_is_returned_unchanged_for_idempotency() -> None:
+    """Verify the transform preserves an already-v4 consumer object."""
     v4 = {
         "spaex_version": "4",
         "identity": "com.example.project",
