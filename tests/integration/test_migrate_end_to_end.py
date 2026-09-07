@@ -1,4 +1,9 @@
-"""T044 — end-to-end `haex migrate` v2→v3 on a fixture v2 repo (Spec 013)."""
+"""T044/T024 - end-to-end `haex migrate` on a fixture v2 repo.
+
+Originally Spec 013 T044 (v2->v3 chain). Under Spec 014 (T024) the chain
+extends through v3->v4, so the proposals are now v4 shape and the consumer
+sidecar filename becomes `.spaex.json.migrated`.
+"""
 
 from __future__ import annotations
 
@@ -71,7 +76,7 @@ def _make_v2_repo(root: Path) -> None:
         (mol_dir / path).write_text(f"# {name} {category}\n")
 
 
-def test_fixture_v2_repo_yields_v3_proposals_for_every_manifest(
+def test_fixture_v2_repo_yields_v4_proposals_for_every_manifest(
     tmp_path: Path,
 ) -> None:
     repo = tmp_path / "repo"
@@ -81,31 +86,34 @@ def test_fixture_v2_repo_yields_v3_proposals_for_every_manifest(
     rc = migrate_cli.run(ns)
     assert rc == 0
 
-    consumer_proposal = repo / ".haex-hive.json.migrated"
+    consumer_proposal = repo / ".spaex.json.migrated"
     root_proposal = repo / "manifest.json.migrated"
     hello_proposal = repo / "hello" / "manifest.json.migrated"
     world_proposal = repo / "world" / "manifest.json.migrated"
     for path in (consumer_proposal, root_proposal, hello_proposal, world_proposal):
         assert path.exists(), f"expected proposal at {path}"
 
-    consumer_v3 = json.loads(consumer_proposal.read_text())
-    assert consumer_v3["haex_hive_version"] == "3"
-    assert consumer_v3["compounds"][0]["molecules"] == [
+    consumer_v4 = json.loads(consumer_proposal.read_text())
+    assert consumer_v4["spaex_version"] == "4"
+    assert "haex_hive_version" not in consumer_v4
+    assert consumer_v4["compounds"][0]["molecules"] == [
         "com.example.publisher.hello",
         "com.example.publisher.world",
     ]
 
-    root_v3 = json.loads(root_proposal.read_text())
-    assert root_v3["haex_hive_version"] == "3"
-    assert set(root_v3["molecules"].keys()) == {
+    root_v4 = json.loads(root_proposal.read_text())
+    assert root_v4["spaex_version"] == "4"
+    assert set(root_v4["molecules"].keys()) == {
         "com.example.publisher.hello",
         "com.example.publisher.world",
     }
 
-    hello_v3 = json.loads(hello_proposal.read_text())
-    assert hello_v3["atoms"] == {"constitution": ["constitution.md"]}
-    world_v3 = json.loads(world_proposal.read_text())
-    assert world_v3["atoms"] == {"skills": ["skill.md"]}
+    hello_v4 = json.loads(hello_proposal.read_text())
+    assert hello_v4["spaex_version"] == "4"
+    assert hello_v4["atoms"] == {"constitution": ["constitution.md"]}
+    world_v4 = json.loads(world_proposal.read_text())
+    assert world_v4["spaex_version"] == "4"
+    assert world_v4["atoms"] == {"skills": ["skill.md"]}
 
 
 def test_originals_are_never_touched(tmp_path: Path) -> None:
