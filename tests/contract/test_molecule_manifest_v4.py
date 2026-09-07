@@ -19,6 +19,7 @@ _SCHEMA = "molecule-manifest.v4.schema.json"
 
 
 def _valid() -> dict:
+    """Return a valid v4 molecule manifest."""
     return {
         "spaex_version": "4",
         "id": "com.example.publisher.alpha",
@@ -31,10 +32,12 @@ def _valid() -> dict:
 
 
 def test_valid_v4_shape_passes() -> None:
+    """Accept a molecule manifest with the valid v4 shape."""
     schema_validator.validate(_valid(), _SCHEMA)
 
 
 def test_empty_category_array_is_rejected() -> None:
+    """Reject a molecule manifest with an empty atom category."""
     data = _valid()
     data["atoms"]["constitution"] = []
     with pytest.raises(schema_validator.SchemaValidationError):
@@ -42,6 +45,7 @@ def test_empty_category_array_is_rejected() -> None:
 
 
 def test_cross_category_path_overlap_is_rejected() -> None:
+    """Reject a path assigned to more than one atom category."""
     data = _valid()
     data["atoms"] = {
         "constitution": [".spaex/shared.md"],
@@ -52,6 +56,7 @@ def test_cross_category_path_overlap_is_rejected() -> None:
 
 
 def test_missing_priority_is_rejected() -> None:
+    """Reject a molecule manifest without a priority."""
     data = _valid()
     del data["priority"]
     with pytest.raises(schema_validator.SchemaValidationError):

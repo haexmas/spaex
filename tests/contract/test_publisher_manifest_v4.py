@@ -10,6 +10,7 @@ _SCHEMA = "publisher-manifest.v4.schema.json"
 
 
 def _valid() -> dict:
+    """Return a valid v4 publisher manifest."""
     return {
         "spaex_version": "4",
         "publisher": "com.example.publisher",
@@ -23,10 +24,12 @@ def _valid() -> dict:
 
 
 def test_valid_molecules_map_passes() -> None:
+    """Accept a publisher manifest with a valid molecules map."""
     schema_validator.validate(_valid(), _SCHEMA)
 
 
 def test_missing_spaex_version_is_rejected() -> None:
+    """Reject a publisher manifest without a spaex version."""
     data = _valid()
     del data["spaex_version"]
     with pytest.raises(schema_validator.SchemaValidationError):
@@ -34,6 +37,7 @@ def test_missing_spaex_version_is_rejected() -> None:
 
 
 def test_legacy_haex_hive_version_key_is_rejected() -> None:
+    """Reject the legacy haex_hive_version key."""
     data = _valid()
     del data["spaex_version"]
     data["haex_hive_version"] = "3"

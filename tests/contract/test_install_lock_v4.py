@@ -12,6 +12,7 @@ _URL = "https://github.com/example/publisher"
 
 
 def _valid() -> dict:
+    """Return a valid v4 installation lock."""
     return {
         "spaex_version": "4",
         "generation_id": "g_20260907T120000Z_abcd",
@@ -27,10 +28,12 @@ def _valid() -> dict:
 
 
 def test_valid_molecules_array_passes() -> None:
+    """Accept an installation lock with a valid molecules array."""
     schema_validator.validate(_valid(), _SCHEMA)
 
 
 def test_unknown_root_property_is_rejected() -> None:
+    """Reject unknown properties at the installation lock root."""
     data = _valid()
     data["nonsense_root"] = 1
     with pytest.raises(schema_validator.SchemaValidationError):
@@ -49,6 +52,7 @@ def test_unknown_root_property_is_rejected() -> None:
 def test_retired_top_level_field_is_rejected(
     retired_field: str, retired_value: object
 ) -> None:
+    """Reject fields retired from the installation lock root."""
     data = _valid()
     data[retired_field] = retired_value
     with pytest.raises(schema_validator.SchemaValidationError):

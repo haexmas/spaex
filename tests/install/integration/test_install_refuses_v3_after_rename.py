@@ -20,6 +20,7 @@ pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git binary 
 
 
 def _run_install(repo_root: Path, state_root: Path) -> subprocess.CompletedProcess:
+    """Run the install CLI against a repository with isolated state."""
     env = os.environ.copy()
     env["SPAEX_STATE"] = str(state_root)
     return subprocess.run(
@@ -31,6 +32,7 @@ def _run_install(repo_root: Path, state_root: Path) -> subprocess.CompletedProce
 
 
 def _assert_v3_refusal(proc: subprocess.CompletedProcess, consumer: Path) -> None:
+    """Assert that install refused v3 input without creating state."""
     assert proc.returncode != 0
     assert "key=spaex-version-unsupported" in proc.stderr
     assert "spaex migrate" in proc.stderr
@@ -38,6 +40,7 @@ def _assert_v3_refusal(proc: subprocess.CompletedProcess, consumer: Path) -> Non
 
 
 def test_legacy_haex_hive_version_in_spaex_json_refuses(tmp_path: Path) -> None:
+    """Refuse a consumer manifest with the legacy version key."""
     consumer = tmp_path / "consumer"
     consumer.mkdir()
     (consumer / ".spaex.json").write_text(
@@ -54,6 +57,7 @@ def test_legacy_haex_hive_version_in_spaex_json_refuses(tmp_path: Path) -> None:
 
 
 def test_spaex_version_three_refuses(tmp_path: Path) -> None:
+    """Refuse a consumer manifest that declares spaex version 3."""
     consumer = tmp_path / "consumer"
     consumer.mkdir()
     (consumer / ".spaex.json").write_text(
