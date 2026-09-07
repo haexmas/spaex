@@ -30,7 +30,7 @@
         "uniqueItems": true,
         "items": { "$ref": "#/$defs/repoRelativePath" }
       },
-      "description": "Category names mapped to non-empty lists of molecule-directory-relative delivered files. Category keys are open (any string); common categories include constitution, slash_commands, agents, mcps, dev_environment."
+      "description": "Category names mapped to non-empty lists of molecule-directory-relative delivered files. Category keys are open (any string); common categories include constitution, slash_commands, agents, mcps. Environment-config category naming (dev/staging/prod) is Spec 015 scope; Spec 014 makes no commitment."
     },
     "defaults": {
       "type": "object",

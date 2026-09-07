@@ -91,7 +91,8 @@ Categories are **open**: any string key. Publishers pick category names by conve
 - `slash_commands`: files placed under `.claude/commands/` (or the equivalent for other agent CLIs).
 - `agents`: agent-role files.
 - `mcps`: MCP-server descriptors.
-- `dev_environment` (newly documented in this feature, FR-043): files like `flake.nix`, `Dockerfile`, `devcontainer.json`, `.envrc`, `shell.nix`. Placed by `spaex install` like any other atom category. No new tool behavior; only documentation makes this an explicit affordance.
+
+**Environment-config files** (`flake.nix`, `Dockerfile`, `devcontainer.json`, `.envrc`, `shell.nix`, etc.) can be declared under any category name a publisher chooses today, because the schema treats keys as open. Spec 014 makes **no** naming commitment here (see Clarification 2026-09-07 Q3); the multi-environment vocabulary (dev/staging/prod), consumer-side selection, and orchestration verbs are the scope of Spec 015.
 
 **Invariants** (unchanged from v3):
 - No path appears in more than one category's list within the same molecule (`atoms-category-overlap` refusal at load time).

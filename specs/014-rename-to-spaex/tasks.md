@@ -24,6 +24,16 @@ description: "Tasks for spec 014: rename to spaex and first PyPI release"
 
 Ordering places US2 before US1 because Phase 4 (US1 self-adoption) uses `spaex migrate` to produce the v4 shape of the repo's own manifests.
 
+**PR-vs-tasks-phase mapping** (revised per Clarification 2026-09-07 Q1). The task phases below are logical execution units; the shipping order combines some of them:
+
+| PR | Contains | Rationale |
+|---|---|---|
+| PR #1 | Phase 1 | Schema-payloads-only, dead code. |
+| PR #2 | Phase 3 (US2 migrate) | Must land before P2+P4 so self-adopt can use `spaex migrate`. |
+| PR #3 | Phase 2 + Phase 4 (foundational rename + self-adoption + docs sweep) | Bundled so `main` never sees a state where the repo's own v3 manifests cannot be read by the v4 loader. |
+| PR #4 | Phase 5 (release) | Only ships after the repo is coherent under the new name. |
+| PR #5 | Phase 6 (polish + directory rename) | Local-directory rename is the very last action, after the session that runs it is deliberately restarted. |
+
 ## Format
 
 `- [ ] TXXX [P?] [Story?] Description with file path`
@@ -124,7 +134,7 @@ Single-project layout (unchanged from Spec 013). `src/haex_hive/` renames to `sr
 
 ### Implementation for User Story 1 (docs sweep)
 
-- [ ] T055 [P] [US1] Rewrite [README.md](../../README.md) per spec FR-041 through FR-044 and the plan's README-Rewrite section. Header: `# spaex — reproducible coding harnesses for any repo and development environment`. What-it-is paragraph. Verb list. Dev-environment placement paragraph (FR-043). Install paragraph with `pipx install spaex`. Migration-from-v3 paragraph. Multi-device vision as one line pointing at holzi.
+- [ ] T055 [P] [US1] Rewrite [README.md](../../README.md) per spec FR-041 through FR-044 and the plan's README-Rewrite section. Header: `# spaex — reproducible coding harnesses for any repo and development environment`. What-it-is paragraph. Verb list. Generic atom-categories-are-open paragraph per the updated FR-043 (Spec 014 makes no naming commitment for environment-config files; forward-reference Spec 015 for multi-environment declaration and orchestration). Install paragraph with `pipx install spaex`. Migration-from-v3 paragraph. Multi-device vision as one line pointing at holzi.
 - [ ] T056 [P] [US1] Sweep every remaining `haex-hive`, `haex_hive`, `haex`, `HAEX_HIVE`, `.haex-hive` reference in `.github/workflows/*.yml`, `pyproject.toml` (if any survived), any root-level docs (`CLAUDE.md`, `AGENTS.md` if they appear). Live references MUST be gone. Historical references in `docs/adr/`, `docs/plans/`, `specs/` remain.
 - [ ] T057 [US1] Add [docs/adr/0011-rename-to-spaex.md](../../docs/adr/0011-rename-to-spaex.md) with the standard ADR template. Records the rename decision, links [Spec 014](spec.md), notes the PATCH constitution bump, and lists Follow-ups: Slot 015 (dev-env orchestration), memory-file sweep.
 - [ ] T058 [US1] Run full test suite: `pytest -m 'not slow'`. Confirm green.
@@ -162,7 +172,8 @@ Single-project layout (unchanged from Spec 013). `src/haex_hive/` renames to `sr
 - [ ] T072 Walk [quickstart.md](quickstart.md) end to end against a scratch project on a fresh machine (or a container). Every command works as documented. Every refusal-key row in the table is reachable via the documented failure mode. Any wording drift is fixed in the same task.
 - [ ] T073 [P] Confirm [SC-001](spec.md) through SC-010 are all satisfied. If any fails, open a follow-up task in this file (do not silently pass).
 - [ ] T074 GitHub-repo rename: through the GitHub UI, rename `haexmas/haex-hive` → `haexmas/spaex`. GitHub configures the redirect automatically. Update the repo description to reference the current identity.
-- [ ] T075 Merge the feature branch. Per the design source, land in six PRs against `main` matching the phase boundaries (P1→P6). Delete the branch after landing.
+- [ ] T075 Merge the feature branch. Per Clarification 2026-09-07 Q1, land as **five PRs** against `main` (see the PR-vs-tasks-phase mapping above). Delete the feature branch after landing.
+- [ ] T076 **RUN AFTER SESSION CLOSE**: Rename the local repository directory: `mv /home/haex/Projekte/haex-hive /home/haex/Projekte/spaex`. Also copy the Claude Code memory directory: `cp -r ~/.claude/projects/-home-haex-Projekte-haex-hive ~/.claude/projects/-home-haex-Projekte-spaex`. Then open a new shell in the new path. Do NOT run this task while any shell, IDE, Claude Code session, or file watcher has the old directory as its cwd; renaming the cwd out from under a running process breaks it. Per Clarification 2026-09-07 Q2.
 
 ---
 

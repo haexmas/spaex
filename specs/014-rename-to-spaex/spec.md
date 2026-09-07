@@ -7,6 +7,14 @@
 
 **Design source**: [docs/plans/2026-09-07-rename-to-spaex-design.md](../../docs/plans/2026-09-07-rename-to-spaex-design.md) is the authoritative requirements capture. This spec restates that plan in Speckit shape for `/speckit-plan` and `/speckit-tasks` to consume.
 
+## Clarifications
+
+### Session 2026-09-07
+
+- Q: How do we keep `main` coherent given that Phase 2 (foundational rename) alone leaves the repo's own v3 manifests unreadable until Phase 4 (self-adopt) also lands? → A: Bundle Phase 2 and Phase 4 in one PR. Phase 3 (v3→v4 migrate) lands as its own PR beforehand so the self-adopt step in the combined P2+P4 PR can actually invoke `spaex migrate`. Revised PR sequence: **P1 → P3(migrate) → P2+P4 combined → P5(release) → P6(polish)**. `main` never sees a broken state.
+- Q: Does the local repo directory `/home/haex/Projekte/haex-hive/` rename to match? → A: Yes, but as the **very last step**, after all six PRs have merged and the local session is deliberately closed. Renaming the cwd out from under a running shell breaks the shell, running watchers, IDE indexers, and the Claude Code session itself. Add a Phase 6 task that is explicitly marked "run after session close": `mv /home/haex/Projekte/haex-hive /home/haex/Projekte/spaex`, plus copying the Claude Code memory directory `~/.claude/projects/-home-haex-Projekte-haex-hive/` to `~/.claude/projects/-home-haex-Projekte-spaex/`. The operator opens a new shell in the new path afterward.
+- Q: How does Spec 014 treat the atom-category name for dev-environment files (`flake.nix`, `Dockerfile`, etc.)? → A: **Spec 014 makes no naming commitment.** FR-043 is reduced to a generic "atom categories are open" statement in the README. The multi-environment story (declarable `dev`/`staging`/`prod` environments, consumer-side selection, orchestration verbs) is the scope of Spec 015 (renamed from "dev-environment orchestration" to "multi-environment declaration + orchestration"). A short Slot 015 placeholder design doc is written to `docs/plans/2026-09-07-slot-015-multi-environment-placeholder.md` at Spec 014 session close.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Operator uses the new brand end to end (Priority: P1) 🎯 MVP
@@ -115,7 +123,7 @@ An operator new to the tool wants to install it without cloning a repo. They run
 - **FR-040**: Documentation (README, quickstart files, `CLAUDE.md`, `AGENTS.md`, ADRs) MUST refer to `spaex` and the new filenames as the current identity. Historical references in `docs/adr/`, `docs/plans/`, and `specs/` are exempted where they capture the pre-rename state as history.
 - **FR-041**: README MUST use the tagline `# spaex — reproducible coding harnesses for any repo and development environment`.
 - **FR-042**: README MUST reference `pipx install spaex` as the primary install command. Development-install `pip install -e '.[dev]'` remains as a secondary path.
-- **FR-043**: README MUST mention that molecules can declare a `dev_environment` atom category (for example `flake.nix`, `Dockerfile`, `devcontainer.json`, `.envrc`, `shell.nix`) and that `spaex install` places those files like any other atom category. No new tool feature required.
+- **FR-043**: README MUST mention that molecule authors can declare any atom category name they like (the schema treats category keys as open) and that `spaex install` places declared files under participating roots by convention. Common categories today are `constitution`, `slash_commands`, `agents`, `mcps`; new categories are added by convention without a schema change. Spec 014 makes **no** naming commitment for environment-config files (`flake.nix`, `Dockerfile`, `devcontainer.json`, `.envrc`, `shell.nix`, etc.); the multi-environment vocabulary and orchestration are the scope of Spec 015. README MAY note that Spec 015 is planned and link the placeholder design doc.
 - **FR-044**: README MUST NOT promise multi-device swarm functionality. That vision moves to a linked separate project (`holzi`).
 - **FR-045**: A new ADR MUST be added (next free ADR number, likely 0011) recording the rename decision and pointing at Spec 014.
 
@@ -160,4 +168,5 @@ An operator new to the tool wants to install it without cloning a repo. They run
 - **`jsonschema` remains the sole runtime dependency**: The rename does not add or remove dependencies.
 - **Domain vocabulary is stable**: `atoms{}`, `molecules[]`, `compounds[]` names survive Spec 013 and are not up for rename in this feature.
 - **Constitution principle text is not being reworded**: This feature is a naming amendment to the constitution, not a principle amendment. If a principle rewording surfaces during Phase 4 review, it becomes a separate follow-up under a new ADR.
-- **Dev-environment orchestration is out of scope**: FR-043 covers placement only. Any `spaex enter` / `spaex shell` / `spaex dev up` verbs are reserved for a future spec (slot 015 tentative).
+- **Environments and orchestration are out of scope**: Spec 014 makes no commitment to any category name for environment-config files, no multi-environment vocabulary (dev/staging/prod), no consumer-side environment selection, and no orchestration verbs (`spaex enter`, `spaex shell`, `spaex dev up`, etc.). All of that is Spec 015 (multi-environment declaration + orchestration). A placeholder design doc for 015 is written at Spec 014 session close.
+- **PR sequence keeps `main` coherent**: Per Clarification 2026-09-07 Q1, the atomic rename (Phase 2 + Phase 4) lands in one PR, with Phase 3 (migrate) as a predecessor PR. `main` is never in a state where the repo's own manifests cannot be read by the current loader.

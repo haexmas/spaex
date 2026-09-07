@@ -50,30 +50,31 @@ The authoritative technical reasoning lives in [docs/plans/2026-09-07-rename-to-
 
 ## D5: Sequencing and PR shape
 
-**Decision**: Six sequential PRs against `main`, no stacked branches. Order:
-1. Schema payloads v4 plus version dispatch (loader still on v3).
-2. Foundational rename (Python package, CLI binary, constants, env var).
-3. Migrate v3→v4 transform.
-4. Self-adoption (repo's own manifests migrate).
-5. Docs sweep (README, quickstart, CLAUDE.md, AGENTS.md, ADRs).
-6. Release workflow plus first PyPI push at `v4.0.0`.
+**Decision (updated per Clarification 2026-09-07 Q1)**: Five sequential PRs against `main`, no stacked branches. Order:
+1. Schema payloads v4 plus version dispatch (loader still on v3). Design-doc Phase 1.
+2. Migrate v3→v4 transform (added by extending the chain). Design-doc Phase 3, promoted ahead of the foundational rename so the self-adopt step in the next PR can invoke `spaex migrate`.
+3. **Foundational rename plus self-adoption (combined)**. Design-doc Phases 2 + 4 in one PR. Bundling is required: Phase 2 alone leaves the repo's own v3 manifests unreadable by the new v4 loader, breaking `main`. Bundling P2+P4 keeps `main` coherent at every merge boundary. Docs sweep (former Phase 5) rides in the same PR since it also touches `haex-hive`/`haex` references.
+4. Release workflow plus first PyPI push at `v4.0.0`. Design-doc Phase 6.
+5. Polish, GH-repo rename, memory-file sweep, local-directory rename. Design-doc Phase 7 equivalent.
 
-**Rationale**: Matches the Spec 013 cadence (PRs 70-77). Each phase is reviewable in isolation. Linear order prevents merge-conflict churn. Memory `pr_strategy_stacked_phases` confirms phase branches target `main` in this repo, not each other.
+**Rationale**: Matches the Spec 013 cadence (PRs land against `main`, not on top of each other). Bundling the foundational rename with the self-adopt is the only way to keep `main` in a coherent state, because the loader's v4-only dispatch (Phase 2) and the repo's own manifest migration (Phase 4) form an atomic pair.
 
 **Alternatives**:
+- **Six separate PRs** (original design-source ordering): rejected per Q1 clarification. `main` would be in a broken state between the P2 and P4 merges.
 - **Single monolithic PR**: rejected. Unreviewable, unbisectable.
 - **Stacked branches (each phase branches from the previous)**: rejected. Memory `pr_strategy_stacked_phases` documents why this repo avoids stacked-branch PRs.
 - **Parallel phases**: rejected. Guaranteed merge conflicts on ~150 files.
 
-## D6: Dev-environment placement (documentation-only)
+## D6: Environment-config placement (generic, no naming commitment)
 
-**Decision**: FR-043 clarifies in the README that molecules can declare a `dev_environment` atom category (containing `flake.nix`, `Dockerfile`, `devcontainer.json`, `.envrc`, `shell.nix`, etc.) and `spaex install` places those files. No new tool feature; the molecule architecture already permits arbitrary category names.
+**Decision (updated per Clarification 2026-09-07 Q3)**: FR-043 says only that molecule authors can declare any atom category name they want and `spaex install` places declared files. Spec 014 makes **no** commitment to a specific category name (`dev_environment`, `dev-environment`, `dev_env`, `devenv`, ...) for environment-config files. Multi-environment vocabulary (dev/staging/prod), consumer-side selection, and orchestration are all Spec 015 scope.
 
-**Rationale**: The tagline reads "reproducible coding harnesses for any repo and development environment," and this documentation change makes the second half of that promise concrete without new code. Orchestration (`spaex enter`, `spaex shell`, `spaex dev up`) is out of scope for 014, reserved as slot 015.
+**Rationale**: The 2026-09-07 clarification surfaced that "dev environment" is one of several environments a repo might need (dev, staging, prod, ...), and orchestration ("bring the repo up in environment X") is a bigger product intent that deserves its own design. Committing to a single-environment category name in 014 would either be premature (locking in a name that Slot 015 wants to change) or misleading (implying multi-env support that does not exist yet). The generic form keeps the README honest: the schema is open, publishers can experiment, Spec 015 will formalize.
 
 **Alternatives**:
-- **Add orchestration commands to 014**: rejected. Doubles the feature scope; would require its own contracts, tests, and design phase.
-- **Silently permit but do not document**: rejected. The tagline promises this capability; not documenting it is a documentation-actual-behavior mismatch.
+- **Commit to `dev_environment`**: rejected per Q3. Locks in a name before the multi-env story is designed.
+- **Drop FR-043 entirely**: rejected. The tagline mentions "development environment"; leaving no README paragraph would be a promise-behavior mismatch. Generic form preserves the promise without over-committing.
+- **Add multi-env vocabulary directly to 014**: rejected. Turns a rename spec into a rename-plus-feature spec; risks landing neither well.
 
 ## D7: Schema `$id` audit deferred to Phase 1
 
@@ -84,11 +85,11 @@ The authoritative technical reasoning lives in [docs/plans/2026-09-07-rename-to-
 **Alternatives**:
 - **Decide now**: rejected. Requires reading files this phase does not otherwise touch.
 
-## D8: `dev_environment` is not a validated category
+## D8: Atom-category keys stay open
 
-**Decision**: The v4 molecule-manifest schema treats `atoms{}` as a `Dict[str, List[str]]` with open category keys, same as v3. `dev_environment` is a recognized-by-convention category; it does not need enumeration in the schema. Existing categories (`constitution`, `slash_commands`, `agents`, `mcps`, etc.) stay unenumerated for the same reason.
+**Decision**: The v4 molecule-manifest schema treats `atoms{}` as a `Dict[str, List[str]]` with open category keys, same as v3. No category name is enumerated. Existing categories (`constitution`, `slash_commands`, `agents`, `mcps`, etc.) are conventions, not schema-enforced.
 
-**Rationale**: v3 already treats categories as open. Enumerating them at the schema layer would create a bottleneck for adding new categories (which is a feature, not a bug, of the current design).
+**Rationale**: v3 already treats categories as open. Enumerating them at the schema layer would create a bottleneck for adding new categories (a feature, not a bug, of the current design). Per D6, Spec 014 makes no naming commitment for environment-config categories in particular; those live under whatever convention Spec 015 lands.
 
 **Alternatives**:
 - **Enumerate categories at the schema layer**: rejected. Would require a schema change on every new category and would push category vocabulary into the schema instead of the community.
