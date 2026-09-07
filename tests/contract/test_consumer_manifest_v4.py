@@ -12,6 +12,7 @@ _URL = "https://github.com/example/publisher"
 
 
 def _valid() -> dict:
+    """Return a valid v4 consumer manifest."""
     return {
         "spaex_version": "4",
         "identity": "com.example.consumer",
@@ -26,10 +27,12 @@ def _valid() -> dict:
 
 
 def test_valid_v4_shape_passes() -> None:
+    """Accept a consumer manifest with the valid v4 shape."""
     schema_validator.validate(_valid(), _SCHEMA)
 
 
 def test_spaex_version_3_is_rejected() -> None:
+    """Reject a consumer manifest that declares spaex version 3."""
     data = _valid()
     data["spaex_version"] = "3"
     with pytest.raises(schema_validator.SchemaValidationError):
@@ -37,6 +40,7 @@ def test_spaex_version_3_is_rejected() -> None:
 
 
 def test_unknown_top_level_property_is_rejected() -> None:
+    """Reject unknown properties at the consumer manifest root."""
     data = _valid()
     data["nonsense_field"] = True
     with pytest.raises(schema_validator.SchemaValidationError):
@@ -44,6 +48,7 @@ def test_unknown_top_level_property_is_rejected() -> None:
 
 
 def test_duplicate_molecule_id_within_compound_is_rejected() -> None:
+    """Reject duplicate molecule identifiers within one compound."""
     data = _valid()
     data["compounds"][0]["molecules"] = [
         "com.example.publisher.alpha",

@@ -15,6 +15,7 @@ pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git binary 
 
 
 def _run_install(repo_root: Path, state_root: Path) -> subprocess.CompletedProcess:
+    """Run the install CLI against a repository with isolated state."""
     env = os.environ.copy()
     env["SPAEX_STATE"] = str(state_root)
     return subprocess.run(
