@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/haexmas/spaex/schemas/publisher-manifest.v4.schema.json",
+  "title": "spaex Publisher Root Manifest v4",
+  "description": "Schema for the root `manifest.json` of a publisher repo. Maps molecule ids to their internal directory paths. Structurally identical to v3; only the version-field name (`haex_hive_version` -> `spaex_version`) and value (`3` -> `4`) change.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["spaex_version", "publisher", "molecules"],
+  "properties": {
+    "spaex_version": {
+      "const": "4"
+    },
+    "publisher": {
+      "$ref": "#/$defs/moleculeId",
+      "description": "Publisher's reverse-DNS namespace. Every molecule-id key in `molecules` MUST start with `publisher + '.'`."
+    },
+    "molecules": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/moleculeId" },
+      "additionalProperties": { "$ref": "#/$defs/publisherMoleculeEntry" },
+      "minProperties": 1,
+      "description": "Map from molecule-id to the publisher-repo-relative directory containing that molecule's `manifest.json`."
+    }
+  },
+  "$defs": {
+    "moleculeId": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$",
+      "minLength": 3,
+      "maxLength": 253
+    },
+    "repoRelativePath": {
+      "type": "string",
+      "pattern": "^(?!(?:\\.{1,2})(?:/|$))[^\\u0000-\\u001F\\u007F/\\\\]+(?:/(?!(?:\\.{1,2})(?:/|$))[^\\u0000-\\u001F\\u007F/\\\\]+)*$",
+      "minLength": 1,
+      "description": "Repository-relative POSIX path with no leading/trailing slash, no control characters, no empty, `.`, or `..` segments."
+    },
+    "publisherMoleculeEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "version"],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/repoRelativePath",
+          "description": "Directory (not file) containing the molecule's `manifest.json`."
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+          "description": "Semver X.Y.Z of the molecule."
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable one-liner."
+        }
+      }
+    }
+  }
+}
