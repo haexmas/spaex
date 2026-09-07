@@ -39,7 +39,6 @@ def test_missing_spaex_version_is_rejected() -> None:
 def test_legacy_haex_hive_version_key_is_rejected() -> None:
     """Reject the legacy haex_hive_version key."""
     data = _valid()
-    del data["spaex_version"]
     data["haex_hive_version"] = "3"
     with pytest.raises(schema_validator.SchemaValidationError):
         schema_validator.validate(data, _SCHEMA)
