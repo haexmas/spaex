@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from haex_hive.model.repo_relative_path import RepoRelativePath
+from spaex.model.repo_relative_path import RepoRelativePath
 
 
 @pytest.mark.parametrize(

@@ -1,0 +1,16 @@
+{
+  "active_feature": null,
+  "compounds": [
+    {
+      "molecules": [
+        "com.github.haexmas.spaex.constitution"
+      ],
+      "revision": "fc05d7aa6ca454a6f057f17d59d8a289e897399f",
+      "source": "https://github.com/haexmas/haex-hive"
+    }
+  ],
+  "groups": [],
+  "identity": "com.github.haexmas.spaex",
+  "spaex_min_version": ">=4.0.0",
+  "spaex_version": "4"
+}

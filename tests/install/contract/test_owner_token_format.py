@@ -7,7 +7,7 @@ Assertions
 - Hostname sanitisation: non-`[A-Za-z0-9.-]` characters are removed, and the
   first 64 matching characters are kept (per contracts/owner-token.v1.md).
 
-The `OwnerToken` type is defined by Spec 008 T013 in `haex_hive.install.lock`.
+The `OwnerToken` type is defined by Spec 008 T013 in `spaex.install.lock`.
 Until T013 lands the class, this whole test module is skipped so CI stays
 green; when T013 lands, the skip guard falls away automatically and each
 assertion below becomes a real contract check.
@@ -19,10 +19,10 @@ import re
 
 import pytest
 
-pytest.importorskip("haex_hive.install.lock")
+pytest.importorskip("spaex.install.lock")
 
 try:
-    from haex_hive.install.lock import OwnerToken  # type: ignore[attr-defined]
+    from spaex.install.lock import OwnerToken  # type: ignore[attr-defined]
 except ImportError:
     pytest.skip("OwnerToken lands with Spec 008 T013", allow_module_level=True)
 

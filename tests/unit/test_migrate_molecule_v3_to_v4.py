@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from haex_hive.migrate.v3_to_v4 import v3_to_v4
+from spaex.migrate.v3_to_v4 import v3_to_v4
 
 
 def test_molecule_version_field_renamed() -> None:

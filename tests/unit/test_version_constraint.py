@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from haex_hive.model.version_constraint import VersionConstraint
+from spaex.model.version_constraint import VersionConstraint
 
 
 def test_exact_form() -> None:

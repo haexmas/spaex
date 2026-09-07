@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from haex_hive.migrate.v3_to_v4 import (
+from spaex.migrate.v3_to_v4 import (
     UnsupportedMinVersionConstraintError,
     rewrite_min_version,
     v3_to_v4,

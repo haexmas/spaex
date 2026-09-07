@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import pytest
 
-from haex_hive.migrate.v2_to_v3 import v2_to_v3
-from haex_hive.migrate.v3_to_v4 import (
+from spaex.migrate.v2_to_v3 import v2_to_v3
+from spaex.migrate.v3_to_v4 import (
     UnrecognizedManifestShapeError,
     is_v4,
     v3_to_v4,

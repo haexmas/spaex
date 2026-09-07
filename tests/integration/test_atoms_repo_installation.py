@@ -3,10 +3,10 @@
 Closes SC-001: a molecule published by the ``haexmas/atoms`` repository
 installs into a v3-adopted consumer through a single `haex add` call
 (which delegates to `haex install`), with the molecule's contributed
-files landing under `.haex-hive/`.
+files landing under `.spaex/`.
 
 Hermetic by design: the fixture stages a bare git clone at the exact
-``$HAEX_HIVE_STATE/repos/<sha256(url)[:16]>/`` path the tool would use
+``$SPAEX_STATE/repos/<sha256(url)[:16]>/`` path the tool would use
 for the real ``https://github.com/haexmas/atoms`` URL. This lets
 `haex add` resolve the SHA against the local clone instead of the
 network, so the test does not depend on GitHub availability.
@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pytest
 
-from haex_hive.model.install_lock import InstallLock
+from spaex.model.install_lock import InstallLock
 
 _ATOMS_URL = "https://github.com/haexmas/atoms"
 _GRAPHIFY_ID = "com.github.haexmas.atoms.graphify-first-authoring"
@@ -72,8 +72,8 @@ def test_add_graphify_from_atoms_repo_installs_end_to_end(
     )
     assert rc == 0
 
-    # `.haex-hive.json` records the adopted molecule at the pinned SHA
-    manifest = json.loads((consumer / ".haex-hive.json").read_text())
+    # `.spaex.json` records the adopted molecule at the pinned SHA
+    manifest = json.loads((consumer / ".spaex.json").read_text())
     assert manifest["compounds"] == [
         {
             "source": _ATOMS_URL,
@@ -82,8 +82,8 @@ def test_add_graphify_from_atoms_repo_installs_end_to_end(
         }
     ]
 
-    # The constitution file lands under .haex-hive/
-    published_constitution = consumer / ".haex-hive" / "constitution.md"
+    # The constitution file lands under .spaex/
+    published_constitution = consumer / ".spaex" / "constitution.md"
     assert published_constitution.exists()
     assert published_constitution.read_bytes() == (
         f"# {_GRAPHIFY_ID} constitution constitution.md\n\n"
@@ -93,14 +93,14 @@ def test_add_graphify_from_atoms_repo_installs_end_to_end(
     # install.lock records exactly one molecule with the exact
     # (source, revision, paths) triple.
     install_lock = InstallLock.from_json(
-        (consumer / ".haex-hive" / "install.lock").read_bytes()
+        (consumer / ".spaex" / "install.lock").read_bytes()
     )
     assert len(install_lock.molecules) == 1
     entry = install_lock.molecules[0]
     assert entry.id == _GRAPHIFY_ID
     assert entry.source == _ATOMS_URL
     assert entry.revision == atoms_repo_fixture["head"]
-    assert entry.paths == (".haex-hive/constitution.md",)
+    assert entry.paths == (".spaex/constitution.md",)
 
 
 def test_second_add_invocation_is_idempotent(
@@ -121,7 +121,7 @@ def test_second_add_invocation_is_idempotent(
         revision=atoms_repo_fixture["head"],
     )
     assert first_rc == 0
-    first_lock_bytes = (consumer / ".haex-hive" / "install.lock").read_bytes()
+    first_lock_bytes = (consumer / ".spaex" / "install.lock").read_bytes()
 
     rc = haex_add_helpers["run_add"](
         consumer,
@@ -132,7 +132,7 @@ def test_second_add_invocation_is_idempotent(
         revision=atoms_repo_fixture["head"],
     )
     assert rc == 0
-    second_lock_bytes = (consumer / ".haex-hive" / "install.lock").read_bytes()
+    second_lock_bytes = (consumer / ".spaex" / "install.lock").read_bytes()
     assert second_lock_bytes == first_lock_bytes, (
         "re-adding the same molecule at the same SHA must not allocate a "
         "new generation"

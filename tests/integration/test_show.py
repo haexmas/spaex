@@ -21,9 +21,9 @@ def _run_haex(
     stdin_bytes: bytes | None = None,
 ) -> subprocess.CompletedProcess:
     env = os.environ.copy()
-    env["HAEX_HIVE_STATE"] = str(state_root)
+    env["SPAEX_STATE"] = str(state_root)
     return subprocess.run(
-        [sys.executable, "-m", "haex_hive", "--repo-root", str(repo_root), *args],
+        [sys.executable, "-m", "spaex", "--repo-root", str(repo_root), *args],
         input=stdin_bytes if stdin_bytes is not None else b"",
         capture_output=True,
         env=env,
@@ -50,7 +50,7 @@ def test_preface_and_body_byte_identity(single_source_constitution_fixture: dict
     atom_id = single_source_constitution_fixture["atom_id"]
     commit_sha = single_source_constitution_fixture["commit_sha"]
     canonical = single_source_constitution_fixture["canonical"]
-    body = (consumer / ".haex-hive" / "constitution.md").read_bytes()
+    body = (consumer / ".spaex" / "constitution.md").read_bytes()
     expected = (
         f"# Assembled from\n- {atom_id} @ {commit_sha[:7]} ({canonical})\n\n---\n\n"
     ).encode() + body
@@ -65,7 +65,7 @@ def test_no_preface_prints_only_body(single_source_constitution_fixture: dict) -
     proc = _show(consumer, "--no-preface", state_root=state_root)
     assert proc.returncode == 0, proc.stderr.decode()
 
-    body = (consumer / ".haex-hive" / "constitution.md").read_bytes()
+    body = (consumer / ".spaex" / "constitution.md").read_bytes()
     assert proc.stdout == body
 
 
@@ -82,7 +82,7 @@ def test_missing_lock_refuses(single_source_constitution_fixture: dict) -> None:
     consumer = single_source_constitution_fixture["consumer"]
     state_root = single_source_constitution_fixture["state_root"]
     _assemble(consumer, state_root)
-    (consumer / ".haex-hive" / "install.lock").unlink()
+    (consumer / ".spaex" / "install.lock").unlink()
 
     proc = _show(consumer, state_root=state_root)
     assert proc.returncode == 3
@@ -94,7 +94,7 @@ def test_install_lock_schema_invalid_refuses(single_source_constitution_fixture:
     state_root = single_source_constitution_fixture["state_root"]
     _assemble(consumer, state_root)
 
-    lock_path = consumer / ".haex-hive" / "install.lock"
+    lock_path = consumer / ".spaex" / "install.lock"
     data = json.loads(lock_path.read_text())
     del data["molecules"]
     lock_path.write_text(json.dumps(data))
@@ -112,7 +112,7 @@ def test_install_lock_out_of_order_molecules_refuses(
     state_root = single_source_constitution_fixture["state_root"]
     _assemble(consumer, state_root)
 
-    lock_path = consumer / ".haex-hive" / "install.lock"
+    lock_path = consumer / ".spaex" / "install.lock"
     data = json.loads(lock_path.read_text())
     molecule = data["molecules"][0]
     data["molecules"] = [
@@ -131,7 +131,7 @@ def test_body_is_rendered_from_a_valid_lock(single_source_constitution_fixture: 
     state_root = single_source_constitution_fixture["state_root"]
     _assemble(consumer, state_root)
 
-    constitution_path = consumer / ".haex-hive" / "constitution.md"
+    constitution_path = consumer / ".spaex" / "constitution.md"
     constitution_path.write_bytes(constitution_path.read_bytes() + b"tampered\n")
 
     proc = _show(consumer, state_root=state_root)
@@ -148,7 +148,7 @@ def test_show_ignores_stale_siblings(
     state_root = single_source_constitution_fixture["state_root"]
     _assemble(consumer, state_root)
 
-    (consumer / f".haex-hive.{sibling}").mkdir()
+    (consumer / f".spaex.{sibling}").mkdir()
 
     proc = _show(consumer, state_root=state_root)
     assert proc.returncode == 0, proc.stderr.decode()
@@ -157,13 +157,13 @@ def test_show_ignores_stale_siblings(
 def test_show_refuses_when_live_absent(
     single_source_constitution_fixture: dict,
 ) -> None:
-    """A missing `.haex-hive/` produces the standard not-assembled refusal."""
+    """A missing `.spaex/` produces the standard not-assembled refusal."""
     consumer = single_source_constitution_fixture["consumer"]
     state_root = single_source_constitution_fixture["state_root"]
     _assemble(consumer, state_root)
 
-    shutil.rmtree(consumer / ".haex-hive")
-    (consumer / ".haex-hive.prev").mkdir()
+    shutil.rmtree(consumer / ".spaex")
+    (consumer / ".spaex.prev").mkdir()
 
     proc = _show(consumer, state_root=state_root)
     assert proc.returncode == 2, proc.stderr.decode()

@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from haex_hive.migrate.transform import migrate_v1_to_v2
-from haex_hive.util.errors import (
+from spaex.migrate.transform import migrate_v1_to_v2
+from spaex.util.errors import (
     CredentialInUrlError,
     IdentityMismatchError,
     PermissionOnlyEntryError,

@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from haex_hive.git.show import show_bytes
-from haex_hive.util.errors import ContributionFileNotFoundError
+from spaex.git.show import show_bytes
+from spaex.util.errors import ContributionFileNotFoundError
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None, reason="git binary required"

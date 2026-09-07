@@ -11,8 +11,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from haex_hive.cli import migrate as migrate_cli
-from haex_hive.migrate.registry import ProposalRegistry
+from spaex.cli import migrate as migrate_cli
+from spaex.migrate.registry import ProposalRegistry
 
 
 def _make_v4_consumer(root: Path) -> None:
@@ -139,7 +139,7 @@ def test_registry_commit_keeps_files(tmp_path: Path) -> None:
 
 def test_dry_run_and_check_mutually_exclusive(tmp_path: Path) -> None:
     _make_v2_consumer_and_molecules(tmp_path / "repo")
-    from haex_hive.util import exit_codes
+    from spaex.util import exit_codes
 
     rc = _run_migrate(tmp_path / "repo", dry_run=True, check=True)
     assert rc == exit_codes.USAGE

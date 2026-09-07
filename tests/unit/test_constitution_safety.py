@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from haex_hive.constitution.safety import (
+from spaex.constitution.safety import (
     validate_no_concealment_instructions,
     validate_no_plaintext_secrets,
     validate_terminal_safe_display,
 )
-from haex_hive.util.errors import (
+from spaex.util.errors import (
     ConstitutionConcealmentInstructionError,
     PlaintextSecretDetectedError,
     TerminalUnsafeContributionError,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from haex_hive.model.install_lock import InstallLock
+from spaex.model.install_lock import InstallLock
 
 _CONST_ID = "com.example.publisher.const"
 _SKILL_ID = "com.example.publisher.skill"
@@ -34,7 +34,7 @@ def test_orphan_paths_are_deleted_after_remove(
         molecule_ids=_CONST_ID,
         revision=head,
     )
-    lock_path = consumer / ".haex-hive" / "install.lock"
+    lock_path = consumer / ".spaex" / "install.lock"
     installed_lock = InstallLock.from_json(lock_path.read_bytes())
     published_paths = tuple(installed_lock.molecules[0].paths)
     for rel in published_paths:
@@ -44,7 +44,7 @@ def test_orphan_paths_are_deleted_after_remove(
         consumer, state_root, monkeypatch, molecule_ids=_CONST_ID
     )
     assert rc == 0
-    written = json.loads((consumer / ".haex-hive.json").read_text())
+    written = json.loads((consumer / ".spaex.json").read_text())
     assert written["compounds"] == []
     for rel in published_paths:
         assert not (consumer / rel).exists(), (
@@ -89,7 +89,7 @@ def test_survivor_files_untouched_when_one_of_many_retracted(
         all=True,
     )
     lock_before = InstallLock.from_json(
-        (consumer / ".haex-hive" / "install.lock").read_bytes()
+        (consumer / ".spaex" / "install.lock").read_bytes()
     )
     const_paths = tuple(
         m.paths for m in lock_before.molecules if m.id == _CONST_ID
@@ -99,7 +99,7 @@ def test_survivor_files_untouched_when_one_of_many_retracted(
     # Seed a recorded path for the non-constitution molecule to model a
     # previously installed contribution. Current v3 resolution filters that
     # category, but removal must still discard every path in the prior lock.
-    lock_data = json.loads((consumer / ".haex-hive" / "install.lock").read_text())
+    lock_data = json.loads((consumer / ".spaex" / "install.lock").read_text())
     retracted_path = ".codex/retracted-skill.md"
     lock_data["molecules"].append(
         {
@@ -109,11 +109,11 @@ def test_survivor_files_untouched_when_one_of_many_retracted(
             "paths": [retracted_path],
         }
     )
-    (consumer / ".haex-hive" / "install.lock").write_text(json.dumps(lock_data))
+    (consumer / ".spaex" / "install.lock").write_text(json.dumps(lock_data))
     (consumer / retracted_path).parent.mkdir(parents=True, exist_ok=True)
     (consumer / retracted_path).write_text("# previously installed skill\n")
     lock_before = InstallLock.from_json(
-        (consumer / ".haex-hive" / "install.lock").read_bytes()
+        (consumer / ".spaex" / "install.lock").read_bytes()
     )
     retracted_entries = tuple(m for m in lock_before.molecules if m.id == _SKILL_ID)
     assert retracted_entries and retracted_entries[0].paths == (retracted_path,)
@@ -124,7 +124,7 @@ def test_survivor_files_untouched_when_one_of_many_retracted(
     assert rc == 0
 
     lock_after = InstallLock.from_json(
-        (consumer / ".haex-hive" / "install.lock").read_bytes()
+        (consumer / ".spaex" / "install.lock").read_bytes()
     )
     surviving_ids = {m.id for m in lock_after.molecules}
     assert _CONST_ID in surviving_ids

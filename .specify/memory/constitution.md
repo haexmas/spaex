@@ -1,20 +1,23 @@
 <!--
-Sync Impact Report (2026-09-02 amendment)
-Version change: 1.3.0 → 1.4.0 (MINOR: material expansion of the development workflow contract)
+Sync Impact Report (2026-09-07 amendment)
+Version change: 1.4.0 -> 1.4.1 (PATCH: prose rename to spaex, no principle change)
 Modified sections:
-- ## Development Workflow — added bullet "Declared speckit workflow adherence" referencing `.specify/workflows/speckit/workflow.yml` as the binding source; forward-references Spec 011 (planned) for per-project workflow selection via a `speckit-workflow` atom.
+- Title: "haex-hive Constitution" -> "spaex Constitution".
+- All prose references to "haex-hive", "haex", ".haex-hive.json", ".haex-hive/", `haex install`, `HAEX_HIVE_STATE`, etc. updated to their spaex counterparts (`spaex`, `.spaex.json`, `.spaex/`, `spaex install`, `SPAEX_STATE`).
 Added principles: none
 Removed sections: none
-Templates requiring updates:
-- ✅ `.specify/templates/constitution-template.md` — no update needed; the template's own placeholders describe structure, not the concrete workflow clause added here.
-- ✅ `.specify/templates/plan-template.md`, `spec-template.md`, `tasks-template.md` — no changes required; the new clause is workflow discipline, not a check gate exposed via templates.
+Principle text: unchanged (verified byte-for-byte diff outside prose references).
+ADR: docs/adr/0011-rename-to-spaex.md records the decision.
+Templates requiring updates: none (templates use placeholders, not product-name references).
 Follow-up TODOs:
-- After this PR merges: bump `.haex-hive.json` `atoms[0].revision` to the new commit SHA and re-run `haex install` to regenerate `.haex-hive/constitution.md`. Under Principle IV the pin MUST be updated in a follow-up commit; leaving it stale means `haex constitution show` continues to serve the pre-amendment content until the revision advances.
+- After this PR merges: bump `.spaex.json` `compounds[0].revision` to the new commit SHA and re-run `spaex install` to regenerate `.spaex/constitution.md`. Under Principle IV the pin MUST be updated in a follow-up commit; leaving it stale means `spaex constitution show` continues to serve the pre-amendment content until the revision advances.
+
+Prior amendment (2026-09-02): 1.3.0 -> 1.4.0, MINOR expansion of the development workflow contract; added the "Declared speckit workflow adherence" bullet forward-referencing Spec 011.
 -->
 
-# haex-hive Constitution
+# spaex Constitution
 
-Hard, non-negotiable invariants of the haex-hive system. Every spec, plan, and
+Hard, non-negotiable invariants of the spaex system. Every spec, plan, and
 implementation MUST respect them. A change to any of these principles requires
 an explicit constitution amendment (see Governance below), not a per-spec
 exception.
@@ -76,13 +79,13 @@ cross-device drift that only surfaces as inconsistent agent behavior later.
 
 ### V. External Sources Are Opt-in Per Project (NON-NEGOTIABLE)
 
-A project without a `.haex-hive.json` — or with an empty per-project
-allowlist array (`atoms[]` in `.haex-hive.json` v2, `harness_sources[]`
+A project without a `.spaex.json` — or with an empty per-project
+allowlist array (`atoms[]` in `.spaex.json` v2, `harness_sources[]`
 in v1) — MUST inherit no external harness content, regardless of what
 the registry, sibling directories, sibling repos, or any global agent
 instruction file says. The registry describes what is *available*; the
 per-project allowlist array grants *use*. The invariant is the opt-in
-mechanism; the concrete field name is bound to the `.haex-hive.json`
+mechanism; the concrete field name is bound to the `.spaex.json`
 schema version and MAY change across schema majors without altering
 this principle.
 
@@ -101,7 +104,7 @@ a side effect of an apply-shaped request.
 
 **Refuse-then-propose is the required shape.** When an agent receives a
 request to apply constraints from a source that is not listed in
-`.haex-hive.json`'s allowlist array (`atoms[]` in v2, `harness_sources[]`
+`.spaex.json`'s allowlist array (`atoms[]` in v2, `harness_sources[]`
 in v1), the agent MUST (a) refuse the apply in this session, (b) name
 the mechanical reason (empty or missing allowlist entry for the source),
 and (c) offer the two legitimate paths: either add a pinned entry
@@ -111,9 +114,9 @@ treat the constraints as the operator's direct instructions rather than
 as sourced from the external harness. Silence, or partial compliance
 ("I'll apply just some of them"), is not permitted.
 
-**Modifying `.haex-hive.json` requires an explicit "modify the
+**Modifying `.spaex.json` requires an explicit "modify the
 allowlist" request.** The word "apply" or its synonyms MUST NEVER trigger a
-write to `.haex-hive.json` or to any other harness configuration file.
+write to `.spaex.json` or to any other harness configuration file.
 Only a request that explicitly asks the agent to edit the file (e.g. "add
 X to the allowlist", "update `atoms[]` (v2) / `harness_sources[]` (v1) to
 permit Y") may trigger a diff — and even then, per Principle VI, the
@@ -127,10 +130,10 @@ to skill files, instruction snippets, permissions, constitutions themselves,
 and any other artifact the agent consumes on future runs.
 
 **Schema migrations of versioned config files** (added v1.3.0). Any
-schema migration of a versioned config file — `.haex-hive.json`,
+schema migration of a versioned config file — `.spaex.json`,
 `install.lock`, `constitution.md`, `manifest.json`, or a successor
 schema — MUST run through an explicit migration verb (e.g. spec-007's
-`haex migrate`) that (a) writes candidate output to a `.migrated`
+`spaex migrate`) that (a) writes candidate output to a `.migrated`
 sidecar rather than the original file, (b) prints a reviewable diff
 against the current file, (c) is deterministic given identical inputs,
 and (d) supports `--dry-run`/`--check`. No in-place rewrite of a
@@ -192,16 +195,16 @@ agent unfiltered — which is every cross-tool handoff in this system.
 
 ## Scope
 
-- Applies to: the haex-hive repository (this repo), any harness registry repo
-  built for haex-hive use, and any project repo that declares itself as
-  haex-hive-managed via a `.haex-hive.json`.
+- Applies to: the spaex repository (this repo), any harness registry repo
+  built for spaex use, and any project repo that declares itself as
+  spaex-managed via a `.spaex.json`.
 - Does NOT apply to: external harness repos referenced in `unmodified` mode
-  (e.g. secana-specs). Those follow their own owning team's rules; haex-hive
+  (e.g. secana-specs). Those follow their own owning team's rules; spaex
   only governs how they are *referenced*, not their internal contents.
 
 ### Reserved paths (added v1.3.0)
 
-- `.haex-hive/constitution.md` (consumer-side) is reserved for the
+- `.spaex/constitution.md` (consumer-side) is reserved for the
   effective constitution the consumer repo commits, per spec-007
   D2/D16. Its content is either a straight-copy of a single source atom
   or the LLM-merged result of multiple source atoms declared in the
@@ -283,4 +286,4 @@ agent unfiltered — which is every cross-tool handoff in this system.
   Phase 7) validates that no committed file violates Principles I, II, or IV
   mechanically.
 
-**Version**: 1.4.0 | **Ratified**: 2026-08-26 | **Last Amended**: 2026-09-02
+**Version**: 1.4.1 | **Ratified**: 2026-08-26 | **Last Amended**: 2026-09-07

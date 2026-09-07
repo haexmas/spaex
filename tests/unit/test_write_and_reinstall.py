@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from haex_hive.install.manifest_lock import ManifestLockContext
-from haex_hive.install.write_and_reinstall import write_and_reinstall
-from haex_hive.io import atomic
-from haex_hive.util.errors import (
+from spaex.install.manifest_lock import ManifestLockContext
+from spaex.install.write_and_reinstall import write_and_reinstall
+from spaex.io import atomic
+from spaex.util.errors import (
     HaexError,
     InstallTransactionFailedError,
     ManifestRollbackFailedError,
@@ -19,7 +19,7 @@ from haex_hive.util.errors import (
 
 def _held_lock(tmp_path: Path) -> ManifestLockContext:
     lock = ManifestLockContext(
-        tmp_path / ".haex-hive.json.lock", timeout_seconds=1.0
+        tmp_path / ".spaex.json.lock", timeout_seconds=1.0
     )
     lock.__enter__()
     return lock
@@ -28,9 +28,9 @@ def _held_lock(tmp_path: Path) -> ManifestLockContext:
 def test_atomic_write_via_tmp_and_rename(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from haex_hive.cli import install as install_cli
+    from spaex.cli import install as install_cli
 
-    manifest = tmp_path / ".haex-hive.json"
+    manifest = tmp_path / ".spaex.json"
     manifest.write_bytes(b'{"old": true}\n')
 
     calls: list[str] = []
@@ -50,15 +50,15 @@ def test_atomic_write_via_tmp_and_rename(
     assert rc == 0
     assert calls == [str(tmp_path)]
     assert manifest.read_bytes() == b'{"new": true}\n'
-    assert not (tmp_path / ".haex-hive.json.tmp").exists()
+    assert not (tmp_path / ".spaex.json.tmp").exists()
 
 
 def test_install_failure_rolls_back_manifest_bytes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from haex_hive.cli import install as install_cli
+    from spaex.cli import install as install_cli
 
-    manifest = tmp_path / ".haex-hive.json"
+    manifest = tmp_path / ".spaex.json"
     manifest.write_bytes(b'{"original": true}\n')
 
     def failing_install(args, *, held_manifest_lock=None):
@@ -80,9 +80,9 @@ def test_install_failure_rolls_back_manifest_bytes(
 def test_install_failure_deletes_manifest_when_no_previous(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from haex_hive.cli import install as install_cli
+    from spaex.cli import install as install_cli
 
-    manifest = tmp_path / ".haex-hive.json"
+    manifest = tmp_path / ".spaex.json"
     assert not manifest.exists()
 
     def failing_install(args, *, held_manifest_lock=None):
@@ -107,9 +107,9 @@ def test_install_failure_deletes_manifest_when_no_previous(
 def test_initial_manifest_write_failure_is_rolled_back(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from haex_hive.cli import install as install_cli
+    from spaex.cli import install as install_cli
 
-    manifest = tmp_path / ".haex-hive.json"
+    manifest = tmp_path / ".spaex.json"
     original_bytes = b'{"original": true}\n'
     manifest.write_bytes(original_bytes)
 
@@ -143,9 +143,9 @@ def test_initial_manifest_write_failure_is_rolled_back(
 def test_rollback_failure_surfaces_recovery_path_with_lock_held(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from haex_hive.cli import install as install_cli
+    from spaex.cli import install as install_cli
 
-    manifest = tmp_path / ".haex-hive.json"
+    manifest = tmp_path / ".spaex.json"
     manifest.write_bytes(b'{"original": true}\n')
 
     def failing_install(args, *, held_manifest_lock=None):
@@ -179,9 +179,9 @@ def test_rollback_failure_surfaces_recovery_path_with_lock_held(
 def test_non_haex_install_failure_is_rolled_back_and_reraised(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from haex_hive.cli import install as install_cli
+    from spaex.cli import install as install_cli
 
-    manifest = tmp_path / ".haex-hive.json"
+    manifest = tmp_path / ".spaex.json"
     manifest.write_bytes(b'{"original": true}\n')
 
     def failing_install(args, *, held_manifest_lock=None):
@@ -202,9 +202,9 @@ def test_non_haex_install_failure_is_rolled_back_and_reraised(
 def test_install_receives_held_lock(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from haex_hive.cli import install as install_cli
+    from spaex.cli import install as install_cli
 
-    manifest = tmp_path / ".haex-hive.json"
+    manifest = tmp_path / ".spaex.json"
     manifest.write_bytes(b'{}\n')
 
     captured: dict[str, ManifestLockContext | None] = {"lock": None}

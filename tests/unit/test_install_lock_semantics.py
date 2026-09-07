@@ -6,11 +6,11 @@ import json
 
 import pytest
 
-from haex_hive.model.install_lock import InstallLock
-from haex_hive.util.errors import CredentialInUrlError, InstallLockSchemaInvalidError
+from spaex.model.install_lock import InstallLock
+from spaex.util.errors import CredentialInUrlError, InstallLockSchemaInvalidError
 
 _BASE = {
-    "haex_hive_version": "3",
+    "spaex_version": "4",
     "generation_id": "g_20260831T142011Z_a4c2",
     "molecules": [],
 }
@@ -28,7 +28,7 @@ def _molecule(molecule_id: str, *, paths: list[str] | None = None) -> dict:
         "id": molecule_id,
         "revision": "0" * 40,
         "source": "https://github.com/a/b",
-        "paths": paths if paths is not None else [".haex-hive/constitution.md"],
+        "paths": paths if paths is not None else [".spaex/constitution.md"],
     }
 
 
@@ -52,7 +52,7 @@ def test_rejects_credentials_in_molecule_source() -> None:
             "id": "com.a.b",
             "revision": "0" * 40,
             "source": "https://user:pass@example.com/publisher",
-            "paths": [".haex-hive/constitution.md"],
+            "paths": [".spaex/constitution.md"],
         }
     ]
     with pytest.raises(CredentialInUrlError):
@@ -90,7 +90,7 @@ def test_allows_empty_paths() -> None:
         ("generated_by", "haex 3.0.0"),
         ("constitution", {"sources": [], "assembled_by": {}}),
         ("atoms", []),
-        ("participating_roots", [".haex-hive/"]),
+        ("participating_roots", [".spaex/"]),
         ("generation_inputs", []),
         ("visibility_marker", {"generation_id": "g_20260831T142011Z_a4c2"}),
     ],

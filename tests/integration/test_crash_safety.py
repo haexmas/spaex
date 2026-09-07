@@ -6,7 +6,7 @@ and either reinstalls from scratch (pre-rename-B crash) or takes the
 idempotent no-op path (post-rename-B crash) — the 2026-09-02 detect+retry
 model that replaced the earlier 8-state recovery-forward dispatcher.
 
-Uses the `HAEX_HIVE_CRASH_AFTER` test seam in `haex_hive.io.transaction` to
+Uses the `SPAEX_CRASH_AFTER` test seam in `spaex.io.transaction` to
 terminate the child process (SIGKILL on POSIX, TerminateProcess-equivalent on
 Windows) at each rename-swap boundary rather than racing an external timer
 against the write.
@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from haex_hive.io import json_deterministic
+from spaex.io import json_deterministic
 
 pytestmark = [
     pytest.mark.slow,
@@ -44,16 +44,16 @@ def _run(
     consumer: Path, state_root: Path, *, crash_after: str | None = None
 ) -> subprocess.CompletedProcess:
     env = os.environ.copy()
-    env["HAEX_HIVE_STATE"] = str(state_root)
+    env["SPAEX_STATE"] = str(state_root)
     if crash_after is not None:
-        env["HAEX_HIVE_CRASH_AFTER"] = crash_after
+        env["SPAEX_CRASH_AFTER"] = crash_after
     else:
-        env.pop("HAEX_HIVE_CRASH_AFTER", None)
+        env.pop("SPAEX_CRASH_AFTER", None)
     return subprocess.run(
         [
             sys.executable,
             "-m",
-            "haex_hive",
+            "spaex",
             "--repo-root",
             str(consumer),
             "install",
@@ -80,15 +80,15 @@ def test_crash_at_boundary_converges_on_retry(
         assert clean.returncode == 0, clean.stderr.decode()
         # Make the next install publish a generation instead of taking the
         # single-source idempotence fast path.
-        constitution_path = consumer / ".haex-hive" / "constitution.md"
+        constitution_path = consumer / ".spaex" / "constitution.md"
         constitution_path.write_bytes(constitution_path.read_bytes() + b"\n")
 
     crashed = _run(consumer, state_root, crash_after=crash_point)
     assert crashed.returncode != 0, "the child process must not exit cleanly when killed"
 
-    live = consumer / ".haex-hive"
-    next_dir = consumer / ".haex-hive.next"
-    prev_dir = consumer / ".haex-hive.prev"
+    live = consumer / ".spaex"
+    next_dir = consumer / ".spaex.next"
+    prev_dir = consumer / ".spaex.prev"
     if crash_point == "pre_swap":
         assert live.exists() is preexisting
         assert next_dir.exists()
@@ -107,7 +107,7 @@ def test_crash_at_boundary_converges_on_retry(
 
     if crash_point == "rename_a" and preexisting:
         previous_generation = (prev_dir / "constitution.md").read_bytes()
-        manifest_path = consumer / ".haex-hive.json"
+        manifest_path = consumer / ".spaex.json"
         manifest_bytes = manifest_path.read_bytes()
         manifest = json.loads(manifest_bytes)
         manifest["compounds"][0]["revision"] = "deadbeef" * 5
@@ -128,12 +128,12 @@ def test_crash_at_boundary_converges_on_retry(
     assert not next_dir.exists()
     assert not prev_dir.exists()
 
-    constitution = (consumer / ".haex-hive" / "constitution.md").read_bytes()
-    lock_data_1 = json.loads((consumer / ".haex-hive" / "install.lock").read_bytes())
+    constitution = (consumer / ".spaex" / "constitution.md").read_bytes()
+    lock_data_1 = json.loads((consumer / ".spaex" / "install.lock").read_bytes())
     again = _run(consumer, state_root)
     assert again.returncode == 0, again.stderr.decode()
-    assert (consumer / ".haex-hive" / "constitution.md").read_bytes() == constitution
-    lock_data_2 = json.loads((consumer / ".haex-hive" / "install.lock").read_bytes())
+    assert (consumer / ".spaex" / "constitution.md").read_bytes() == constitution
+    lock_data_2 = json.loads((consumer / ".spaex" / "install.lock").read_bytes())
     assert lock_data_1["generation_id"] == lock_data_2["generation_id"]
     lock_data_1["generation_id"] = None
     lock_data_2["generation_id"] = None
@@ -149,20 +149,20 @@ def test_rename_a_crash_restores_previous_before_retry_resolution(
 
     initial = _run(consumer, state_root)
     assert initial.returncode == 0, initial.stderr.decode()
-    constitution_path = consumer / ".haex-hive" / "constitution.md"
+    constitution_path = consumer / ".spaex" / "constitution.md"
     constitution_path.write_bytes(constitution_path.read_bytes() + b"\n")
 
     crashed = _run(consumer, state_root, crash_after="rename_a")
     assert crashed.returncode != 0
 
-    live = consumer / ".haex-hive"
-    next_dir = consumer / ".haex-hive.next"
-    prev_dir = consumer / ".haex-hive.prev"
+    live = consumer / ".spaex"
+    next_dir = consumer / ".spaex.next"
+    prev_dir = consumer / ".spaex.prev"
     prior_lock = json.loads((prev_dir / "install.lock").read_bytes())
     candidate_lock = json.loads((next_dir / "install.lock").read_bytes())
     assert prior_lock["generation_id"] != candidate_lock["generation_id"]
 
-    manifest_path = consumer / ".haex-hive.json"
+    manifest_path = consumer / ".spaex.json"
     manifest_bytes = manifest_path.read_bytes()
     manifest = json.loads(manifest_bytes)
     manifest["compounds"][0]["revision"] = "deadbeef" * 5

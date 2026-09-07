@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from haex_hive.migrate.v2_to_v3 import (
+from spaex.migrate.v2_to_v3 import (
     DirectoryFormContributesUnsupportedError,
     v2_to_v3,
 )

@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from haex_hive.migrate.transform import clone_dir
+from spaex.migrate.transform import clone_dir
 
 pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git binary required")
 
@@ -25,12 +25,12 @@ pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git binary 
 def _run_install(repo_root: Path, state_root: Path) -> subprocess.CompletedProcess:
     """Run `haex install` against a fixture repository."""
     env = os.environ.copy()
-    env["HAEX_HIVE_STATE"] = str(state_root)
+    env["SPAEX_STATE"] = str(state_root)
     return subprocess.run(
         [
             sys.executable,
             "-m",
-            "haex_hive",
+            "spaex",
             "--repo-root",
             str(repo_root),
             "install",
@@ -52,7 +52,7 @@ def test_second_install_is_a_no_op(
     assert first.returncode == 0, first.stderr
     assert first.stdout.startswith("installed generation g_")
 
-    live = consumer / ".haex-hive"
+    live = consumer / ".spaex"
     constitution_bytes = (live / "constitution.md").read_bytes()
     lock_bytes = (live / "install.lock").read_bytes()
     stat_before = {
@@ -91,7 +91,7 @@ def test_changed_source_url_republishes_lock(
     new_clone = clone_dir(state_root, new_source)
     shutil.copytree(old_clone, new_clone)
 
-    manifest_path = consumer / ".haex-hive.json"
+    manifest_path = consumer / ".spaex.json"
     manifest = json.loads(manifest_path.read_text())
     manifest["compounds"][0]["source"] = new_source
     manifest_path.write_text(json.dumps(manifest, indent=2))
@@ -102,5 +102,5 @@ def test_changed_source_url_republishes_lock(
     second_generation_id = second.stdout.strip().removeprefix("installed generation ")
     assert second_generation_id != first_generation_id
 
-    lock = json.loads((consumer / ".haex-hive" / "install.lock").read_text())
+    lock = json.loads((consumer / ".spaex" / "install.lock").read_text())
     assert lock["molecules"][0]["source"] == new_source
