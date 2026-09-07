@@ -117,12 +117,12 @@ Single-project layout (unchanged from Spec 013). `src/haex_hive/` renames to `sr
 
 ### Tests for User Story 1
 
-- [ ] T040 [P] [US1] Contract test in `tests/contract/test_consumer_manifest_v4.py`: valid v4 shape passes; `spaex_version: "3"` fails; unknown top-level property fails; duplicate molecule id within one compound's `molecules[]` fails.
-- [ ] T041 [P] [US1] Contract test in `tests/contract/test_molecule_manifest_v4.py`: `atoms{category: [paths]}` shape passes; empty category array fails; cross-category path overlap fails (via runtime check); missing `priority` fails.
-- [ ] T042 [P] [US1] Contract test in `tests/contract/test_publisher_manifest_v4.py`: `molecules{}` map passes; missing `spaex_version` fails; legacy `haex_hive_version` key fails.
-- [ ] T043 [P] [US1] Contract test in `tests/contract/test_install_lock_v4.py`: `molecules[]` array passes with `moleculeEntry` items; unknown root property fails; retired top-level fields (`generated_by`, `constitution`, `participating_roots`, `generation_inputs`) rejected.
-- [ ] T044 [P] [US1] Integration test in `tests/install/integration/test_install_lock_byte_identical_v4.py`: `spaex install` on a fixture repo twice; assert byte-identical `.spaex/install.lock` output.
-- [ ] T045 [P] [US1] Integration test in `tests/install/integration/test_install_refuses_v3_after_rename.py`: v3 `.haex-hive.json` or `manifest.json` refuses with `spaex-version-unsupported` diagnostic naming `spaex migrate`.
+- [x] T040 [P] [US1] Contract test in `tests/contract/test_consumer_manifest_v4.py`: valid v4 shape passes; `spaex_version: "3"` fails; unknown top-level property fails; duplicate molecule id within one compound's `molecules[]` fails.
+- [x] T041 [P] [US1] Contract test in `tests/contract/test_molecule_manifest_v4.py`: `atoms{category: [paths]}` shape passes; empty category array fails; cross-category path overlap fails (via runtime check); missing `priority` fails.
+- [x] T042 [P] [US1] Contract test in `tests/contract/test_publisher_manifest_v4.py`: `molecules{}` map passes; missing `spaex_version` fails; legacy `haex_hive_version` key fails.
+- [x] T043 [P] [US1] Contract test in `tests/contract/test_install_lock_v4.py`: `molecules[]` array passes with `moleculeEntry` items; unknown root property fails; retired top-level fields (`generated_by`, `constitution`, `participating_roots`, `generation_inputs`) rejected.
+- [x] T044 [P] [US1] Integration test in `tests/install/integration/test_install_lock_byte_identical_v4.py`: `spaex install` on a fixture repo twice; assert byte-identical `.spaex/install.lock` output.
+- [x] T045 [P] [US1] Integration test in `tests/install/integration/test_install_refuses_v3_after_rename.py`: v3 `.haex-hive.json` or `manifest.json` refuses with `spaex-version-unsupported` diagnostic naming `spaex migrate`.
 
 ### Implementation for User Story 1 (self-adoption)
 
@@ -167,13 +167,13 @@ Single-project layout (unchanged from Spec 013). `src/haex_hive/` renames to `sr
 
 **Purpose**: Verify success criteria, sweep memory files, walk the quickstart end to end.
 
-- [ ] T070 [P] Grep sweep: `rg 'haex[_-]hive' src/ tests/ pyproject.toml README.md .github/` and `rg '\bhaex\b' src/ tests/ pyproject.toml README.md .github/` MUST return zero for non-legacy surfaces. The README migration section, migration/legacy-detection code, v4 schema descriptions, and legacy fixtures (including the retired `tests/haex-init/` suite) are intentional compatibility references and must be excluded from the zero-match check; historical references in `docs/adr/`, `docs/plans/`, `specs/` are also documented as exempt in [spec.md](spec.md) SC-006 and remain untouched.
-- [ ] T071 [P] Memory-file sweep: rename `~/.claude/projects/-home-haex-Projekte-haex-hive/memory/haex_hive_*.md` files to `spaex_*.md`; update `MEMORY.md` index entries; update memory-file content that references `haex-hive` to `spaex`. Directory path itself (`-home-haex-Projekte-haex-hive`) is a Claude Code implementation detail keyed by the working directory; unchanged.
+- [x] T070 [P] Grep sweep: `rg 'haex[_-]hive' src/ tests/ pyproject.toml README.md .github/` and `rg '\bhaex\b' src/ tests/ pyproject.toml README.md .github/` MUST return zero for non-legacy surfaces. The README migration section, migration/legacy-detection code, v4 schema descriptions, and legacy fixtures (including the retired `tests/haex-init/` suite) are intentional compatibility references and must be excluded from the zero-match check; historical references in `docs/adr/`, `docs/plans/`, `specs/` are also documented as exempt in [spec.md](spec.md) SC-006 and remain untouched.
+- [x] T071 [P] Memory-file sweep: rename `~/.claude/projects/-home-haex-Projekte-haex-hive/memory/haex_hive_*.md` files to `spaex_*.md`; update `MEMORY.md` index entries; update memory-file content that references `haex-hive` to `spaex`. Directory path itself (`-home-haex-Projekte-haex-hive`) is a Claude Code implementation detail keyed by the working directory; unchanged.
 - [X] T072 Walk [quickstart.md](quickstart.md) end to end against a scratch project on a fresh machine (or a container). Every command works as documented. Every refusal-key row in the table is reachable via the documented failure mode. Any wording drift is fixed in the same task.
 - [X] T073 [P] Confirm [SC-001](spec.md) through SC-010 are all satisfied. If any fails, open a follow-up task in this file (do not silently pass).
 - [X] T074 GitHub-repo rename: through the GitHub UI, rename `haexmas/haex-hive` → `haexmas/spaex`. GitHub configures the redirect automatically. Update the repo description to reference the current identity.
 - [X] T075 Merge the feature branch. Per Clarification 2026-09-07 Q1, land as **five PRs** against `main` (see the PR-vs-tasks-phase mapping above). Delete the feature branch after landing.
-- [ ] T076 **RUN AFTER SESSION CLOSE**: Rename the local repository directory: `mv /home/haex/Projekte/haex-hive /home/haex/Projekte/spaex`. Also copy the Claude Code memory directory: `cp -r ~/.claude/projects/-home-haex-Projekte-haex-hive ~/.claude/projects/-home-haex-Projekte-spaex`. Then open a new shell in the new path. Do NOT run this task while any shell, IDE, Claude Code session, or file watcher has the old directory as its cwd; renaming the cwd out from under a running process breaks it. Per Clarification 2026-09-07 Q2.
+- [x] T076 **RUN AFTER SESSION CLOSE**: Rename the local repository directory: `mv /home/haex/Projekte/haex-hive /home/haex/Projekte/spaex`. Also copy the Claude Code memory directory: `cp -r ~/.claude/projects/-home-haex-Projekte-haex-hive ~/.claude/projects/-home-haex-Projekte-spaex`. Then open a new shell in the new path. Do NOT run this task while any shell, IDE, Claude Code session, or file watcher has the old directory as its cwd; renaming the cwd out from under a running process breaks it. Per Clarification 2026-09-07 Q2.
 
 ---
 
