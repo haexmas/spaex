@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/haexmas/spaex/schemas/install-lock.v4.schema.json",
+  "title": "spaex Install Lockfile v4 (npm/pip-shape simplification)",
+  "description": "Schema for `.spaex/install.lock`. Structurally identical to the v3 npm/pip-shape (Spec 008 2026-09-03 amendment); only the version-field name (`haex_hive_version` -> `spaex_version`) and value (`3` -> `4`) change. Legacy generated_by, constitution, atoms, contributed_paths, generation_inputs, participating_roots, and visibility_marker fields remain rejected by the schema/migration gate.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["spaex_version", "generation_id", "molecules"],
+  "properties": {
+    "spaex_version": { "const": "4" },
+    "generation_id": {
+      "type": "string",
+      "pattern": "^g_[0-9]{8}T[0-9]{6}Z_[0-9a-f]{4}$",
+      "description": "This generation's identifier. install.lock is the sole publication record; there is no separate visibility.json file."
+    },
+    "molecules": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/moleculeEntry" },
+      "$comment": "The post-schema semantic validator requires lexicographic (id, source, revision, paths) ordering. JSON Schema cannot compare properties across array items. uniqueItems rejects duplicate full tuples.",
+      "description": "One entry per resolved molecule, canonically ordered by (id, source, revision, paths). Constitution provenance, participating roots, and tool/adapter identity are all derivable from this array rather than tracked separately."
+    }
+  },
+  "$defs": {
+    "moleculeEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "source", "revision", "paths"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$",
+          "description": "Reverse-DNS molecule ID."
+        },
+        "source": {
+          "type": "string",
+          "format": "uri",
+          "description": "Credential-free canonical publisher repository URL."
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "description": "Immutable full commit SHA per Constitution Principle IV."
+        },
+        "paths": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^(?!.*(?:^|/)\\.\\.?/)(?!.*\\\\)\\.[A-Za-z0-9._-]+/[^\\u0000-\\u001F\\u007F\\\\]+$"
+          },
+          "description": "Unique, deterministically ordered POSIX paths relative to the consumer repository root that this molecule wrote. Every path implicitly names its participating root (its leading dot-segment); there is no separate participating_roots list."
+        }
+      }
+    }
+  }
+}

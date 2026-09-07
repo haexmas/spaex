@@ -6,9 +6,9 @@
 
 ## Content Quality
 
-- [ ] No implementation details (languages, frameworks, APIs) — **fails by design**, see Notes
+- [ ] No implementation details (languages, frameworks, APIs): **fails by design**, see Notes
 - [X] Focused on user value and business needs
-- [ ] Written for non-technical stakeholders — **partial**, US1/US2/US3 are approachable but FR block is technical
+- [ ] Written for non-technical stakeholders: **partial**, US1/US2/US3 are approachable but FR block is technical
 - [X] All mandatory sections completed
 
 ## Requirement Completeness
