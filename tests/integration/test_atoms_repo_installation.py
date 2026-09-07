@@ -1,20 +1,20 @@
 """T091 — end-to-end: adopt an atoms-repo molecule and install it (SC-001).
 
 Closes SC-001: a molecule published by the ``haexmas/atoms`` repository
-installs into a v3-adopted consumer through a single `haex add` call
-(which delegates to `haex install`), with the molecule's contributed
+installs into a v3-adopted consumer through a single `spaex add` call
+(which delegates to `spaex install`), with the molecule's contributed
 files landing under `.spaex/`.
 
 Hermetic by design: the fixture stages a bare git clone at the exact
 ``$SPAEX_STATE/repos/<sha256(url)[:16]>/`` path the tool would use
 for the real ``https://github.com/haexmas/atoms`` URL. This lets
-`haex add` resolve the SHA against the local clone instead of the
+`spaex add` resolve the SHA against the local clone instead of the
 network, so the test does not depend on GitHub availability.
 
 The real atoms repo at HEAD ``ff6fda21…`` today declares a v2
 publisher-root ``manifest.json`` (with `atoms:` instead of `molecules:`)
 even though the ``graphify-first-authoring`` molecule itself is v3.
-A network `haex add` against the real remote would therefore refuse
+A network `spaex add` against the real remote would therefore refuse
 with `publisher-manifest-invalid` at the publisher gate; migrating the
 publisher-root manifest to v3 is a follow-up on the atoms repo itself.
 """
@@ -59,7 +59,7 @@ def test_add_graphify_from_atoms_repo_installs_end_to_end(
     monkeypatch: pytest.MonkeyPatch,
     haex_add_helpers,
 ) -> None:
-    """One `haex add` on the atoms repo lands the graphify constitution."""
+    """One `spaex add` on the atoms repo lands the graphify constitution."""
     consumer = haex_add_helpers["make_consumer"](tmp_path)
 
     rc = haex_add_helpers["run_add"](
@@ -109,7 +109,7 @@ def test_second_add_invocation_is_idempotent(
     monkeypatch: pytest.MonkeyPatch,
     haex_add_helpers,
 ) -> None:
-    """A repeat `haex add` at the same SHA is a no-op end to end."""
+    """A repeat `spaex add` at the same SHA is a no-op end to end."""
     consumer = haex_add_helpers["make_consumer"](tmp_path)
 
     first_rc = haex_add_helpers["run_add"](

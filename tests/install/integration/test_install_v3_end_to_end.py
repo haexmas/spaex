@@ -1,4 +1,4 @@
-"""T024 — `haex install` against a fully v3 consumer + publisher (Spec 013)."""
+"""T024 — `spaex install` against a fully v3 consumer + publisher (Spec 013)."""
 
 from __future__ import annotations
 
