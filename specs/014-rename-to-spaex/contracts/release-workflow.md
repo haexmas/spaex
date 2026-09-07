@@ -14,7 +14,7 @@ The maintainer registered these on 2026-09-07:
   - Repository: `haex-hive` until the GitHub-repo rename; update it to `spaex` before a post-rename release
   - Workflow filename: `release.yml`
   - Environment: `pypi`
-- GitHub **Environment** `pypi` in `haexmas/spaex` repo settings. Optionally with a required-reviewer gate for manual approval before publish.
+- GitHub **Environment** `pypi` in `haexmas/haex-hive` repo settings until the GitHub-repo rename; update it to `haexmas/spaex` afterward. Optionally with a required-reviewer gate for manual approval before publish.
 
 If any of these are missing at workflow-run time, the publish step fails with a PyPI OIDC error. No secret rotation needed; nothing to fix in the workflow itself.
 
@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
       - run: python -m pip install --upgrade pip build
       - name: verify tag matches package version
         run: |

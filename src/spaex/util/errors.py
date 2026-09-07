@@ -76,7 +76,7 @@ class InvalidHaexHiveManifestError(HaexError):
 class MigrationManifestInvalidError(HaexError):
     diagnostic_key: str = "migration-manifest-invalid"
     exit_code: int = exit_codes.INPUT_REFUSE
-    hint: str = "Fix the malformed v2 manifest and retry the migration."
+    hint: str = "Fix the malformed source manifest and retry the migration."
 
 
 @dataclass
