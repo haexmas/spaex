@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spaex"
-version = "4.0.0.dev0"
+version = "4.0.0"
 description = "spaex 4.0: reproducible coding harnesses for any repo. Compose skills, MCPs, constitutions, slash commands, and dev-environment files into a single project; add/remove/install/migrate/constitution show CLI."
 readme = "README.md"
 requires-python = ">=3.10"
