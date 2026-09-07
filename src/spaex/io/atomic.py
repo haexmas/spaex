@@ -68,11 +68,28 @@ def _write_replace_windows(target: Path, data: bytes) -> None:
         with os.fdopen(fd, "wb") as fh:
             fh.write(data)
             fh.flush()
-            handle = ctypes.windll.msvcrt._get_osfhandle(fh.fileno())  # type: ignore[attr-defined]
-            ctypes.windll.kernel32.FlushFileBuffers(wintypes.HANDLE(handle))
+            get_osfhandle = ctypes.windll.msvcrt._get_osfhandle  # type: ignore[attr-defined]
+            get_osfhandle.argtypes = [ctypes.c_int]
+            get_osfhandle.restype = ctypes.c_ssize_t
+            handle = get_osfhandle(fh.fileno())
+            if handle == -1:
+                raise ctypes.WinError()
+
+            flush_file_buffers = ctypes.windll.kernel32.FlushFileBuffers
+            flush_file_buffers.argtypes = [wintypes.HANDLE]
+            flush_file_buffers.restype = wintypes.BOOL
+            try:
+                native_handle = wintypes.HANDLE(handle)
+            except (OverflowError, TypeError, ValueError):
+                raise ctypes.WinError() from None
+            if not flush_file_buffers(native_handle):
+                raise ctypes.WinError()
         MOVEFILE_REPLACE_EXISTING = 0x1
         MOVEFILE_WRITE_THROUGH = 0x8
-        result = ctypes.windll.kernel32.MoveFileExW(
+        move_file_ex = ctypes.windll.kernel32.MoveFileExW
+        move_file_ex.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD]
+        move_file_ex.restype = wintypes.BOOL
+        result = move_file_ex(
             ctypes.c_wchar_p(str(tmp)),
             ctypes.c_wchar_p(str(target)),
             MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,

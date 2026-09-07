@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
+
 from spaex.migrate.v3_to_v4 import v3_to_v4
+from spaex.util.errors import MigrationManifestInvalidError
 
 
 def test_molecule_version_field_renamed() -> None:
@@ -62,3 +65,16 @@ def test_v4_molecule_input_returned_unchanged() -> None:
         "atoms": {"constitution": ["constitution.md"]},
     }
     assert v3_to_v4(v4) is v4
+
+
+def test_scalar_atom_path_is_rejected_instead_of_split_into_characters() -> None:
+    v3 = {
+        "haex_hive_version": "3",
+        "id": "com.example.publisher.hello",
+        "version": "1.0.0",
+        "priority": 100,
+        "atoms": {"constitution": "constitution.md"},
+    }
+
+    with pytest.raises(MigrationManifestInvalidError):
+        v3_to_v4(v3)

@@ -148,6 +148,12 @@ def _validate_molecule(data: dict[str, Any]) -> None:
             )
     if not isinstance(data.get("atoms"), dict):
         _invalid_manifest("molecule manifest atoms must be an object", field="atoms")
+    for category, paths in data["atoms"].items():
+        if not isinstance(paths, list) or not all(isinstance(path, str) for path in paths):
+            _invalid_manifest(
+                "molecule manifest atoms values must be arrays of strings",
+                field=f"atoms.{category}",
+            )
 
 
 def _v3_consumer_to_v4(data: dict[str, Any]) -> dict[str, Any]:

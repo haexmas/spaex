@@ -31,6 +31,7 @@ def test_accepts_valid(value: str) -> None:
         ".com.example",
         "_com.example",
         "com.example_underscore",
+        "com.example\n",
     ],
 )
 def test_rejects_invalid(value: str) -> None:

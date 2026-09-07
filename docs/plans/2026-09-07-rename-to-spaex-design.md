@@ -113,7 +113,20 @@ Canonical table used by every phase.
 
 ## Sequencing
 
-Six phases, six PRs against `main`, in strict linear order. No parallel work between phases to keep merge conflicts controllable. Memory `pr_strategy_stacked_phases` applies: every phase PR targets `main`, not the previous phase's branch.
+Six logical phases ship as five PRs against `main`, in strict linear order. No
+parallel work between shipping boundaries keeps merge conflicts controllable.
+Memory `pr_strategy_stacked_phases` applies: every PR targets `main`, not the
+previous phase's branch.
+
+The shipping order is:
+
+1. P1: schema payloads v4 (Phase 1).
+2. P3: the v3→v4 migration transform (Phase 3), which must land before the
+   v4-only loader and self-adoption.
+3. P2+P4: the foundational rename bundled with self-adoption and the docs
+   sweep (Phases 2, 4, and 5).
+4. P5: release workflow and first PyPI release (design Phase 6; task Phase 5).
+5. P6: polish, repository rename, and local-directory rename (task Phase 6).
 
 ### Phase 1: schema payloads v4 and version dispatch (dead code)
 
@@ -173,7 +186,8 @@ Six phases, six PRs against `main`, in strict linear order. No parallel work bet
 **PyPI Trusted Publishing** via GitHub Actions OIDC. Registered by the maintainer on 2026-09-07:
 - PyPI project: `spaex`
 - GitHub owner: `haexmas`
-- Repository: `spaex`
+- Repository: `haex-hive` until the P6 GitHub-repository rename; update the
+  Trusted Publisher entry to `spaex` before any post-rename release.
 - Workflow filename: `release.yml`
 - Environment: `pypi`
 
@@ -186,13 +200,27 @@ on:
     tags: ['v*']
 jobs:
   build:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
+    outputs:
+      stable: ${{ steps.release-version.outputs.stable }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
       - run: python -m pip install --upgrade pip build
+      - name: verify tag matches package version
+        id: release-version
+        run: |
+          package_version="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          test "$package_version" = "${GITHUB_REF_NAME#v}"
+          if [[ "$package_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "stable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "stable=false" >> "$GITHUB_OUTPUT"
+          fi
       - run: python -m build
       - uses: actions/upload-artifact@v4
         with:
@@ -200,6 +228,7 @@ jobs:
           path: dist/
   publish:
     needs: build
+    if: needs.build.outputs.stable == 'true'
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -251,8 +280,8 @@ pipx install spaex
 
 Development install:
 ```bash
-git clone https://github.com/haexmas/spaex.git
-cd spaex
+git clone https://github.com/haexmas/haex-hive.git
+cd haex-hive
 pip install -e '.[dev]'
 ```
 

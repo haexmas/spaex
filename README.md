@@ -31,8 +31,8 @@ pipx install spaex
 **From a local checkout (development):**
 
 ```bash
-git clone https://github.com/haexmas/spaex.git
-cd spaex
+git clone https://github.com/haexmas/haex-hive.git
+cd haex-hive
 pip install -e '.[dev]'
 ```
 

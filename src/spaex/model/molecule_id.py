@@ -28,7 +28,7 @@ class MoleculeId:
             raise ValueError("molecule-id is empty")
         if length > _MAX_LENGTH:
             raise ValueError(f"molecule-id is {length} chars; max {_MAX_LENGTH}")
-        if not _MOLECULE_ID_RE.match(value):
+        if not _MOLECULE_ID_RE.fullmatch(value):
             raise ValueError(f"molecule-id does not match reverse-DNS grammar: {value!r}")
         return value
 

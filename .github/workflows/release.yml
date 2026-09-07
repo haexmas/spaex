@@ -8,7 +8,11 @@ permissions: {}
 
 jobs:
   build:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
+    outputs:
+      stable: ${{ steps.release-version.outputs.stable }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -16,6 +20,29 @@ jobs:
           python-version: '3.10'
       - name: install build tooling
         run: python -m pip install --upgrade pip build
+      - name: verify release version
+        id: release-version
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          package_version="$(python - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          with Path("pyproject.toml").open("rb") as handle:
+              print(tomllib.load(handle)["project"]["version"])
+          PY
+          )"
+          tag_version="${REF_NAME#v}"
+          if [ "$package_version" != "$tag_version" ]; then
+            echo "package version $package_version does not match tag version $tag_version" >&2
+            exit 1
+          fi
+          if [[ "$package_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "stable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "stable=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: build sdist and wheel
         run: python -m build
       - name: upload dist artifact
@@ -26,6 +53,7 @@ jobs:
 
   publish:
     needs: build
+    if: needs.build.outputs.stable == 'true'
     runs-on: ubuntu-latest
     environment:
       name: pypi
