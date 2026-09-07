@@ -149,8 +149,8 @@ Single-project layout (unchanged from Spec 013). `src/haex_hive/` renames to `sr
 
 **Independent Test**: On a machine with `pipx` and Python 3.10+, run `pipx install spaex`. Confirm `spaex --version` reports `4.0.0`. Run `spaex --help`. In an empty directory, create a minimal `.spaex.json` and run `spaex install`. Confirm normal end-to-end behavior.
 
-- [ ] T060 [US3] Create [.github/workflows/release.yml](../../.github/workflows/release.yml) per [contracts/release-workflow.md](contracts/release-workflow.md). Include the `build` and `publish` jobs, the `pypi` environment reference, and `id-token: write` permission.
-- [ ] T061 [US3] Verify PyPI Trusted Publisher pending-publisher config is in place for project `spaex`, owner `haexmas`, repository `spaex`, workflow filename `release.yml`, environment `pypi`. (Maintainer confirmed 2026-09-07; T061 is a spot-check before tagging.)
+- [X] T060 [US3] Create [.github/workflows/release.yml](../../.github/workflows/release.yml) per [contracts/release-workflow.md](contracts/release-workflow.md). Include the `build` and `publish` jobs, the `pypi` environment reference, and `id-token: write` permission.
+- [X] T061 [US3] Verify PyPI Trusted Publisher pending-publisher config is in place for project `spaex`, owner `haexmas`, repository `spaex`, workflow filename `release.yml`, environment `pypi`. (Maintainer confirmed 2026-09-07; T061 is a spot-check before tagging.)
 - [ ] T062 [US3] On `main` (after PR merges land), bump [pyproject.toml](../../pyproject.toml) version from `"4.0.0.dev0"` to `"4.0.0"`. Commit as `chore(release): 4.0.0`.
 - [ ] T063 [US3] `git tag v4.0.0 && git push origin v4.0.0`. Workflow triggers.
 - [ ] T064 [US3] If the `pypi` GitHub Environment has a required-reviewer gate, approve the publish job in the GitHub Environments UI. Wait for the publish job to complete.
