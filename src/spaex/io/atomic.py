@@ -54,6 +54,7 @@ def _write_replace_posix(target: Path, data: bytes) -> None:
 
 def _write_replace_windows(target: Path, data: bytes) -> None:
     import ctypes
+    import msvcrt
     from ctypes import wintypes
 
     parent = target.parent
@@ -68,12 +69,9 @@ def _write_replace_windows(target: Path, data: bytes) -> None:
         with os.fdopen(fd, "wb") as fh:
             fh.write(data)
             fh.flush()
-            get_osfhandle = ctypes.windll.msvcrt._get_osfhandle  # type: ignore[attr-defined]
-            get_osfhandle.argtypes = [ctypes.c_int]
-            get_osfhandle.restype = ctypes.c_ssize_t
-            handle = get_osfhandle(fh.fileno())
-            if handle == -1:
-                raise ctypes.WinError()
+            # Python's msvcrt wrapper calls the CRT selected for this Python
+            # build and returns the pointer-sized native handle as an int.
+            handle = msvcrt.get_osfhandle(fh.fileno())
 
             flush_file_buffers = ctypes.windll.kernel32.FlushFileBuffers
             flush_file_buffers.argtypes = [wintypes.HANDLE]
