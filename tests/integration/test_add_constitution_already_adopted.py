@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from haex_hive.util.errors import ConstitutionAlreadyAdoptedError
+from spaex.util.errors import ConstitutionAlreadyAdoptedError
 
 _FIRST_ID = "com.example.publisher.first-constitution"
 _SECOND_ID = "com.example.publisher.second-constitution"
@@ -48,7 +48,7 @@ def test_add_refuses_second_constitution_pre_write(
         molecule_ids=_FIRST_ID,
         revision=head_a,
     )
-    baseline = (consumer / ".haex-hive.json").read_bytes()
+    baseline = (consumer / ".spaex.json").read_bytes()
 
     with pytest.raises(ConstitutionAlreadyAdoptedError) as exc_info:
         haex_add_helpers["run_add"](
@@ -60,13 +60,13 @@ def test_add_refuses_second_constitution_pre_write(
             revision=head_b,
         )
     assert _FIRST_ID in exc_info.value.context["adopted_by"]
-    assert (consumer / ".haex-hive.json").read_bytes() == baseline
-    assert not (consumer / ".haex-hive" / "pending").exists()
+    assert (consumer / ".spaex.json").read_bytes() == baseline
+    assert not (consumer / ".spaex" / "pending").exists()
 
     # Recovery: simulate `haex remove` (US4) by dropping the compound then retrying.
     manifest_data = json.loads(baseline)
     manifest_data["compounds"] = []
-    (consumer / ".haex-hive.json").write_bytes(
+    (consumer / ".spaex.json").write_bytes(
         json.dumps(manifest_data).encode("utf-8")
     )
     rc = haex_add_helpers["run_add"](

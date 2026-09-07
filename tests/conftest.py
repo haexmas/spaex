@@ -83,7 +83,7 @@ def self_migration_fixture(tmp_path: Path, git_binary: str) -> dict:
     commit_a = _git(publisher, "rev-parse", "HEAD")
 
     state_root = tmp_path / "state"
-    from haex_hive.migrate.transform import clone_dir
+    from spaex.migrate.transform import clone_dir
 
     canonical = "https://github.com/haexmas/haex-hive"
     clone_target = clone_dir(state_root, canonical)
@@ -109,8 +109,8 @@ def haex_add_helpers() -> dict:
     from pathlib import Path as _P
     from types import SimpleNamespace
 
-    from haex_hive.cli import add as add_cli
-    from haex_hive.migrate.transform import clone_dir
+    from spaex.cli import add as add_cli
+    from spaex.migrate.transform import clone_dir
 
     def _local_git(cwd: _P, *args: str) -> str:
         proc = subprocess.run(
@@ -137,7 +137,7 @@ def haex_add_helpers() -> dict:
         _local_git(working, "config", "user.name", "t")
         _local_git(working, "config", "commit.gpgsign", "false")
         publisher_manifest = {
-            "haex_hive_version": "3",
+            "spaex_version": "4",
             "publisher": publisher,
             "molecules": {
                 mid: {"path": info["path"], "version": info["version"]}
@@ -151,7 +151,7 @@ def haex_add_helpers() -> dict:
             mol_dir = working / info["path"]
             mol_dir.mkdir(parents=True)
             molecule_manifest = {
-                "haex_hive_version": "3",
+                "spaex_version": "4",
                 "id": mid,
                 "version": info["version"],
                 "priority": info.get("priority", 100),
@@ -182,10 +182,10 @@ def haex_add_helpers() -> dict:
     ) -> _P:
         consumer = tmp_path / "consumer"
         consumer.mkdir()
-        (consumer / ".haex-hive.json").write_text(
+        (consumer / ".spaex.json").write_text(
             json.dumps(
                 {
-                    "haex_hive_version": "3",
+                    "spaex_version": "4",
                     "identity": identity,
                     "compounds": [],
                 }
@@ -196,7 +196,7 @@ def haex_add_helpers() -> dict:
 
     def run_add(consumer, state_root, monkeypatch, **kwargs) -> int:
         """Run `haex add` against a fixture publisher state root."""
-        monkeypatch.setenv("HAEX_HIVE_STATE", str(state_root))
+        monkeypatch.setenv("SPAEX_STATE", str(state_root))
         ns = SimpleNamespace(
             repo_root=str(consumer),
             source_url=kwargs["source_url"],
@@ -208,9 +208,9 @@ def haex_add_helpers() -> dict:
         return add_cli.run(ns)
 
     def run_remove(consumer, state_root, monkeypatch, molecule_ids: str, **kwargs) -> int:
-        from haex_hive.cli import remove as remove_cli
+        from spaex.cli import remove as remove_cli
 
-        monkeypatch.setenv("HAEX_HIVE_STATE", str(state_root))
+        monkeypatch.setenv("SPAEX_STATE", str(state_root))
         ns = SimpleNamespace(
             repo_root=str(consumer),
             molecule_ids=molecule_ids,
@@ -243,7 +243,7 @@ def single_source_constitution_fixture(tmp_path: Path, git_binary: str) -> dict:
     (publisher / "manifest.json").write_text(
         json.dumps(
             {
-                "haex_hive_version": "3",
+                "spaex_version": "4",
                 "publisher": "com.github.example.publisher",
                 "molecules": {
                     atom_id: {"path": "constitution", "version": "1.0.0"},
@@ -256,7 +256,7 @@ def single_source_constitution_fixture(tmp_path: Path, git_binary: str) -> dict:
     (publisher / "constitution" / "manifest.json").write_text(
         json.dumps(
             {
-                "haex_hive_version": "3",
+                "spaex_version": "4",
                 "id": atom_id,
                 "version": "1.0.0",
                 "priority": 100,
@@ -273,7 +273,7 @@ def single_source_constitution_fixture(tmp_path: Path, git_binary: str) -> dict:
     commit_sha = _git(publisher, "rev-parse", "HEAD")
 
     state_root = tmp_path / "state"
-    from haex_hive.migrate.transform import clone_dir
+    from spaex.migrate.transform import clone_dir
 
     clone_target = clone_dir(state_root, canonical)
     clone_target.parent.mkdir(parents=True, exist_ok=True)
@@ -281,10 +281,10 @@ def single_source_constitution_fixture(tmp_path: Path, git_binary: str) -> dict:
 
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-    (consumer / ".haex-hive.json").write_text(
+    (consumer / ".spaex.json").write_text(
         json.dumps(
             {
-                "haex_hive_version": "3",
+                "spaex_version": "4",
                 "identity": "com.github.example.consumer",
                 "compounds": [
                     {
@@ -324,7 +324,7 @@ def multi_source_constitution_fixture(tmp_path: Path, git_binary: str) -> dict:
     (publisher / "manifest.json").write_text(
         json.dumps(
             {
-                "haex_hive_version": "3",
+                "spaex_version": "4",
                 "publisher": "com.github.example.multi-publisher",
                 "molecules": {
                     atom_id_a: {"path": "atom-a", "version": "1.0.0"},
@@ -343,7 +343,7 @@ def multi_source_constitution_fixture(tmp_path: Path, git_binary: str) -> dict:
         (atom_dir / "manifest.json").write_text(
             json.dumps(
                 {
-                    "haex_hive_version": "3",
+                    "spaex_version": "4",
                     "id": atom_id,
                     "version": "1.0.0",
                     "priority": 100,
@@ -358,7 +358,7 @@ def multi_source_constitution_fixture(tmp_path: Path, git_binary: str) -> dict:
     commit_sha = _git(publisher, "rev-parse", "HEAD")
 
     state_root = tmp_path / "state"
-    from haex_hive.migrate.transform import clone_dir
+    from spaex.migrate.transform import clone_dir
 
     clone_target = clone_dir(state_root, canonical)
     clone_target.parent.mkdir(parents=True, exist_ok=True)
@@ -366,10 +366,10 @@ def multi_source_constitution_fixture(tmp_path: Path, git_binary: str) -> dict:
 
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-    (consumer / ".haex-hive.json").write_text(
+    (consumer / ".spaex.json").write_text(
         json.dumps(
             {
-                "haex_hive_version": "3",
+                "spaex_version": "4",
                 "identity": "com.github.example.consumer",
                 "compounds": [
                     {

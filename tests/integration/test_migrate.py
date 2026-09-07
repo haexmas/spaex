@@ -18,9 +18,9 @@ pytestmark = pytest.mark.skipif(
 
 def _run_haex(repo_root: Path, *args: str, state_root: Path) -> subprocess.CompletedProcess:
     env = os.environ.copy()
-    env["HAEX_HIVE_STATE"] = str(state_root)
+    env["SPAEX_STATE"] = str(state_root)
     return subprocess.run(
-        [sys.executable, "-m", "haex_hive", "--repo-root", str(repo_root), *args],
+        [sys.executable, "-m", "spaex", "--repo-root", str(repo_root), *args],
         capture_output=True,
         text=True,
         env=env,

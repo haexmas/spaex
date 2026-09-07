@@ -22,8 +22,8 @@ from typing import Any
 
 import pytest
 
-from haex_hive.io.state import transaction_paths
-from haex_hive.io.writer_lock import ConstitutionWriterLock
+from spaex.io.state import transaction_paths
+from spaex.io.writer_lock import ConstitutionWriterLock
 
 pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git binary required")
 
@@ -36,16 +36,16 @@ def _run_install(
 ) -> subprocess.CompletedProcess[str]:
     """Run the install CLI against a fixture with isolated state."""
     env = os.environ.copy()
-    env["HAEX_HIVE_STATE"] = str(state_root)
+    env["SPAEX_STATE"] = str(state_root)
     if crash_after is not None:
-        env["HAEX_HIVE_CRASH_AFTER"] = crash_after
+        env["SPAEX_CRASH_AFTER"] = crash_after
     else:
-        env.pop("HAEX_HIVE_CRASH_AFTER", None)
+        env.pop("SPAEX_CRASH_AFTER", None)
     return subprocess.run(
         [
             sys.executable,
             "-m",
-            "haex_hive",
+            "spaex",
             "--repo-root",
             str(repo_root),
             "install",
@@ -71,7 +71,7 @@ def _load_stable_install_lock(
     while the directory rename is in flight. There is no second file to
     cross-check against anymore.
     """
-    install_lock_path = repo_root / ".haex-hive" / "install.lock"
+    install_lock_path = repo_root / ".spaex" / "install.lock"
     callback = after_first_read
     for _ in range(attempts):
         try:
@@ -98,7 +98,7 @@ def test_quickstart_walkthrough_single_source(
     first = _run_install(consumer, state_root=state_root)
     assert first.returncode == 0, first.stderr
     assert first.stdout.startswith("installed generation g_")
-    live = consumer / ".haex-hive"
+    live = consumer / ".spaex"
     for name in ("constitution.md", "install.lock"):
         assert (live / name).exists(), f"missing {name} after first install"
     assert not (live / "visibility.json").exists()
@@ -119,7 +119,7 @@ def test_quickstart_walkthrough_single_source(
     (live / "constitution.md").write_bytes((live / "constitution.md").read_bytes() + b"\n")
     crashed = _run_install(consumer, state_root=state_root, crash_after="rename_a")
     assert crashed.returncode != 0
-    prev_dir = consumer / ".haex-hive.prev"
+    prev_dir = consumer / ".spaex.prev"
     assert prev_dir.exists()
     recovered = _run_install(consumer, state_root=state_root)
     assert recovered.returncode == 0, recovered.stderr
@@ -129,14 +129,14 @@ def test_quickstart_walkthrough_single_source(
     assert (live / "constitution.md").read_bytes() == expected_constitution
     recovered_lock = json.loads((live / "install.lock").read_bytes())
     assert recovered_lock["generation_id"]
-    assert not (consumer / ".haex-hive.next").exists()
+    assert not (consumer / ".spaex.next").exists()
     assert not prev_dir.exists()
 
     # Step 7 — reader consistency helper. Swap the live tree after the first
     # install.lock read; the stable-read algorithm must retry instead of
     # raising or returning a torn read.
-    reader_next = consumer / ".haex-hive.reader-next"
-    reader_old = consumer / ".haex-hive.reader-old"
+    reader_next = consumer / ".spaex.reader-next"
+    reader_old = consumer / ".spaex.reader-old"
     shutil.copytree(live, reader_next)
     reader_lock = json.loads((reader_next / "install.lock").read_bytes())
     reader_generation = "g_20990101T000000Z_0000"
@@ -177,7 +177,7 @@ def test_quickstart_walkthrough_refuses_multiple_constitutions(
 
     assert refused.returncode == 2, refused.stderr
     assert "key=constitution-already-adopted" in refused.stderr
-    assert not (consumer / ".haex-hive" / "constitution.md").exists()
+    assert not (consumer / ".spaex" / "constitution.md").exists()
 
 
 @pytest.mark.skip(reason="Step 3 depends on T037 (`--verify-only` + shared lock), deferred")

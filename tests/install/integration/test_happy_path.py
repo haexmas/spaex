@@ -1,6 +1,6 @@
 """T021 — `haex install` happy path (US1 MVP, Spec 008).
 
-A single-source constitution atom lands under `.haex-hive/` as two files
+A single-source constitution atom lands under `.spaex/` as two files
 (constitution.md, install.lock) published atomically by the rename-swap
 primitive. The lock's `molecules[]` records the atom's `(id, source,
 revision, paths)` and the lock's own top-level `generation_id` (install.lock
@@ -26,12 +26,12 @@ pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git binary 
 def _run_install(repo_root: Path, state_root: Path) -> subprocess.CompletedProcess:
     """Run `haex install` against a fixture repository."""
     env = os.environ.copy()
-    env["HAEX_HIVE_STATE"] = str(state_root)
+    env["SPAEX_STATE"] = str(state_root)
     return subprocess.run(
         [
             sys.executable,
             "-m",
-            "haex_hive",
+            "spaex",
             "--repo-root",
             str(repo_root),
             "install",
@@ -56,7 +56,7 @@ def test_happy_path_single_source_publishes_both_files(
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.startswith("installed generation g_")
 
-    live = consumer / ".haex-hive"
+    live = consumer / ".spaex"
     constitution = live / "constitution.md"
     lock_path = live / "install.lock"
 
@@ -64,13 +64,13 @@ def test_happy_path_single_source_publishes_both_files(
     assert not (live / "visibility.json").exists()
 
     lock = json.loads(lock_path.read_text())
-    assert lock["haex_hive_version"] == "3"
+    assert lock["spaex_version"] == "4"
     assert lock["molecules"] == [
         {
             "id": atom_id,
             "source": canonical,
             "revision": commit_sha,
-            "paths": [".haex-hive/constitution.md"],
+            "paths": [".spaex/constitution.md"],
         }
     ]
     assert proc.stdout.strip().endswith(lock["generation_id"])

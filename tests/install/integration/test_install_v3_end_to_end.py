@@ -16,9 +16,9 @@ pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git binary 
 
 def _run_install(repo_root: Path, state_root: Path) -> subprocess.CompletedProcess:
     env = os.environ.copy()
-    env["HAEX_HIVE_STATE"] = str(state_root)
+    env["SPAEX_STATE"] = str(state_root)
     return subprocess.run(
-        [sys.executable, "-m", "haex_hive", "--repo-root", str(repo_root), "install"],
+        [sys.executable, "-m", "spaex", "--repo-root", str(repo_root), "install"],
         capture_output=True,
         text=True,
         env=env,
@@ -32,22 +32,22 @@ def test_v3_consumer_and_publisher_produce_byte_identical_lock_across_runs(
     consumer: Path = single_source_constitution_fixture["consumer"]
     state_root: Path = single_source_constitution_fixture["state_root"]
 
-    manifest = json.loads((consumer / ".haex-hive.json").read_text())
-    assert manifest["haex_hive_version"] == "3"
+    manifest = json.loads((consumer / ".spaex.json").read_text())
+    assert manifest["spaex_version"] == "4"
     assert "compounds" in manifest
 
     first = _run_install(consumer, state_root)
     assert first.returncode == 0, first.stderr
 
-    lock_path = consumer / ".haex-hive" / "install.lock"
+    lock_path = consumer / ".spaex" / "install.lock"
     lock_data = json.loads(lock_path.read_text())
-    assert lock_data["haex_hive_version"] == "3"
+    assert lock_data["spaex_version"] == "4"
     assert lock_data["molecules"] == [
         {
             "id": single_source_constitution_fixture["atom_id"],
             "source": single_source_constitution_fixture["canonical"],
             "revision": single_source_constitution_fixture["commit_sha"],
-            "paths": [".haex-hive/constitution.md"],
+            "paths": [".spaex/constitution.md"],
         }
     ]
 

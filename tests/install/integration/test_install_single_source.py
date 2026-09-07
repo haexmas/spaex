@@ -15,17 +15,17 @@ from pathlib import Path
 
 import pytest
 
-from haex_hive.io.state import transaction_paths
-from haex_hive.io.writer_lock import ConstitutionWriterLock
+from spaex.io.state import transaction_paths
+from spaex.io.writer_lock import ConstitutionWriterLock
 
 pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git binary required")
 
 
 def _run_haex(repo_root: Path, *args: str, state_root: Path) -> subprocess.CompletedProcess:
     env = os.environ.copy()
-    env["HAEX_HIVE_STATE"] = str(state_root)
+    env["SPAEX_STATE"] = str(state_root)
     return subprocess.run(
-        [sys.executable, "-m", "haex_hive", "--repo-root", str(repo_root),
+        [sys.executable, "-m", "spaex", "--repo-root", str(repo_root),
          "install", *args],
         capture_output=True,
         text=True,
@@ -41,19 +41,19 @@ def test_successful_straight_copy(single_source_constitution_fixture: dict) -> N
     proc = _run_haex(consumer, state_root=state_root)
     assert proc.returncode == 0, proc.stderr
 
-    constitution = consumer / ".haex-hive" / "constitution.md"
-    lock = consumer / ".haex-hive" / "install.lock"
+    constitution = consumer / ".spaex" / "constitution.md"
+    lock = consumer / ".spaex" / "install.lock"
     assert constitution.read_bytes() == b"# Example Constitution\n\nBe kind.\n"
-    assert not (consumer / ".haex-hive" / "visibility.json").exists()
+    assert not (consumer / ".spaex" / "visibility.json").exists()
 
     lock_data = json.loads(lock.read_text())
-    assert lock_data["haex_hive_version"] == "3"
+    assert lock_data["spaex_version"] == "4"
     assert lock_data["molecules"] == [
         {
             "id": single_source_constitution_fixture["atom_id"],
             "source": single_source_constitution_fixture["canonical"],
             "revision": single_source_constitution_fixture["commit_sha"],
-            "paths": [".haex-hive/constitution.md"],
+            "paths": [".spaex/constitution.md"],
         }
     ]
     assert lock_data["generation_id"]
@@ -76,7 +76,7 @@ def test_unavailable_pinned_sha_refuses_untouched(single_source_constitution_fix
     consumer = single_source_constitution_fixture["consumer"]
     state_root = single_source_constitution_fixture["state_root"]
 
-    manifest_path = consumer / ".haex-hive.json"
+    manifest_path = consumer / ".spaex.json"
     data = json.loads(manifest_path.read_text())
     data["compounds"][0]["revision"] = "deadbeef" * 5
     manifest_path.write_text(json.dumps(data))
@@ -84,8 +84,8 @@ def test_unavailable_pinned_sha_refuses_untouched(single_source_constitution_fix
     proc = _run_haex(consumer, state_root=state_root)
     assert proc.returncode == 3
     assert "key=pinned-revision-not-found" in proc.stderr
-    assert not (consumer / ".haex-hive" / "constitution.md").exists()
-    assert not (consumer / ".haex-hive" / "install.lock").exists()
+    assert not (consumer / ".spaex" / "constitution.md").exists()
+    assert not (consumer / ".spaex" / "install.lock").exists()
 
 
 def test_contribution_file_absent_refuses(tmp_path: Path, git_binary: str) -> None:
@@ -108,7 +108,7 @@ def test_contribution_file_absent_refuses(tmp_path: Path, git_binary: str) -> No
     (publisher / "manifest.json").write_text(
         json.dumps(
             {
-                "haex_hive_version": "3",
+                "spaex_version": "4",
                 "publisher": "com.github.example.broken-publisher",
                 "molecules": {atom_id: {"path": "c", "version": "1.0.0"}},
             }
@@ -118,7 +118,7 @@ def test_contribution_file_absent_refuses(tmp_path: Path, git_binary: str) -> No
     (publisher / "c" / "manifest.json").write_text(
         json.dumps(
             {
-                "haex_hive_version": "3",
+                "spaex_version": "4",
                 "id": atom_id,
                 "version": "1.0.0",
                 "priority": 100,
@@ -131,7 +131,7 @@ def test_contribution_file_absent_refuses(tmp_path: Path, git_binary: str) -> No
     sha = _git(publisher, "rev-parse", "HEAD")
 
     state_root = tmp_path / "state"
-    from haex_hive.migrate.transform import clone_dir
+    from spaex.migrate.transform import clone_dir
 
     clone_target = clone_dir(state_root, canonical)
     clone_target.parent.mkdir(parents=True, exist_ok=True)
@@ -139,10 +139,10 @@ def test_contribution_file_absent_refuses(tmp_path: Path, git_binary: str) -> No
 
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-    (consumer / ".haex-hive.json").write_text(
+    (consumer / ".spaex.json").write_text(
         json.dumps(
             {
-                "haex_hive_version": "3",
+                "spaex_version": "4",
                 "identity": "com.github.example.consumer",
                 "compounds": [{"source": canonical, "revision": sha, "molecules": [atom_id]}],
             }
@@ -152,7 +152,7 @@ def test_contribution_file_absent_refuses(tmp_path: Path, git_binary: str) -> No
     proc = _run_haex(consumer, state_root=state_root)
     assert proc.returncode == 3
     assert "key=contribution-file-not-found" in proc.stderr
-    assert not (consumer / ".haex-hive" / "constitution.md").exists()
+    assert not (consumer / ".spaex" / "constitution.md").exists()
 
 
 def test_empty_compounds_publishes_empty_generation(tmp_path: Path) -> None:
@@ -163,10 +163,10 @@ def test_empty_compounds_publishes_empty_generation(tmp_path: Path) -> None:
     """
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-    (consumer / ".haex-hive.json").write_text(
+    (consumer / ".spaex.json").write_text(
         json.dumps(
             {
-                "haex_hive_version": "3",
+                "spaex_version": "4",
                 "identity": "com.github.example.consumer",
                 "compounds": [],
             }
@@ -175,9 +175,9 @@ def test_empty_compounds_publishes_empty_generation(tmp_path: Path) -> None:
     proc = _run_haex(consumer, state_root=tmp_path / "state")
     assert proc.returncode == 0, proc.stderr
     assert "installed empty generation" in proc.stdout
-    assert not (consumer / ".haex-hive" / "constitution.md").exists()
+    assert not (consumer / ".spaex" / "constitution.md").exists()
 
-    lock_bytes = (consumer / ".haex-hive" / "install.lock").read_bytes()
+    lock_bytes = (consumer / ".spaex" / "install.lock").read_bytes()
     lock_data = json.loads(lock_bytes)
     assert lock_data["molecules"] == []
 
@@ -185,4 +185,4 @@ def test_empty_compounds_publishes_empty_generation(tmp_path: Path) -> None:
     proc2 = _run_haex(consumer, state_root=tmp_path / "state")
     assert proc2.returncode == 0
     assert "no changes" in proc2.stdout
-    assert (consumer / ".haex-hive" / "install.lock").read_bytes() == lock_bytes
+    assert (consumer / ".spaex" / "install.lock").read_bytes() == lock_bytes

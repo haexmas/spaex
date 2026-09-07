@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from haex_hive.migrate.v2_to_v3 import v2_to_v3
+from spaex.migrate.v2_to_v3 import v2_to_v3
 
 
 def test_atoms_map_renamed_to_molecules_map() -> None:

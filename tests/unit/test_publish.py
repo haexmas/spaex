@@ -7,16 +7,16 @@ from pathlib import Path
 
 import pytest
 
-from haex_hive.constitution import publish as publish_module
-from haex_hive.constitution.publish import (
+from spaex.constitution import publish as publish_module
+from spaex.constitution.publish import (
     CONSTITUTION_PATH,
     _publish_constitution,
     publish_constitution,
 )
-from haex_hive.constitution.resolve import ResolvedConstitutionContribution
-from haex_hive.io import transaction
-from haex_hive.model.install_lock import ConstitutionSource, InstallLock, MoleculeEntry
-from haex_hive.util.errors import ConstitutionConcealmentInstructionError, PostWriteValidationError
+from spaex.constitution.resolve import ResolvedConstitutionContribution
+from spaex.io import transaction
+from spaex.model.install_lock import ConstitutionSource, InstallLock, MoleculeEntry
+from spaex.util.errors import ConstitutionConcealmentInstructionError, PostWriteValidationError
 
 _SOURCE = ConstitutionSource(
     id="com.example.constitution",
@@ -70,13 +70,13 @@ def test_publish_allocates_generation_id_after_existing_generation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Every publication receives a fresh generation ID after the live one."""
-    live = tmp_path / transaction.HAEX_HIVE_DIR
+    live = tmp_path / transaction.SPAEX_DIR
     live.mkdir()
     existing_generation_id = "g_20990101T000000Z_0000"
     (live / transaction.INSTALL_LOCK_NAME).write_bytes(
         json.dumps(
             {
-                "haex_hive_version": "3",
+                "spaex_version": "4",
                 "generation_id": existing_generation_id,
                 "molecules": [],
                 "future_field": {"enabled": True},
@@ -147,7 +147,7 @@ def test_publish_constitution_empty_publishes_lock_without_constitution_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Only install.lock is staged in the rename-swap when the state is empty."""
-    from haex_hive.io import transaction
+    from spaex.io import transaction
 
     staged_files_captured: list[str] = []
 
@@ -166,7 +166,7 @@ def test_publish_constitution_empty_records_empty_molecules_in_lock(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The staged install.lock for the empty state has molecules=[]."""
-    from haex_hive.io import transaction
+    from spaex.io import transaction
 
     captured_lock: dict[str, object] = {}
 
@@ -180,7 +180,7 @@ def test_publish_constitution_empty_records_empty_molecules_in_lock(
 
     _publish_constitution(None, None, tmp_path)
 
-    assert captured_lock["haex_hive_version"] == "3"
+    assert captured_lock["spaex_version"] == "4"
     assert captured_lock["molecules"] == []
     assert "generation_id" in captured_lock
 
@@ -189,7 +189,7 @@ def test_publish_constitution_molecule_and_body_must_agree_on_none(
     tmp_path: Path,
 ) -> None:
     """Mixing None and non-None across (molecule, body) is a programmer error."""
-    from haex_hive.model.install_lock import MoleculeEntry
+    from spaex.model.install_lock import MoleculeEntry
 
     molecule = MoleculeEntry(
         id=_SOURCE.id,
@@ -215,7 +215,7 @@ def test_single_source_rejects_concealment_instruction(tmp_path: Path) -> None:
     with pytest.raises(ConstitutionConcealmentInstructionError):
         publish_constitution(contributions, tmp_path)
 
-    assert not (tmp_path / ".haex-hive").exists()
+    assert not (tmp_path / ".spaex").exists()
 
 
 def test_orphan_cleanup_skips_symlinked_parent_outside_repository(tmp_path: Path) -> None:
@@ -231,7 +231,7 @@ def test_orphan_cleanup_skips_symlinked_parent_outside_repository(tmp_path: Path
         pytest.skip("symlinks are unavailable on this platform")
 
     previous = InstallLock(
-        haex_hive_version="3",
+        spaex_version="4",
         generation_id="g_20260101T000000Z_0000",
         molecules=(
             _molecule(),
@@ -254,10 +254,10 @@ def test_orphan_cleanup_restores_prior_deletions_on_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A failed orphan deletion restores files before publication rolls back."""
-    live = tmp_path / ".haex-hive"
+    live = tmp_path / ".spaex"
     live.mkdir()
     old_lock = InstallLock(
-        haex_hive_version="3",
+        spaex_version="4",
         generation_id="g_20260101T000000Z_0000",
         molecules=(
             _molecule(),

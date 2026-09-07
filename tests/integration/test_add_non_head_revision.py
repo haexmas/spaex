@@ -51,7 +51,7 @@ def test_add_pins_non_head_revision_via_fetched_sha(
     # `ensure_object` through its initialization and fetch path. The working
     # copy remains the reachable source for the test's canonical URL.
     shutil.rmtree(bare, onerror=_remove_read_only)
-    from haex_hive.git import publisher_fetch
+    from spaex.git import publisher_fetch
 
     original_run_git = publisher_fetch._run_git
 
@@ -73,7 +73,7 @@ def test_add_pins_non_head_revision_via_fetched_sha(
         revision=head,
     )
     assert rc == 0
-    written = json.loads((consumer / ".haex-hive.json").read_text())
+    written = json.loads((consumer / ".spaex.json").read_text())
     assert written["compounds"][0]["revision"] == head
-    published = (consumer / ".haex-hive" / "constitution.md").read_bytes()
+    published = (consumer / ".spaex" / "constitution.md").read_bytes()
     assert b"hello constitution constitution.md" in published

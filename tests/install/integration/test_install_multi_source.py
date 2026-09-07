@@ -19,12 +19,12 @@ def _run_haex(
     state_root: Path,
 ) -> subprocess.CompletedProcess:
     env = os.environ.copy()
-    env["HAEX_HIVE_STATE"] = str(state_root)
+    env["SPAEX_STATE"] = str(state_root)
     return subprocess.run(
         [
             sys.executable,
             "-m",
-            "haex_hive",
+            "spaex",
             "--repo-root",
             str(repo_root),
             "install",
@@ -47,8 +47,8 @@ def test_multi_source_constitution_refuses_before_writing(
 
     assert proc.returncode == 2, proc.stderr.decode()
     assert b"key=constitution-already-adopted" in proc.stderr
-    assert not (consumer / ".haex-hive" / "constitution.md").exists()
-    assert not (consumer / ".haex-hive" / "install.lock").exists()
+    assert not (consumer / ".spaex" / "constitution.md").exists()
+    assert not (consumer / ".spaex" / "install.lock").exists()
 
 
 def test_retired_merge_flags_are_not_install_options(

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from haex_hive.io import json_deterministic
+from spaex.io import json_deterministic
 
 
 def test_byte_identity_across_calls() -> None:

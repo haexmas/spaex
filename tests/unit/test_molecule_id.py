@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from haex_hive.model.molecule_id import MoleculeId
+from spaex.model.molecule_id import MoleculeId
 
 
 @pytest.mark.parametrize(

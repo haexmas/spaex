@@ -1,10 +1,10 @@
 {
-  "haex_hive_version": "3",
-  "publisher": "com.github.haexmas.haex-hive",
   "molecules": {
-    "com.github.haexmas.haex-hive.constitution": {
+    "com.github.haexmas.spaex.constitution": {
       "path": ".specify/memory",
       "version": "1.4.0"
     }
-  }
+  },
+  "publisher": "com.github.haexmas.spaex",
+  "spaex_version": "4"
 }

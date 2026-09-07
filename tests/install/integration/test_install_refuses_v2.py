@@ -23,9 +23,9 @@ def _git(repo: Path, *args: str) -> str:
 
 def _run_install(repo_root: Path, state_root: Path) -> subprocess.CompletedProcess:
     env = os.environ.copy()
-    env["HAEX_HIVE_STATE"] = str(state_root)
+    env["SPAEX_STATE"] = str(state_root)
     return subprocess.run(
-        [sys.executable, "-m", "haex_hive", "--repo-root", str(repo_root), "install"],
+        [sys.executable, "-m", "spaex", "--repo-root", str(repo_root), "install"],
         capture_output=True,
         text=True,
         env=env,
@@ -36,7 +36,7 @@ def test_v2_consumer_refuses_with_unavailable_migration_hint(tmp_path: Path) -> 
     """A v2 consumer is refused because v2-to-v3 migration is not available yet."""
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-    (consumer / ".haex-hive.json").write_text(
+    (consumer / ".spaex.json").write_text(
         json.dumps(
             {
                 "haex_hive_version": "2",
@@ -49,7 +49,7 @@ def test_v2_consumer_refuses_with_unavailable_migration_hint(tmp_path: Path) -> 
     proc = _run_install(consumer, tmp_path / "state")
     assert proc.returncode != 0
     assert "v2-to-v3 migration is not available yet" in proc.stderr
-    assert not (consumer / ".haex-hive").exists()
+    assert not (consumer / ".spaex").exists()
 
 
 def test_v3_consumer_against_v2_publisher_refuses_without_writing(
@@ -92,7 +92,7 @@ def test_v3_consumer_against_v2_publisher_refuses_without_writing(
     sha = _git(publisher, "rev-parse", "HEAD")
 
     state_root = tmp_path / "state"
-    from haex_hive.migrate.transform import clone_dir
+    from spaex.migrate.transform import clone_dir
 
     clone_target = clone_dir(state_root, canonical)
     clone_target.parent.mkdir(parents=True, exist_ok=True)
@@ -100,10 +100,10 @@ def test_v3_consumer_against_v2_publisher_refuses_without_writing(
 
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-    (consumer / ".haex-hive.json").write_text(
+    (consumer / ".spaex.json").write_text(
         json.dumps(
             {
-                "haex_hive_version": "3",
+                "spaex_version": "4",
                 "identity": "com.github.example.consumer",
                 "compounds": [{"source": canonical, "revision": sha, "molecules": [molecule_id]}],
             }
@@ -112,4 +112,4 @@ def test_v3_consumer_against_v2_publisher_refuses_without_writing(
 
     proc = _run_install(consumer, state_root)
     assert proc.returncode != 0
-    assert not (consumer / ".haex-hive").exists()
+    assert not (consumer / ".spaex").exists()

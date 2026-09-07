@@ -9,27 +9,27 @@ from types import SimpleNamespace
 
 import pytest
 
-from haex_hive.cli import install as install_cli
-from haex_hive.cli.diagnostics import emit_refuse
-from haex_hive.cli.main import main
-from haex_hive.constitution.resolve import ResolvedConstitutionContribution
-from haex_hive.constitution.safety import (
+from spaex.cli import install as install_cli
+from spaex.cli.diagnostics import emit_refuse
+from spaex.cli.main import main
+from spaex.constitution.resolve import ResolvedConstitutionContribution
+from spaex.constitution.safety import (
     validate_no_plaintext_secrets,
     validate_terminal_safe_display,
 )
-from haex_hive.io import json_deterministic
-from haex_hive.migrate import detect
-from haex_hive.migrate.transform import (
+from spaex.io import json_deterministic
+from spaex.migrate import detect
+from spaex.migrate.transform import (
     _glob_matches,
     _select_atom_for_path,
     migrate_v1_to_v2,
 )
-from haex_hive.model.consumer_manifest import ConsumerManifest
-from haex_hive.model.install_lock import ConstitutionSource, InstallLock
-from haex_hive.model.molecule_manifest import MoleculeManifest
-from haex_hive.model.publisher_manifest import PublisherManifest
-from haex_hive.schema.validator import _json_pointer
-from haex_hive.util.errors import (
+from spaex.model.consumer_manifest import ConsumerManifest
+from spaex.model.install_lock import ConstitutionSource, InstallLock
+from spaex.model.molecule_manifest import MoleculeManifest
+from spaex.model.publisher_manifest import PublisherManifest
+from spaex.schema.validator import _json_pointer
+from spaex.util.errors import (
     HaexError,
     IdentityMismatchError,
     InstallLockSchemaInvalidError,
@@ -50,20 +50,20 @@ def test_constitution_commands_refuse_without_traceback(
 def test_migrate_invalid_manifest_is_typed(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    (tmp_path / ".haex-hive.json").write_bytes(b"{")
+    (tmp_path / ".spaex.json").write_bytes(b"{")
     assert main(["--repo-root", str(tmp_path), "migrate", "--dry-run"]) == 2
-    assert "key=haex-hive-json-invalid" in capsys.readouterr().err
+    assert "key=spaex-json-invalid" in capsys.readouterr().err
 
 
 def test_migrate_invalid_manifest_shape_is_typed(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    (tmp_path / ".haex-hive.json").write_text(
-        '{"haex_hive_version":"1","identity":"com.example.project",'
+    (tmp_path / ".spaex.json").write_text(
+        '{"haex_hive_version": "1","identity":"com.example.project",'
         '"harness_sources":null}'
     )
     assert main(["--repo-root", str(tmp_path), "migrate", "--dry-run"]) == 2
-    assert "key=haex-hive-json-invalid" in capsys.readouterr().err
+    assert "key=spaex-json-invalid" in capsys.readouterr().err
 
 
 def test_detect_non_object_manifest_is_shape_error() -> None:
@@ -84,11 +84,11 @@ def test_invalid_atom_manifest_is_typed(
     # (research.md D6): the migrate-only v1->v2 path never goes through the
     # (now v3-only) PublisherManifest runtime model.
     publisher = json.loads(
-        '{"haex_hive_version":"2","publisher":"com.example", "atoms": {'
+        '{"haex_hive_version": "2","publisher":"com.example", "atoms": {'
         '"com.example.atom":{"path":"atom","version":"1.0.0"}}}'
     )
     monkeypatch.setattr(
-        "haex_hive.migrate.transform.git_show.show_bytes", lambda *args, **kwargs: b"{"
+        "spaex.migrate.transform.git_show.show_bytes", lambda *args, **kwargs: b"{"
     )
     with pytest.raises(MissingAtomManifestError):
         _select_atom_for_path(
@@ -126,7 +126,7 @@ def test_invalid_legacy_contributes_value_is_typed(
 ) -> None:
     """A malformed legacy contributes block does not leak an AttributeError."""
     monkeypatch.setattr(
-        "haex_hive.migrate.transform.git_show.show_bytes",
+        "spaex.migrate.transform.git_show.show_bytes",
         lambda *args, **kwargs: b'{"contributes": []}',
     )
     publisher = {"atoms": {"com.example.atom": {"path": "atom"}}}
@@ -172,7 +172,7 @@ def test_install_lock_freezes_unknown_nested_values() -> None:
     # Unknown top-level fields are accepted by the model's forward-compatible
     # projection and remain immutable after they are stored.
     lock = InstallLock(
-        haex_hive_version="3",
+        spaex_version="4",
         generation_id="g_20260901T120000Z_abcd",
         molecules=(),
         unknown_top_level={"future": {"nested": [1]}},
@@ -191,7 +191,7 @@ def test_install_allows_multiple_paths_from_one_molecule(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A multi-file constitution from one molecule is not a multi-source install."""
-    (tmp_path / ".haex-hive.json").write_text('{"identity":"com.example.project"}')
+    (tmp_path / ".spaex.json").write_text('{"identity":"com.example.project"}')
     source = ConstitutionSource(
         id="com.example.constitution",
         revision="0" * 40,
@@ -224,7 +224,7 @@ def test_install_allows_multiple_paths_from_one_molecule(
 
 def test_models_freeze_nested_json_values() -> None:
     molecule = MoleculeManifest.from_json(
-        b'{"haex_hive_version":"3","id":"com.example.atom","version":"1.0.0",'
+        b'{"spaex_version": "4","id":"com.example.atom","version":"1.0.0",'
         b'"priority":100,"atoms":{"constitution":["constitution.md"]},'
         b'"defaults":{"nested":{"x":1}}}'
     )
@@ -232,7 +232,7 @@ def test_models_freeze_nested_json_values() -> None:
         molecule.defaults["nested"]["x"] = 2
 
     consumer = ConsumerManifest.from_json(
-        b'{"haex_hive_version":"3","identity":"com.example.project","compounds":['
+        b'{"spaex_version": "4","identity":"com.example.project","compounds":['
         b'{"source":"https://example.com/publisher","revision":"' + b"0" * 40
         + b'","molecules":["com.example.atom"],"config":{"com.example.atom":'
         b'{"values":{"nested":{"x":1}}}}}]}'
@@ -243,7 +243,7 @@ def test_models_freeze_nested_json_values() -> None:
     assert consumer.to_json_bytes() == before
 
     publisher = PublisherManifest.from_json(
-        b'{"haex_hive_version":"3","publisher":"com.example","molecules":{'
+        b'{"spaex_version": "4","publisher":"com.example","molecules":{'
         b'"com.example.atom":{"path":"atom","version":"1.0.0"}}}'
     )
     with pytest.raises(TypeError):

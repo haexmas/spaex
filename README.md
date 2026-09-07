@@ -1,120 +1,96 @@
-# haex-hive
+# spaex — reproducible coding harnesses for any repo and development environment
 
-**Spec-kit-based harness management for distributed AI-assisted development.** One place to define the conventions your AI agents follow (constitutions, skills, MCPs, and other reusable *molecules*), and one CLI to compose them into any project on any device.
+**Status**: `4.0.0.dev0` (v4 vocabulary landed as part of Spec 014, first PyPI release upcoming). Portmanteau of `spec` and `haex`. See [docs/adr/0011-rename-to-spaex.md](docs/adr/0011-rename-to-spaex.md) for the rename decision and [specs/014-rename-to-spaex/](specs/014-rename-to-spaex/) for the full spec.
 
-> **Status:** `3.0.0.dev0`. The manifest v3 vocabulary (Spec 013) has landed: `compounds[]`/`molecules[]` naming, and molecule manifests grouping delivered files into an `atoms{}` category map. The one-command `haex add`/`haex remove` CLI (also Spec 013) has not landed yet; adopt or retract a molecule by hand-editing `.haex-hive.json`. Interfaces are not yet stable.
+## What it is
 
-## Vision
-
-You push a feature from your laptop and head out. On the train the CI turns red. You open your phone, tell the agent on your workstation at home to fix it, and it does. Later you're on the couch with a Chromebook and kick off a GPU-heavy job that actually runs on the box in your office. The local LLM you keep on that box? Reachable from any of your devices, wherever you are.
-
-That's what haex-hive is being built toward: **your development environment as a swarm of your own devices**, every one of them able to run AI agents, take over work from another, and stay in sync without giving up local autonomy.
-
-For a swarm like that to feel like one environment instead of five scattered ones, every device has to agree on **how it behaves**: the same conventions, the same skills, the same MCPs, the same permissions, the same constitutions. That agreement is what a "harness" is here. haex-hive lets you:
-
-- **Compose a harness out of molecules.** Skills, MCPs, constitutions, and other pieces, written by you or adopted from someone else. Each project's `.haex-hive.json` picks exactly the molecules that project needs; nothing else leaks in.
-- **Maintain it once, run it everywhere (roadmap).** The planned workflow will let you update the harness in one place, then have each device adopt the new pinned revision and pick up the change. It is intended to work on Linux, macOS, and Windows, and drive whichever agent CLI you happen to have in front of you (Claude Code, Codex, Gemini, …).
-- **Delegate freely between your devices (roadmap).** The planned delegation layer will let every device act as a relay for the others: hand a GPU job to the machine with the GPU, talk to the local model that lives on your home box, and watch a run from your phone while the laptop is closed.
-
-**Today** you can declare a harness manifest and assemble its constitution part on any device. Cross-device sessions, mobile control, and the delegation layer are on the roadmap; the full plan lives in [docs/plans/2026-08-26-haex-hive-design.md](docs/plans/2026-08-26-haex-hive-design.md).
+spaex composes a coding harness for a single repo out of reusable pieces (skills, MCPs, constitutions, slash commands, dev-environment files, collectively "molecules"). You declare which molecules you want in `.spaex.json`. `spaex install` writes them into `.claude/`, `.codex/`, `.spaex/`, and any other participating roots deterministically, pinned by SHA. Two consecutive `spaex install` runs on unchanged inputs produce byte-identical output.
 
 ## What you can do today
 
-The `haex` CLI covers the **constitution** portion of the config plane. As an operator you can:
+- `spaex add <source-url> <molecule-ids...>`: adopt one or more molecules from a publisher repo into `.spaex.json` and install them in one invocation.
+- `spaex remove <molecule-ids...>`: retract one or more molecules from `.spaex.json` and re-run install (files that only the retracted molecule contributed are deleted).
+- `spaex install`: publish adopted molecules atomically into their participating roots. Writes `.spaex/install.lock`.
+- `spaex migrate`: read v1/v2/v3 legacy manifests (`.haex-hive.json`, `manifest.json`) and emit v4 `.migrated` sidecar proposals with adoption instructions.
+- `spaex constitution show`: print the effective constitution to stdout, assembled from adopted molecules per `install.lock`.
 
-1. **Migrate a legacy v1 `.haex-hive.json` into the v2 shape.** `haex migrate` writes a `.migrated` sidecar with a reviewable unified diff; the original file is untouched until you replace it manually. (The v2 → v3 leg of this chain is not implemented yet — see Status above.)
-2. **Assemble a single-source constitution deterministically.** One `compounds[]` entry pointing at a constitution molecule pinned by SHA produces a byte-for-byte copy of the source file at `.haex-hive/constitution.md`, plus an `install.lock` recording molecule-ID, revision, source URL, and a SHA-256 content hash.
-3. **Enforce one constitution source per repository.** If more than one adopted molecule contributes a constitution, `haex install` refuses with `constitution-already-adopted` before writing. Combine multiple rule sets externally into one constitution molecule when needed.
-4. **Inspect the effective constitution on any satellite.** `haex constitution show` prints an "Assembled from" preface synthesized from `install.lock` (one line per source with molecule-ID + SHA + URL), a `---` separator, then the constitution content. `--no-preface` for scripting.
+## Atom-category conventions
 
-Spec 008 provides the full `haex install` command that publishes molecules atomically across `.haex-hive/`, `.claude/`, `.codex/` and other participating roots, with concurrent-install safety, crash recovery, and delta-driven cleanup when a molecule is removed.
+The v4 molecule-manifest schema treats `atoms{}` as an open `Dict[str, List[str]]` map. Publishers pick category names by convention. Common categories today: `constitution`, `slash_commands`, `agents`, `mcps`.
+
+**Environment-config files** (`flake.nix`, `Dockerfile`, `devcontainer.json`, `.envrc`, `shell.nix`, etc.) can be declared under any category name a publisher chooses. Spec 014 makes no naming commitment here; multi-environment vocabulary (dev/staging/prod), consumer-side selection, and orchestration verbs are the scope of Spec 015 (planned; see [docs/plans/2026-09-07-slot-015-multi-environment-placeholder.md](docs/plans/2026-09-07-slot-015-multi-environment-placeholder.md)).
 
 ## Install
 
-Not published to PyPI yet. Install from a local checkout:
+**Once published to PyPI (upcoming with the `v4.0.0` tag):**
 
 ```bash
-git clone https://github.com/haexmas/haex-hive.git
-cd haex-hive
-pip install -e .
+pipx install spaex
+```
+
+**From a local checkout (development):**
+
+```bash
+git clone https://github.com/haexmas/spaex.git
+cd spaex
+pip install -e '.[dev]'
 ```
 
 Requires Python 3.10+ and Git 2.30+ on `$PATH`. Only runtime dependency is `jsonschema`.
 
-## The `haex` CLI
+## Migrating from haex-hive v3
+
+If your project has a `.haex-hive.json` with `haex_hive_version: "3"`:
 
 ```bash
-haex migrate                # rewrite a v1 .haex-hive.json into the v2 sidecar
-haex install                # produce .haex-hive/constitution.md + install.lock
-haex constitution show      # print the effective constitution to stdout
+pipx install spaex
+cd /path/to/your/project
+spaex migrate
 ```
 
-`haex add <source-url> <molecule-id>...` and `haex remove <molecule-id>...` (Spec 013) will turn adoption and retraction into one command each, writing `.haex-hive.json` and calling `haex install` in the same invocation. Not implemented yet — see Status above. Until then, edit `.haex-hive.json`'s `compounds[]` by hand and run `haex install`.
+`spaex migrate` walks the repo and writes `.migrated` siblings for every v3 (or v1/v2) manifest it finds:
 
-Every write goes through a **sidecar → review → replace** flow: migrations write to `.migrated`, constitution assembly stages into `.haex-hive/*.lock`, and no versioned config file is ever rewritten in place by the tool.
+- `.haex-hive.json` (v1/v2/v3) → `.spaex.json.migrated`
+- publisher-root `manifest.json` → `manifest.json.migrated`
+- per-molecule `manifest.json` → `manifest.json.migrated`
 
-See [specs/008-install-transaction/quickstart.md](specs/008-install-transaction/quickstart.md) for a full walkthrough of each command and every refusal path.
-
-## Core Model
-
-A project opts into haex-hive by committing a `.haex-hive.json` at its root. That file is a **manifest of molecules**: each molecule names an external harness source pinned by commit SHA.
-
-```json
-{
-  "haex_hive_version": "3",
-  "identity": "com.github.acme.my-project",
-  "compounds": [
-    {
-      "source": "https://github.com/haexmas/haex-hive",
-      "revision": "443c3af57255f3d85a57774c1f54439190462534",
-      "molecules": ["com.github.haexmas.haex-hive.constitution"]
-    }
-  ]
-}
-```
-
-`haex install` resolves the molecules and writes both the effective constitution and an `install.lock` recording which SHA supplied it. For a **single-source** manifest, the output is a byte-for-byte copy. A manifest resolving multiple constitution contributions is refused with `constitution-already-adopted` before any output is written; combine those contributions externally into one molecule if needed.
-
-## Non-Negotiable Principles
-
-The constitution enforces eight NON-NEGOTIABLE principles. Every spec, plan, and tool in this repo respects them:
-
-1. **No secrets in git.** Repos carry identity aliases; key material lives in the OS keychain.
-2. **No local absolute paths in versioned config.** Output must resolve identically on Linux, macOS, WSL2.
-3. **Project identity is device-independent.** A project is its git remote (or `.harness-id`), never a path.
-4. **Cross-repo references pin immutable revisions.** Consumed spec, plan, and task content requires a full commit SHA; branch or `HEAD` refs are permitted only for explicit living-document cases.
-5. **External sources are opt-in per project.** No `.haex-hive.json`, no inheritance. The allowlist is a trust boundary.
-6. **Self-modifying instructions are always review-gated.** No in-place rewrites of versioned config; migrations use sidecars.
-7. **Relay unavailability never blocks local work.** The Nostr liveness plane is optional; all content resolves from git.
-8. **No concealment instructions in agent output.** Agents may not tell downstream readers to hide anything from the operator.
-
-The authoritative text lives in [.haex-hive/constitution.md](.haex-hive/constitution.md); amendments follow the procedure in Principle VI.
-
-## Repository Layout
-
-| Path | Purpose |
-|---|---|
-| `src/haex_hive/` | Python package (`haex` CLI, constitution assembly, migration, schema) |
-| `.haex-hive/` | This repo's own assembled constitution and install lock |
-| `.specify/` | Spec-kit workspace: constitutions, molecule definitions, scripts |
-| `specs/` | Numbered specifications (001 → 008) driving the implementation |
-| `docs/adr/` | Architecture decision records |
-| `docs/plans/` | Design documents behind each spec |
-| `tests/` | Pytest suite (`pytest -m 'not slow'` by default) |
-
-## Development
+Review the printed diffs. When satisfied, adopt each proposal:
 
 ```bash
-pip install -e '.[dev]'
-pytest                    # fast suite
-pytest -m slow            # opt-in end-to-end scenarios
-ruff check .
-mypy
+# consumer
+mv .spaex.json.migrated .spaex.json
+rm .haex-hive.json
+
+# publisher-root and each molecule
+mv path/to/manifest.json.migrated path/to/manifest.json
+
+# runtime output (safe to delete; regenerated by install)
+rm -rf .haex-hive/
+
+spaex install
 ```
 
-Contributions follow the PR / conventional-commits flow in
-[docs/adr/0006-development-workflow-pr-flow-and-conventional-commits.md](docs/adr/0006-development-workflow-pr-flow-and-conventional-commits.md).
+After `spaex install` completes, `.spaex/install.lock` is present and byte-identical across two consecutive runs.
 
-## License
+## The v4 vocabulary at a glance
 
-Apache-2.0. See [pyproject.toml](pyproject.toml).
+- **Compound** (`.spaex.json.compounds[]`): a `(source, revision)` pair with a list of adopted `molecules[]`. The consumer's allowlist.
+- **Molecule**: a published, reverse-DNS-identified bundle that a publisher declares in its root `manifest.json` under `molecules{}`.
+- **Atom**: a single delivered file, grouped under a category key in a molecule's `manifest.json` `atoms{}` map.
+
+This vocabulary (compounds -> molecules -> atoms) was introduced by Spec 013 and is unchanged in v4. The v4 delta is limited to two field-name renames: `haex_hive_version` -> `spaex_version` (value `"3"` -> `"4"`) and `haex_hive_min_version` -> `spaex_min_version`.
+
+## Multi-device delegation
+
+Not part of spaex. That is a separate project: [holzi](https://github.com/haexmas/holzi) (Nostr + iroh + MCP agent plane, single-user first). spaex is deliberately scoped to one repo, one device.
+
+## Environment variable
+
+`spaex` honors `$SPAEX_STATE` for the per-invocation state directory (publisher clones, migration proposals). Unset falls back to `~/.local/share/spaex/`.
+
+## Documentation
+
+- Every spec under [specs/](specs/) is authoritative for the mechanism it introduces.
+- Design plans under [docs/plans/](docs/plans/) capture pre-spec requirements.
+- Architecture Decision Records under [docs/adr/](docs/adr/) record decisions that reshape the system.
+- The constitution at [.specify/memory/constitution.md](.specify/memory/constitution.md) is the non-negotiable invariant set every spec, plan, and implementation MUST respect.

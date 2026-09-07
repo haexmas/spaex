@@ -14,11 +14,11 @@ from unittest.mock import Mock
 
 import pytest
 
-from haex_hive.install import inflight
-from haex_hive.install.lock import OwnerToken
-from haex_hive.io import transaction, writer_lock
-from haex_hive.io.state import transaction_paths
-from haex_hive.util.errors import (
+from spaex.install import inflight
+from spaex.install.lock import OwnerToken
+from spaex.io import transaction, writer_lock
+from spaex.io.state import transaction_paths
+from spaex.util.errors import (
     ConstitutionWriterBusyError,
     PostWriteValidationError,
 )
@@ -27,7 +27,7 @@ from haex_hive.util.errors import (
 def _init_project(repo_root: Path) -> Path:
     """Prepare a project fixture with an identity and return its state root."""
     state_root = repo_root / "state"
-    (repo_root / ".haex-hive.json").write_text(
+    (repo_root / ".spaex.json").write_text(
         json.dumps({"identity": "com.example.consumer"})
     )
     return state_root
@@ -42,7 +42,7 @@ def _staged(constitution: bytes, install_lock: bytes) -> list[transaction.Staged
 
 def test_publish_creates_live_on_first_generation(tmp_path: Path) -> None:
     state_root = _init_project(tmp_path)
-    live = tmp_path / transaction.HAEX_HIVE_DIR
+    live = tmp_path / transaction.SPAEX_DIR
 
     transaction.publish_generation(
         live,
@@ -53,13 +53,13 @@ def test_publish_creates_live_on_first_generation(tmp_path: Path) -> None:
 
     assert (live / transaction.CONSTITUTION_NAME).read_bytes() == b"body\n"
     assert (live / transaction.INSTALL_LOCK_NAME).read_bytes() == b"{}\n"
-    assert not (tmp_path / f"{transaction.HAEX_HIVE_DIR}.next").exists()
-    assert not (tmp_path / f"{transaction.HAEX_HIVE_DIR}.prev").exists()
+    assert not (tmp_path / f"{transaction.SPAEX_DIR}.next").exists()
+    assert not (tmp_path / f"{transaction.SPAEX_DIR}.prev").exists()
 
 
 def test_publish_replaces_previous_generation_via_rename_swap(tmp_path: Path) -> None:
     state_root = _init_project(tmp_path)
-    live = tmp_path / transaction.HAEX_HIVE_DIR
+    live = tmp_path / transaction.SPAEX_DIR
 
     transaction.publish_generation(
         live,
@@ -75,13 +75,13 @@ def test_publish_replaces_previous_generation_via_rename_swap(tmp_path: Path) ->
     )
 
     assert (live / transaction.CONSTITUTION_NAME).read_bytes() == b"new\n"
-    assert not (tmp_path / f"{transaction.HAEX_HIVE_DIR}.next").exists()
-    assert not (tmp_path / f"{transaction.HAEX_HIVE_DIR}.prev").exists()
+    assert not (tmp_path / f"{transaction.SPAEX_DIR}.next").exists()
+    assert not (tmp_path / f"{transaction.SPAEX_DIR}.prev").exists()
 
 
 def test_publish_writes_identity_record_under_state_root(tmp_path: Path) -> None:
     state_root = _init_project(tmp_path)
-    live = tmp_path / transaction.HAEX_HIVE_DIR
+    live = tmp_path / transaction.SPAEX_DIR
 
     transaction.publish_generation(
         live,
@@ -98,7 +98,7 @@ def test_publish_writes_identity_record_under_state_root(tmp_path: Path) -> None
 
 def test_post_write_verify_rollback_restores_previous(tmp_path: Path) -> None:
     state_root = _init_project(tmp_path)
-    live = tmp_path / transaction.HAEX_HIVE_DIR
+    live = tmp_path / transaction.SPAEX_DIR
 
     transaction.publish_generation(
         live,
@@ -121,15 +121,15 @@ def test_post_write_verify_rollback_restores_previous(tmp_path: Path) -> None:
 
     assert (live / transaction.CONSTITUTION_NAME).read_bytes() == b"good\n"
     assert (live / transaction.INSTALL_LOCK_NAME).read_bytes() == b"{}\n"
-    assert not (tmp_path / f"{transaction.HAEX_HIVE_DIR}.next").exists()
-    assert not (tmp_path / f"{transaction.HAEX_HIVE_DIR}.prev").exists()
+    assert not (tmp_path / f"{transaction.SPAEX_DIR}.next").exists()
+    assert not (tmp_path / f"{transaction.SPAEX_DIR}.prev").exists()
 
 
 def test_rename_b_failure_restores_previous_generation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     state_root = _init_project(tmp_path)
-    live = tmp_path / transaction.HAEX_HIVE_DIR
+    live = tmp_path / transaction.SPAEX_DIR
     transaction.publish_generation(
         live,
         _staged(b"old\n", b"{}\n"),
@@ -140,7 +140,7 @@ def test_rename_b_failure_restores_previous_generation(
     real_rename = transaction.os.rename
 
     def fail_rename_b(source: str, destination: str) -> None:
-        if Path(source) == tmp_path / f"{transaction.HAEX_HIVE_DIR}.next":
+        if Path(source) == tmp_path / f"{transaction.SPAEX_DIR}.next":
             raise OSError("rename B failed")
         real_rename(source, destination)
 
@@ -154,13 +154,13 @@ def test_rename_b_failure_restores_previous_generation(
         )
 
     assert (live / transaction.CONSTITUTION_NAME).read_bytes() == b"old\n"
-    assert not (tmp_path / f"{transaction.HAEX_HIVE_DIR}.next").exists()
-    assert not (tmp_path / f"{transaction.HAEX_HIVE_DIR}.prev").exists()
+    assert not (tmp_path / f"{transaction.SPAEX_DIR}.next").exists()
+    assert not (tmp_path / f"{transaction.SPAEX_DIR}.prev").exists()
 
 
 def test_post_write_verify_rollback_removes_first_generation(tmp_path: Path) -> None:
     state_root = _init_project(tmp_path)
-    live = tmp_path / transaction.HAEX_HIVE_DIR
+    live = tmp_path / transaction.SPAEX_DIR
 
     def failing_verify() -> None:
         raise PostWriteValidationError(message="mismatch")
@@ -175,13 +175,13 @@ def test_post_write_verify_rollback_removes_first_generation(tmp_path: Path) -> 
         )
 
     assert not live.exists()
-    assert not (tmp_path / f"{transaction.HAEX_HIVE_DIR}.prev").exists()
+    assert not (tmp_path / f"{transaction.SPAEX_DIR}.prev").exists()
 
 
 def test_clean_stale_siblings_removes_next_only(tmp_path: Path) -> None:
     """A leftover `.next/` from a pre-swap crash is deleted; live is untouched."""
-    live = tmp_path / transaction.HAEX_HIVE_DIR
-    next_dir = tmp_path / f"{transaction.HAEX_HIVE_DIR}.next"
+    live = tmp_path / transaction.SPAEX_DIR
+    next_dir = tmp_path / f"{transaction.SPAEX_DIR}.next"
 
     live.mkdir()
     (live / "constitution.md").write_bytes(b"live\n")
@@ -198,8 +198,8 @@ def test_clean_stale_siblings_removes_next_only(tmp_path: Path) -> None:
 
 def test_clean_stale_siblings_retains_prev_only(tmp_path: Path) -> None:
     """A leftover `.prev/` from a mid-swap crash is retained; live is untouched."""
-    live = tmp_path / transaction.HAEX_HIVE_DIR
-    prev_dir = tmp_path / f"{transaction.HAEX_HIVE_DIR}.prev"
+    live = tmp_path / transaction.SPAEX_DIR
+    prev_dir = tmp_path / f"{transaction.SPAEX_DIR}.prev"
 
     live.mkdir()
     (live / "constitution.md").write_bytes(b"live\n")
@@ -215,8 +215,8 @@ def test_clean_stale_siblings_retains_prev_only(tmp_path: Path) -> None:
 
 def test_restore_previous_generation_when_live_is_absent(tmp_path: Path) -> None:
     """Restore the retained pre-image before a retry can read or resolve inputs."""
-    live = tmp_path / transaction.HAEX_HIVE_DIR
-    prev_dir = tmp_path / f"{transaction.HAEX_HIVE_DIR}.prev"
+    live = tmp_path / transaction.SPAEX_DIR
+    prev_dir = tmp_path / f"{transaction.SPAEX_DIR}.prev"
 
     prev_dir.mkdir()
     (prev_dir / "install.lock").write_bytes(b'{"generation_id":"P"}\n')
@@ -230,9 +230,9 @@ def test_restore_previous_generation_when_live_is_absent(tmp_path: Path) -> None
 
 def test_clean_stale_siblings_retains_prev_after_mid_swap_crash(tmp_path: Path) -> None:
     """A mid-swap crash loses `.next/` but retains `.prev/` for a safe retry."""
-    live = tmp_path / transaction.HAEX_HIVE_DIR
-    next_dir = tmp_path / f"{transaction.HAEX_HIVE_DIR}.next"
-    prev_dir = tmp_path / f"{transaction.HAEX_HIVE_DIR}.prev"
+    live = tmp_path / transaction.SPAEX_DIR
+    next_dir = tmp_path / f"{transaction.SPAEX_DIR}.next"
+    prev_dir = tmp_path / f"{transaction.SPAEX_DIR}.prev"
 
     next_dir.mkdir()
     (next_dir / "constitution.md").write_bytes(b"new gen\n")
@@ -249,8 +249,8 @@ def test_clean_stale_siblings_retains_prev_after_mid_swap_crash(tmp_path: Path) 
 
 def test_clean_stale_siblings_removes_validated_prev(tmp_path: Path) -> None:
     """A validated live replacement may remove its stale `.prev/` sibling."""
-    live = tmp_path / transaction.HAEX_HIVE_DIR
-    prev_dir = tmp_path / f"{transaction.HAEX_HIVE_DIR}.prev"
+    live = tmp_path / transaction.SPAEX_DIR
+    prev_dir = tmp_path / f"{transaction.SPAEX_DIR}.prev"
 
     live.mkdir()
     prev_dir.mkdir()
@@ -262,7 +262,7 @@ def test_clean_stale_siblings_removes_validated_prev(tmp_path: Path) -> None:
 
 def test_clean_stale_siblings_is_noop_on_steady_state(tmp_path: Path) -> None:
     """No siblings, no work; live is preserved."""
-    live = tmp_path / transaction.HAEX_HIVE_DIR
+    live = tmp_path / transaction.SPAEX_DIR
     live.mkdir()
     (live / "constitution.md").write_bytes(b"live\n")
 
@@ -272,7 +272,7 @@ def test_clean_stale_siblings_is_noop_on_steady_state(tmp_path: Path) -> None:
 
 def test_clean_stale_siblings_is_noop_when_uninitialized(tmp_path: Path) -> None:
     """No live, no siblings, no work."""
-    live = tmp_path / transaction.HAEX_HIVE_DIR
+    live = tmp_path / transaction.SPAEX_DIR
 
     assert inflight.clean_stale_siblings(live) == (False, False)
     assert not live.exists()

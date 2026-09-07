@@ -22,9 +22,9 @@ def _run_haex(
     repo_root: Path, *args: str, state_root: Path, timeout: float
 ) -> subprocess.CompletedProcess:
     env = os.environ.copy()
-    env["HAEX_HIVE_STATE"] = str(state_root)
+    env["SPAEX_STATE"] = str(state_root)
     return subprocess.run(
-        [sys.executable, "-m", "haex_hive", "--repo-root", str(repo_root), *args],
+        [sys.executable, "-m", "spaex", "--repo-root", str(repo_root), *args],
         capture_output=True,
         env=env,
         timeout=timeout,
@@ -34,7 +34,7 @@ def _run_haex(
 def test_migrate_dry_run_completes_under_5s(self_migration_fixture: dict, tmp_path: Path) -> None:
     consumer = tmp_path / "consumer"
     shutil.copytree(self_migration_fixture["publisher"], consumer)
-    (consumer / ".haex-hive.json").write_text(
+    (consumer / ".spaex.json").write_text(
         json.dumps(
             {
                 "haex_hive_version": "1",

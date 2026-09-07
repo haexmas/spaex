@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from haex_hive.cli import migrate as migrate_cli
+from spaex.cli import migrate as migrate_cli
 
 
 def _make_v3_repo(root: Path) -> None:

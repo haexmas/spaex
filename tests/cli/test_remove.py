@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from haex_hive.util.errors import HaexError, UnknownMoleculeIdError
+from spaex.util.errors import HaexError, UnknownMoleculeIdError
 
 _CONST_ID = "com.example.publisher.const"
 _SKILL_ID = "com.example.publisher.skill"
@@ -56,7 +56,7 @@ def test_single_id_retraction(adopted_repo, haex_add_helpers, monkeypatch) -> No
         molecule_ids=_SKILL_ID,
     )
     assert rc == 0
-    written = json.loads((consumer / ".haex-hive.json").read_text())
+    written = json.loads((consumer / ".spaex.json").read_text())
     assert len(written["compounds"]) == 1
     assert written["compounds"][0]["molecules"] == [_CONST_ID]
 
@@ -73,12 +73,12 @@ def test_multi_id_comma_separated_retraction(
         molecule_ids=f"{_CONST_ID},{_SKILL_ID}",
     )
     assert rc == 0
-    written = json.loads((consumer / ".haex-hive.json").read_text())
+    written = json.loads((consumer / ".spaex.json").read_text())
     assert written["compounds"] == []
-    # `.haex-hive/constitution.md` disappears with the rename-swap of the
+    # `.spaex/constitution.md` disappears with the rename-swap of the
     # live directory; `install.lock` records an empty molecules[] array.
-    assert not (consumer / ".haex-hive" / "constitution.md").exists()
-    lock_data = json.loads((consumer / ".haex-hive" / "install.lock").read_text())
+    assert not (consumer / ".spaex" / "constitution.md").exists()
+    lock_data = json.loads((consumer / ".spaex" / "install.lock").read_text())
     assert lock_data["molecules"] == []
 
 
@@ -125,14 +125,14 @@ def test_empty_compound_dropped_after_retraction(
         molecule_ids=_SKILL_ID,
         revision=other_head,
     )
-    before = json.loads((consumer / ".haex-hive.json").read_text())
+    before = json.loads((consumer / ".spaex.json").read_text())
     assert len(before["compounds"]) == 2
 
     rc = haex_add_helpers["run_remove"](
         consumer, state_root, monkeypatch, molecule_ids=_SKILL_ID
     )
     assert rc == 0
-    after = json.loads((consumer / ".haex-hive.json").read_text())
+    after = json.loads((consumer / ".spaex.json").read_text())
     assert len(after["compounds"]) == 1
     assert after["compounds"][0]["source"] == canonical
 
@@ -141,7 +141,7 @@ def test_unknown_molecule_id_refuses_absent(
     adopted_repo, haex_add_helpers, monkeypatch
 ) -> None:
     consumer = adopted_repo["consumer"]
-    baseline = (consumer / ".haex-hive.json").read_bytes()
+    baseline = (consumer / ".spaex.json").read_bytes()
     with pytest.raises(UnknownMoleculeIdError) as exc_info:
         haex_add_helpers["run_remove"](
             consumer,
@@ -150,7 +150,7 @@ def test_unknown_molecule_id_refuses_absent(
             molecule_ids="com.example.publisher.never-adopted",
         )
     assert "never-adopted" in exc_info.value.context["missing"]
-    assert (consumer / ".haex-hive.json").read_bytes() == baseline
+    assert (consumer / ".spaex.json").read_bytes() == baseline
 
 
 def test_preflight_refuses_mixed_request_without_touching_manifest(
@@ -158,7 +158,7 @@ def test_preflight_refuses_mixed_request_without_touching_manifest(
 ) -> None:
     """`haex remove <present>,<absent>` names every missing id and writes nothing."""
     consumer = adopted_repo["consumer"]
-    baseline = (consumer / ".haex-hive.json").read_bytes()
+    baseline = (consumer / ".spaex.json").read_bytes()
     with pytest.raises(UnknownMoleculeIdError) as exc_info:
         haex_add_helpers["run_remove"](
             consumer,
@@ -174,14 +174,14 @@ def test_preflight_refuses_mixed_request_without_touching_manifest(
     assert "absent-a" in missing
     assert "absent-b" in missing
     assert _CONST_ID not in missing
-    assert (consumer / ".haex-hive.json").read_bytes() == baseline
+    assert (consumer / ".spaex.json").read_bytes() == baseline
 
 
 def test_malformed_manifest_is_a_typed_refusal(
     tmp_path, haex_add_helpers, monkeypatch
 ) -> None:
     consumer = haex_add_helpers["make_consumer"](tmp_path)
-    (consumer / ".haex-hive.json").write_text("{}")
+    (consumer / ".spaex.json").write_text("{}")
 
     with pytest.raises(HaexError) as exc_info:
         haex_add_helpers["run_remove"](
@@ -191,4 +191,4 @@ def test_malformed_manifest_is_a_typed_refusal(
             molecule_ids=_CONST_ID,
         )
 
-    assert exc_info.value.diagnostic_key == "haex-hive-json-invalid"
+    assert exc_info.value.diagnostic_key == "spaex-json-invalid"

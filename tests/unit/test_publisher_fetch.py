@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from haex_hive.git import publisher_fetch
-from haex_hive.migrate.transform import clone_dir
-from haex_hive.util.errors import RevisionNotFoundError, SourceUrlInvalidError
+from spaex.git import publisher_fetch
+from spaex.migrate.transform import clone_dir
+from spaex.util.errors import RevisionNotFoundError, SourceUrlInvalidError
 
 
 def _git(cwd: Path, *args: str) -> str:

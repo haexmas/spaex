@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from haex_hive.model.source_url import CanonicalSourceUrl, canonicalize
-from haex_hive.util.errors import CredentialInUrlError, UnsupportedSchemeError
+from spaex.model.source_url import CanonicalSourceUrl, canonicalize
+from spaex.util.errors import CredentialInUrlError, UnsupportedSchemeError
 
 
 @pytest.mark.parametrize(

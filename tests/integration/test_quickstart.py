@@ -21,9 +21,9 @@ def _run_haex(
     stdin_bytes: bytes | None = None,
 ) -> subprocess.CompletedProcess:
     env = os.environ.copy()
-    env["HAEX_HIVE_STATE"] = str(state_root)
+    env["SPAEX_STATE"] = str(state_root)
     return subprocess.run(
-        [sys.executable, "-m", "haex_hive", "--repo-root", str(repo_root), *args],
+        [sys.executable, "-m", "spaex", "--repo-root", str(repo_root), *args],
         input=stdin_bytes if stdin_bytes is not None else b"",
         capture_output=True,
         env=env,
@@ -37,7 +37,7 @@ def test_path1_migrate_produces_schema_valid_v4(
     and the consumer sidecar lives at `.spaex.json.migrated`."""
     consumer = tmp_path / "consumer"
     shutil.copytree(self_migration_fixture["publisher"], consumer)
-    (consumer / ".haex-hive.json").write_text(
+    (consumer / ".spaex.json").write_text(
         json.dumps(
             {
                 "haex_hive_version": "1",
@@ -70,13 +70,13 @@ def test_path1_migrate_produces_schema_valid_v4(
     assert data["spaex_version"] == "4"
     assert "haex_hive_version" not in data
 
-    # Adopt every proposal (consumer becomes .spaex.json + delete .haex-hive.json;
+    # Adopt every proposal (consumer becomes .spaex.json + delete .spaex.json;
     # publisher-root + per-molecule manifest.json.migrated overwrite their
     # originals). Only after all `.migrated` siblings replace their originals
     # does the rerun report "already at v4".
     for migrated in list(consumer.rglob("*.migrated")):
         if migrated.name == ".spaex.json.migrated":
-            (consumer / ".haex-hive.json").unlink(missing_ok=True)
+            (consumer / ".spaex.json").unlink(missing_ok=True)
             migrated.replace(consumer / ".spaex.json")
         else:
             migrated.replace(migrated.with_name(migrated.name[: -len(".migrated")]))
@@ -99,15 +99,15 @@ def test_path2_single_source_assemble_and_show(
     source_body = (
         single_source_constitution_fixture["publisher"] / "constitution" / "constitution.md"
     ).read_bytes()
-    constitution = (consumer / ".haex-hive" / "constitution.md").read_bytes()
+    constitution = (consumer / ".spaex" / "constitution.md").read_bytes()
     assert constitution == source_body
-    lock_data_1 = json.loads((consumer / ".haex-hive" / "install.lock").read_bytes())
+    lock_data_1 = json.loads((consumer / ".spaex" / "install.lock").read_bytes())
 
     second = _run_haex(consumer, "install", state_root=state_root)
     assert second.returncode == 0
     assert second.stdout.decode().strip() == "no changes"
-    assert (consumer / ".haex-hive" / "constitution.md").read_bytes() == constitution
-    lock_data_2 = json.loads((consumer / ".haex-hive" / "install.lock").read_bytes())
+    assert (consumer / ".spaex" / "constitution.md").read_bytes() == constitution
+    lock_data_2 = json.loads((consumer / ".spaex" / "install.lock").read_bytes())
     assert lock_data_1 == lock_data_2, "no-op re-install must leave install.lock untouched"
 
     show = _run_haex(consumer, "constitution", "show", state_root=state_root)
@@ -130,4 +130,4 @@ def test_path3_multi_source_refuses_before_writing(
     proc = _run_haex(consumer, "install", state_root=state_root)
     assert proc.returncode == 2
     assert b"key=constitution-already-adopted" in proc.stderr
-    assert not (consumer / ".haex-hive" / "constitution.md").exists()
+    assert not (consumer / ".spaex" / "constitution.md").exists()

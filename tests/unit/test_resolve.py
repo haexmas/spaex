@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
-from haex_hive.constitution.resolve import resolve_constitution_contributions
-from haex_hive.migrate.transform import clone_dir
-from haex_hive.model.consumer_manifest import CompoundEntry, ConfigEntry, ConsumerManifest
-from haex_hive.util.errors import (
+from spaex.constitution.resolve import resolve_constitution_contributions
+from spaex.migrate.transform import clone_dir
+from spaex.model.consumer_manifest import CompoundEntry, ConfigEntry, ConsumerManifest
+from spaex.util.errors import (
     AtomIdCollisionError,
     MissingAtomManifestError,
     MissingPublisherManifestError,
@@ -61,7 +61,7 @@ def _clone(state_root: Path, canonical: str, publisher: Path) -> None:
 
 def _manifest(compounds: list[CompoundEntry]) -> ConsumerManifest:
     return ConsumerManifest(
-        haex_hive_version="3",
+        spaex_version="3",
         identity="com.github.example.consumer",
         compounds=tuple(compounds),
     )
@@ -74,14 +74,14 @@ def test_publisher_key_atom_id_mismatch(tmp_path: Path) -> None:
     sha = _publish(
         publisher,
         {
-            "haex_hive_version": "3",
+            "spaex_version": "4",
             "publisher": "com.github.example.publisher",
             "molecules": {molecule_key: {"path": "c", "version": "1.0.0"}},
         },
         {
             "c": (
                 {
-                    "haex_hive_version": "3",
+                    "spaex_version": "4",
                     "id": "com.github.example.publisher.wrong-id",
                     "version": "1.0.0",
                     "priority": 100,
@@ -114,14 +114,14 @@ def test_version_mismatch(tmp_path: Path) -> None:
     sha = _publish(
         publisher,
         {
-            "haex_hive_version": "3",
+            "spaex_version": "4",
             "publisher": "com.github.example.publisher",
             "molecules": {molecule_id: {"path": "c", "version": "2.0.0"}},
         },
         {
             "c": (
                 {
-                    "haex_hive_version": "3",
+                    "spaex_version": "4",
                     "id": molecule_id,
                     "version": "1.0.0",
                     "priority": 100,
@@ -147,7 +147,7 @@ def test_atom_not_declared_by_publisher(tmp_path: Path) -> None:
     sha = _publish(
         publisher,
         {
-            "haex_hive_version": "3",
+            "spaex_version": "4",
             "publisher": "com.github.example.publisher",
             "molecules": {
                 "com.github.example.publisher.other": {"path": "other", "version": "1.0.0"}
@@ -156,7 +156,7 @@ def test_atom_not_declared_by_publisher(tmp_path: Path) -> None:
         {
             "other": (
                 {
-                    "haex_hive_version": "3",
+                    "spaex_version": "4",
                     "id": "com.github.example.publisher.other",
                     "version": "1.0.0",
                     "priority": 100,
@@ -190,14 +190,14 @@ def test_atom_id_collision_across_two_source_revision_pairs(tmp_path: Path) -> N
     sha_a = _publish(
         publisher_a,
         {
-            "haex_hive_version": "3",
+            "spaex_version": "4",
             "publisher": "com.github.example.publisher",
             "molecules": {molecule_id: {"path": "c", "version": "1.0.0"}},
         },
         {
             "c": (
                 {
-                    "haex_hive_version": "3",
+                    "spaex_version": "4",
                     "id": molecule_id,
                     "version": "1.0.0",
                     "priority": 100,
@@ -212,14 +212,14 @@ def test_atom_id_collision_across_two_source_revision_pairs(tmp_path: Path) -> N
     sha_b = _publish(
         publisher_b,
         {
-            "haex_hive_version": "3",
+            "spaex_version": "4",
             "publisher": "com.github.example.publisher",
             "molecules": {molecule_id: {"path": "c", "version": "1.0.0"}},
         },
         {
             "c": (
                 {
-                    "haex_hive_version": "3",
+                    "spaex_version": "4",
                     "id": molecule_id,
                     "version": "1.0.0",
                     "priority": 100,
@@ -251,14 +251,14 @@ def test_same_atom_same_source_revision_is_not_a_collision(tmp_path: Path) -> No
     sha = _publish(
         publisher,
         {
-            "haex_hive_version": "3",
+            "spaex_version": "4",
             "publisher": "com.github.example.publisher",
             "molecules": {molecule_id: {"path": "c", "version": "1.0.0"}},
         },
         {
             "c": (
                 {
-                    "haex_hive_version": "3",
+                    "spaex_version": "4",
                     "id": molecule_id,
                     "version": "1.0.0",
                     "priority": 100,
@@ -289,7 +289,7 @@ def test_non_contribution_atom_is_filtered_not_errored(tmp_path: Path) -> None:
     sha = _publish(
         publisher,
         {
-            "haex_hive_version": "3",
+            "spaex_version": "4",
             "publisher": "com.github.example.publisher",
             "molecules": {molecule_id: {"path": "c", "version": "1.0.0"}},
         },
@@ -299,7 +299,7 @@ def test_non_contribution_atom_is_filtered_not_errored(tmp_path: Path) -> None:
     (publisher / "c" / "manifest.json").write_text(
         json.dumps(
             {
-                "haex_hive_version": "3",
+                "spaex_version": "4",
                 "id": molecule_id,
                 "version": "1.0.0",
                 "priority": 100,
@@ -329,7 +329,7 @@ def test_effective_priority_overrides_lexical_molecule_order(tmp_path: Path) -> 
     sha = _publish(
         publisher,
         {
-            "haex_hive_version": "3",
+            "spaex_version": "4",
             "publisher": "com.github.example.publisher",
             "molecules": {
                 ids["alpha"]: {"path": "alpha", "version": "1.0.0"},
@@ -340,7 +340,7 @@ def test_effective_priority_overrides_lexical_molecule_order(tmp_path: Path) -> 
         {
             "alpha": (
                 {
-                    "haex_hive_version": "3",
+                    "spaex_version": "4",
                     "id": ids["alpha"],
                     "version": "1.0.0",
                     "priority": 200,
@@ -350,7 +350,7 @@ def test_effective_priority_overrides_lexical_molecule_order(tmp_path: Path) -> 
             ),
             "beta": (
                 {
-                    "haex_hive_version": "3",
+                    "spaex_version": "4",
                     "id": ids["beta"],
                     "version": "1.0.0",
                     "priority": 100,
@@ -360,7 +360,7 @@ def test_effective_priority_overrides_lexical_molecule_order(tmp_path: Path) -> 
             ),
             "gamma": (
                 {
-                    "haex_hive_version": "3",
+                    "spaex_version": "4",
                     "id": ids["gamma"],
                     "version": "1.0.0",
                     "priority": 300,
