@@ -6,6 +6,12 @@
 **Input**: User description: "Spec 016: Molecule install-hooks in spaex install. Full design already captured in docs/plans/2026-09-08-spec-016-molecule-install-hooks-design.md (PR #83 merged 2026-09-08)."
 **Design reference**: [docs/plans/2026-09-08-spec-016-molecule-install-hooks-design.md](../../docs/plans/2026-09-08-spec-016-molecule-install-hooks-design.md)
 
+## Clarifications
+
+### Session 2026-09-08
+
+- Q: Which environment variables does spaex pass to the hook subprocess? → A: Full env inheritance — spaex passes its complete `os.environ` to the hook verbatim, matching pip/npm postinstall behaviour. Sanitising or filtering would be security theatre while the trust model is otherwise pin-based-only (Assumptions section) and would break realistic hooks like `graphify-first-authoring/install.py` that need `PATH`, `HOME`, `XDG_*`, `SSH_AUTH_SOCK`, and harness-specific tokens to complete their declared setup.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Molecule author ships a setup script that spaex runs on adopt (Priority: P1)
@@ -110,7 +116,7 @@ When a consumer adopts several molecules in one project, each with its own insta
 - **FR-010**: install_hooks MUST execute in ascending effective-priority order, with ties broken by ascending UTF-8 byte order of the molecule id (same order as constitution assembly).
 - **FR-011**: install_hooks MUST execute before `publish_constitution()` (or its Spec-008 generalisation) seals `install.lock` and swaps the staged generation into the published root.
 - **FR-012**: The hook subprocess MUST run with `cwd` set to the consumer repository root.
-- **FR-013**: The hook subprocess MUST inherit stdin, stdout, and stderr from the invoking `spaex` process. spaex MUST NOT capture, buffer, or prefix the hook's stdio streams while the process is running.
+- **FR-013**: The hook subprocess MUST inherit stdin, stdout, stderr, and the invoking `spaex` process's complete environment (`os.environ`) verbatim, with no allowlist filtering and no denylist redaction. spaex MUST NOT capture, buffer, or prefix the hook's stdio streams while the process is running.
 
 **Script path containment**
 
@@ -166,7 +172,7 @@ When a consumer adopts several molecules in one project, each with its own insta
 ## Assumptions
 
 - **`spaex install` is already invoked implicitly by `spaex add`**: verified in-session on 2026-09-07; the observation "installed generation g_..." confirms `spaex add` runs install as part of its flow. This spec assumes that behaviour continues and does not re-specify it.
-- **Trust model is pin-based**: the consumer's decision to trust arbitrary publisher code is made once at pin time (`spaex add --revision <sha>`). The publisher SHA is treated as the sole trust anchor; hooks run with full consumer-user permissions with no additional consent step per invocation. Preemptive sandboxing is explicitly out of scope for v1 and revisited if concrete security incidents surface.
+- **Trust model is pin-based**: the consumer's decision to trust arbitrary publisher code is made once at pin time (`spaex add --revision <sha>`). The publisher SHA is treated as the sole trust anchor; hooks run with full consumer-user permissions with no additional consent step per invocation, AND with the invoking `spaex` process's complete environment (per FR-013 and the 2026-09-08 clarification). Preemptive sandboxing (env allowlists, sandbox filesystems, network restrictions) is explicitly out of scope for v1 and revisited if concrete security incidents surface.
 - **Reversibility is out of scope**: `spaex remove` cannot undo hook side effects (git hooks, gitignore entries, provisioned tools). This is a fundamental consequence of allowing arbitrary code execution. Consumers who need full reversibility should use a declarative tool (nix, terraform); spaex does not aspire to that in v1. Documented in `spaex remove` output as a warning when the removed molecule declared an install_hook.
 - **Interactive prompts are supported in TTY only**: the `input()` builtin in the hook subprocess reads from the inherited stdin. In non-TTY contexts (CI, piped stdin, `< /dev/null`), `input()` raises `EOFError`. Molecule authors are expected to catch this and fall back to a sensible default; the reference implementation in graphify-first-authoring/install.py already follows this pattern. spaex does not synthesise a stdin.
 - **The molecule cache directory is immutable per pinned SHA**: the `<molecule-cache-dir>` used for script resolution and cache-containment checks is the extracted publisher tree at the pinned revision, populated by the existing publisher-fetch machinery. This spec does not modify that machinery.
