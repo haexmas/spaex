@@ -32,12 +32,13 @@ Explicitly scoped down from the original D15, based on 2026-09-08 operator decis
 Introduces one new module, `spaex.git.store` (or `spaex.install.molecule_store` — naming decided during `/speckit-plan`), exposing:
 
 ```python
-def get_or_extract(repo_dir: Path, revision: str, molecule_path: str, state_root: Path) -> Path:
+def get_or_extract(repo_dir: Path, source_url: str, revision: str, molecule_path: str, state_root: Path) -> Path:
     """Return the local directory containing molecule_path's tree at revision.
 
     Extracts via `git archive <revision> -- <molecule_path>` piped into
     Python's stdlib `tarfile` (not the external `tar` binary — see Extraction
-    mechanism below), into a cache keyed by (repo_dir, revision, molecule_path).
+    mechanism below), into a cache keyed by (source_url, revision, molecule_path).
+    `repo_dir` is the corresponding local bare clone used to perform extraction.
     Idempotent: a second call with the same key returns the same directory
     without re-extracting. Safe under concurrent processes via the existing
     `ManifestLockContext` pattern (matching `publisher_fetch.ensure_object`'s
@@ -51,7 +52,7 @@ def get_or_extract(repo_dir: Path, revision: str, molecule_path: str, state_root
 SPAEX_STATE/molecule-store/<source-digest>/<revision>/<molecule-path>/
 ```
 
-- `<source-digest>`: same SHA-256-hex-16 digest scheme `clone_dir()` already uses for the `repos/` tier, applied to the canonical source URL. Reuses the existing digest helper rather than inventing a new one.
+- `<source-digest>`: `clone_dir(state_root, source_url).name`, using the same SHA-256-hex-16 digest scheme `clone_dir()` already uses for the `repos/` tier. `source_url` is the stable identity; the local `repo_dir` path is never used as a cache key.
 - `<revision>`: the canonical full 40-hex SHA returned by
   `git_revparse.full_sha()` (immutable — safe to cache indefinitely, no
   staleness ever possible for a fixed revision). Callers MUST resolve symbolic
@@ -63,7 +64,7 @@ Presence of the final directory (post successful extraction) is itself the cache
 
 ### Extraction mechanism
 
-`git archive <revision> -- <molecule_path>` run against the bare clone (`repo_dir`, from the existing `repos/` tier — no new clone step needed), producing a tar stream on stdout. That stream is extracted using Python's stdlib `tarfile`, **not** the external `tar` binary:
+`git archive <revision> -- <molecule_path>` run against the existing bare clone (`repo_dir`, from the existing `repos/` tier — no new clone step needed), producing a tar stream on stdout. The caller supplies the canonical `source_url` so the molecule-store cache uses the same source digest as the repository tier. That stream is extracted using Python's stdlib `tarfile`, **not** the external `tar` binary:
 
 - **Portability**: matches this project's "Python-only, py3-none-any wheel, Linux/macOS/WSL2" target (plan.md Technical Context, unchanged by this spec). Shelling out to `tar` would add a new external-binary dependency the project doesn't otherwise have (git and the configured interpreter are the only external tools spaex already assumes).
 - **Path-safety**: `tarfile.extractall(path, filter="data")` (Python 3.12+) refuses member paths that would escape `path` via `..` segments, refuses device files, and strips unsafe metadata. On Python 3.10/3.11 (this project's stated minimum), `filter="data"` is unavailable; the extraction helper MUST perform equivalent manual validation — for each tar member, resolve its target path and verify containment under the destination directory before extracting, rejecting any member that would escape (symlink or `..`-based). For symlink and hardlink members, validate the link target against the same destination root, and reject a member whose parent would traverse a link created by an earlier member; validation MUST happen in archive order so a later file cannot follow an earlier escaping link. The helper MUST NOT call an unfiltered `extractall()` as a fallback. This applies even though `git archive` only ever emits paths under the requested `molecule_path` prefix from a repository spaex itself does not control the trustworthiness of — the pinned SHA authenticates the publisher's bytes, but this extraction-time check is the same defense-in-depth principle Spec 016's `canonicalise_within` already applies at hook-invocation time (FR-014/015), just one layer earlier (at materialization time, before any file is used for anything).
@@ -77,6 +78,8 @@ Presence of the final directory (post successful extraction) is itself the cache
   extraction mid-way never leaves a partially-extracted directory at the
   final path, and the returned `final_dir` directly contains `manifest.json`,
   `constitution.md`, `install.py`, etc. — it MUST NOT contain an extra nested
+  `molecule_path` directory. If a successful archive contains no members, the
+  implementation MUST still create and atomically publish the requested empty
   `molecule_path` directory. This mirrors `publisher_fetch.ensure_object`'s
   own temp-dir-then-`os.replace` pattern for the bare clone itself.
 - **Locking**: wrap extraction in a `ManifestLockContext` keyed off the destination directory (same pattern `ensure_object` uses: `repo_dir.with_name(repo_dir.name + ".lock")`), so two concurrent `spaex install` processes racing to extract the same `(source, revision, molecule_path)` don't corrupt each other's temp directories.
