@@ -1,8 +1,8 @@
-# Quickstart: publish and adopt a molecule with `install_hook`
+# Post-implementation acceptance walkthrough: publish and adopt a molecule with `install_hook`
 
-**Feature**: 016 | **Date**: 2026-09-08 | **Runnable acceptance for**: [spec.md § User Story 1](./spec.md#user-story-1---molecule-author-ships-a-setup-script-that-spaex-runs-on-adopt-priority-p1)
+**Feature**: 016 | **Date**: 2026-09-08 | **Status**: post-implementation acceptance walkthrough; requires the completed Spec 016 implementation and spaex 4.1.0 release
 
-This quickstart is a minimal, end-to-end walk-through that exercises the P1 story: a molecule author declares `install_hook` in the manifest, a consumer adopts the molecule via `spaex add`, and the hook runs producing a verifiable side effect. Uses only spaex 4.1.0 CLI + git; no external dependencies.
+This walkthrough is intentionally not runnable against the current spaex 4.0.x/main implementation. After Spec 016 is implemented and released, it exercises the P1 story: a molecule author declares `install_hook` in the manifest, a consumer adopts the molecule via `spaex add`, and the hook runs producing a verifiable side effect. It uses only the spaex 4.1.0 CLI and git; no external dependencies.
 
 ## Prerequisites
 
@@ -79,7 +79,7 @@ GITIGNORE_LINE = "hello-hook-out/"
 def main() -> int:
     repo = Path.cwd()  # cwd is the consumer repo root, per FR-012
 
-    marker_file = repo / ".spaex" / "hello-hook.marker"
+    marker_file = repo / ".spaex-hook" / "hello-hook.marker"
     marker_file.parent.mkdir(parents=True, exist_ok=True)
     if not marker_file.exists():
         marker_file.write_text(MARKER + "\n", encoding="utf-8")
@@ -154,7 +154,7 @@ Expected output includes:
 
 ```
 installed generation g_<timestamp>_<pid>
-hello-hook: wrote .spaex/hello-hook.marker
+hello-hook: wrote .spaex-hook/hello-hook.marker
 hello-hook: appended hello-hook-out/ to .gitignore
 added 1 molecule(s) at file:///tmp/spaex-016-quickstart/publisher@<12-char-sha>:
   com.example.demo.hello-hook
@@ -181,7 +181,7 @@ grep -c "^hello-hook-out/$" .gitignore
 # → 1
 
 # The hook output confirms idempotency
-# → "hello-hook: .gitignore already contains ..., skipping"
+# → "hello-hook: hello-hook-out/ already in .gitignore, skipping"
 ```
 
 ## 4. Exercise the `--no-install-hooks` opt-out (User Story 3)
@@ -189,11 +189,11 @@ grep -c "^hello-hook-out/$" .gitignore
 Remove the marker to prove the hook does not run:
 
 ```bash
-rm .spaex/hello-hook.marker
+rm .spaex-hook/hello-hook.marker
 spaex --repo-root . install --no-install-hooks
 
 # Marker was NOT recreated
-ls .spaex/hello-hook.marker 2>&1
+ls .spaex-hook/hello-hook.marker 2>&1
 # → (no such file)
 
 # install.lock records skipped
@@ -205,8 +205,8 @@ Re-run without the flag to confirm skipping is per-invocation only:
 
 ```bash
 spaex --repo-root . install
-ls .spaex/hello-hook.marker
-# → .spaex/hello-hook.marker (present)
+ls .spaex-hook/hello-hook.marker
+# → .spaex-hook/hello-hook.marker (present)
 python3 -c "import json; d=json.load(open('.spaex/install.lock')); print(d['molecules'][0]['hook_status'])"
 # → ok
 ```
@@ -220,11 +220,16 @@ In the publisher repo:
 ```bash
 cd /tmp/spaex-016-quickstart/publisher
 # Make the hook fail
-cat >> hello-hook/install.py <<'PY'
+python3 - <<'PY'
+from pathlib import Path
 
-
-# Force failure for User Story 2 demo
-raise SystemExit(1)
+path = Path("hello-hook/install.py")
+text = path.read_text(encoding="utf-8")
+needle = '    return 0\n\nif __name__ == "__main__":'
+replacement = '    return 1\n\nif __name__ == "__main__":'
+if needle not in text:
+    raise SystemExit("could not find main() return in hello-hook/install.py")
+path.write_text(text.replace(needle, replacement, 1), encoding="utf-8")
 PY
 git add hello-hook/install.py
 git commit -qm "hello-hook: force failure for demo"
@@ -243,7 +248,30 @@ spaex --repo-root . add \
 # install.lock records hook_status: "failed", CLI exits 0
 ```
 
-To demonstrate the `abort` policy, change the manifest's `on_failure` to `"abort"`, republish, and repin: the install fails, the transaction rolls back, and `.spaex.json` is unchanged.
+To demonstrate the `abort` policy with the same failing hook, change the
+manifest's `on_failure` to `"abort"`, republish, and repin:
+
+```bash
+cd /tmp/spaex-016-quickstart/publisher
+python3 - <<'PY'
+from pathlib import Path
+
+path = Path("hello-hook/manifest.json")
+text = path.read_text(encoding="utf-8")
+path.write_text(text.replace('"on_failure": "warn"', '"on_failure": "abort"'), encoding="utf-8")
+PY
+git add hello-hook/manifest.json
+git commit -qm "hello-hook: demonstrate abort policy"
+PUBLISHER_SHA_ABORT=$(git rev-parse HEAD)
+
+cd /tmp/spaex-016-quickstart/consumer
+spaex --repo-root . add \
+  file:///tmp/spaex-016-quickstart/publisher \
+  com.example.demo.hello-hook \
+  --revision "$PUBLISHER_SHA_ABORT"
+# Expected: install fails with install-failed, managed .spaex state rolls back,
+# and the delegated .spaex.json compound update is reverted.
+```
 
 ## 6. Cleanup
 
@@ -263,4 +291,4 @@ Consumer artefacts observed (all locations relative to the consumer repo root):
 - `.spaex/constitution.md` (assembled from the molecule's constitution atom)
 - `.spaex/install.lock` (new `hook_status` field on the per-molecule record)
 - `.gitignore` (line appended by the hook)
-- `.spaex/hello-hook.marker` (side-effect file written by the hook)
+- `.spaex-hook/hello-hook.marker` (side-effect file written by the hook outside the managed `.spaex/` generation)

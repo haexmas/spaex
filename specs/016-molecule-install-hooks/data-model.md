@@ -86,6 +86,18 @@ The `.spaex/install.lock` file records one entry per adopted molecule for the cu
 - Older install-lock generations written before this feature landed have no `hook_status` field on any record. Reading such a lock is unchanged.
 - Reading a new lock with an unfamiliar `hook_status` value (from a future spaex) MUST fall through to the schema's enum-validation, which rejects unknown values. There is no "unknown status" tolerance path.
 
+### Hook side effects and the managed-generation boundary
+
+Hooks run with the consumer repository root as their working directory, so
+they may create or modify consumer-owned files such as `.gitignore`,
+`.spaex-hook/hello-hook.marker`, git hooks, or provisioned tools. These are
+external hook side effects: spaex MUST NOT copy them into the staged
+generation, include them in `install.lock`, or pretend that the transaction
+can undo them. Hook scripts MUST NOT write to paths under the spaex-managed
+generation; writes there are outside this feature's contract. The example
+marker therefore lives under `.spaex-hook/`, outside the managed `.spaex/`
+generation.
+
 **Hook-only transaction** (FR-025):
 - When atom bytes are unchanged between two successive `spaex install` invocations but the resulting `hook_status` records differ from the current install.lock content, spaex publishes a new install.lock generation whose only change is the hook-status delta. Atom file bytes are not rewritten.
 - When both atom bytes and hook-status records are unchanged, spaex performs the usual clean no-op after the hooks have run.
@@ -96,7 +108,7 @@ There are no long-lived stateful entities introduced by this feature. Every `spa
 
 1. Resolves the compounds → constructs the `ResolvedMolecule` collection with `install_hook` populated for each hook-carrying molecule.
 2. Materialises atoms into the Spec-008 staging generation.
-3. For each `ResolvedMolecule` with `install_hook != None`, in sort order, executes the hook.
+3. For each `ResolvedMolecule` with `install_hook != None`, in sort order, executes the hook with the consumer repository root as `cwd`; hook-created side effects remain outside the staged generation.
 4. Computes the `hook_status` for each record.
 5. Publishes the install.lock (with hook_status fields) and swaps the staged generation, OR aborts and rolls back per `on_failure: "abort"` policy.
 

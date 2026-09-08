@@ -13,7 +13,9 @@
 
 Add an optional `install_hook` field to molecule-manifest v4. `spaex install` invokes each declared hook as a normal subprocess (arbitrary code execution, consumer-user permissions, full env inheritance) after atom materialization and before publishing the install.lock generation. Per-molecule `on_failure: "abort" | "warn"` selects between Spec-008 transaction rollback and continue-with-`hook_status`-recorded semantics. Global `--no-install-hooks` opt-out. Additive, backwards-compatible schema addition; existing molecules without the field remain valid. Target spaex 4.1.0 (MINOR bump). Concrete downstream unblock: graphify-first-authoring 1.0.3 lets three current consumers (haex-crdt, specifyr, holzi) stop maintaining a manual `.gitignore` line per repo.
 
-Ships as **one PR against `main`** (feature is contained; the design doc landed separately in PR #83, so this PR is implementation + tests + docs only).
+This PR contains **only the Speckit design artifacts** for the feature. The
+implementation, tests, documentation updates, and Molecule version changes
+are follow-up work after this specification/planning PR is reviewed.
 
 ## Technical Context
 
@@ -75,14 +77,14 @@ src/spaex/
 │   └── data/
 │       ├── molecule-manifest.v4.schema.json  # Extend: new install_hook property under type=object
 │       └── install-lock.v4.schema.json       # Extend: optional hook_status enum on per-molecule record
+├── constitution/
+│   └── resolve.py                   # Extend resolver: retain hook-only molecules, priority sort
 ├── install/
-│   ├── __init__.py                  # Resolver + orchestration: retain hook-only molecules, priority sort
 │   ├── manifest_lock.py             # No change
-│   ├── hook_runner.py               # NEW: subprocess invocation, cache-containment check, on_failure application
-│   └── ...                          # publish flow: hooks run before publish_constitution() commit
+│   └── hook_runner.py               # NEW: subprocess invocation, cache-containment check, on_failure application
 ├── cli/
 │   ├── add.py                       # New flag: --no-install-hooks (propagated to install subroutine)
-│   ├── install.py                   # New flag: --no-install-hooks (existing install-failed key at line 232 reused)
+│   ├── install.py                   # Orchestrate hooks before publication; reuse install-failed key
 │   └── remove.py                    # New behavior: WARN on removal of a molecule that declared install_hook
 └── util/
     └── path_containment.py          # NEW: canonicalise + descendant-check helper (or extend existing util)
@@ -129,12 +131,13 @@ Output: [research.md](./research.md)
    - `cli-flags.md`: `--no-install-hooks` flag contract on `spaex add` and `spaex install`, with propagation semantics between the two commands.
 
 3. **Quickstart** ([quickstart.md](./quickstart.md)):
-   - Minimal end-to-end example: publisher molecule with a trivial install_hook, consumer adopting it via `spaex add`, expected artefacts after execution. Serves as the runnable acceptance-scenario documentation for User Story 1.
+   - Minimal end-to-end example: publisher molecule with a trivial install_hook, consumer adopting it via `spaex add`, expected artefacts after execution. Serves as the post-implementation acceptance-scenario documentation for User Story 1.
 
 4. **Agent context update**:
    - Update `CLAUDE.md` between `<!-- SPECKIT START -->` and `<!-- SPECKIT END -->` markers to point to this plan file.
 
-Output: data-model.md, contracts/*, quickstart.md, updated CLAUDE.md.
+Output: data-model.md, contracts/*, and a post-implementation quickstart;
+there is no root `CLAUDE.md` in this repository to update.
 
 ## Phase 2 handoff
 
