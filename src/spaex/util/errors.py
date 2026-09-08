@@ -198,6 +198,23 @@ class ContributionFileNotFoundError(HaexError):
 
 
 @dataclass
+class MoleculeTreePathNotFoundError(HaexError):
+    diagnostic_key: str = "molecule-tree-path-not-found"
+    exit_code: int = exit_codes.IO_REFUSE
+    hint: str = "Verify the molecule path exists in the publisher repository at the pinned revision."
+
+
+@dataclass
+class MoleculeTreeExtractionError(HaexError):
+    diagnostic_key: str = "molecule-tree-extraction-failed"
+    exit_code: int = exit_codes.IO_REFUSE
+    hint: str = (
+        "Check the publisher repository is reachable and the local cache is writable; "
+        "if the failure persists, the source content may be malformed."
+    )
+
+
+@dataclass
 class PostWriteValidationError(HaexError):
     diagnostic_key: str = "post-write-validation-failed"
     exit_code: int = exit_codes.POST_WRITE_VALIDATION
