@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/haexmas/spaex/schemas/install-lock.v4.hook-status.fragment.schema.json",
+  "title": "spaex install-lock v4 - hook_status fragment (spec 016)",
+  "description": "Schema fragment that MUST be merged into src/spaex/schema/data/install-lock.v4.schema.json to add the optional per-molecule hook_status field. Structurally additive: existing per-molecule records without hook_status remain valid. The extension applies to the per-molecule record shape referenced under the top-level `molecules` array.",
+  "properties": {
+    "hook_status": {
+      "enum": ["ok", "failed", "skipped"],
+      "description": "Outcome of this molecule's install_hook invocation for the current generation. Present ONLY when the pinned molecule manifest declared install_hook. 'ok' = hook was enabled and exited 0. 'failed' = hook could not be launched, violated cache containment, or exited non-zero under on_failure='warn'. 'skipped' = operator supplied --no-install-hooks. A hook failure under on_failure='abort' produces no record because the entire generation rolls back."
+    }
+  }
+}
