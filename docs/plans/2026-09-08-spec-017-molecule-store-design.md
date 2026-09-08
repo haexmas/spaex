@@ -52,7 +52,11 @@ SPAEX_STATE/molecule-store/<source-digest>/<revision>/<molecule-path>/
 ```
 
 - `<source-digest>`: same SHA-256-hex-16 digest scheme `clone_dir()` already uses for the `repos/` tier, applied to the canonical source URL. Reuses the existing digest helper rather than inventing a new one.
-- `<revision>`: the full 40-hex SHA (immutable — safe to cache indefinitely, no staleness ever possible for a fixed revision).
+- `<revision>`: the canonical full 40-hex SHA returned by
+  `git_revparse.full_sha()` (immutable — safe to cache indefinitely, no
+  staleness ever possible for a fixed revision). Callers MUST resolve symbolic
+  or abbreviated input to this SHA before constructing the key or invoking
+  `git archive`.
 - `<molecule-path>`: the publisher-declared molecule directory path (already validated as a safe `RepoRelativePath` — no `..`, no control characters — safe to use as literal path segments).
 
 Presence of the final directory (post successful extraction) is itself the cache-hit signal; no separate marker file needed given the immutability of `(source, revision, molecule_path)`.
@@ -62,8 +66,19 @@ Presence of the final directory (post successful extraction) is itself the cache
 `git archive <revision> -- <molecule_path>` run against the bare clone (`repo_dir`, from the existing `repos/` tier — no new clone step needed), producing a tar stream on stdout. That stream is extracted using Python's stdlib `tarfile`, **not** the external `tar` binary:
 
 - **Portability**: matches this project's "Python-only, py3-none-any wheel, Linux/macOS/WSL2" target (plan.md Technical Context, unchanged by this spec). Shelling out to `tar` would add a new external-binary dependency the project doesn't otherwise have (git and the configured interpreter are the only external tools spaex already assumes).
-- **Path-safety**: `tarfile.extractall(path, filter="data")` (Python 3.12+) refuses member paths that would escape `path` via `..` segments, refuses device files, and strips unsafe metadata. On Python 3.10/3.11 (this project's stated minimum), `filter="data"` is unavailable; the extraction helper MUST perform equivalent manual validation — for each tar member, resolve its target path and verify containment under the destination directory before extracting, rejecting any member that would escape (symlink or `..`-based). This applies even though `git archive` only ever emits paths under the requested `molecule_path` prefix from a repository spaex itself does not control the trustworthiness of — the pinned SHA authenticates the publisher's bytes, but this extraction-time check is the same defense-in-depth principle Spec 016's `canonicalise_within` already applies at hook-invocation time (FR-014/015), just one layer earlier (at materialization time, before any file is used for anything).
-- **Atomicity**: extract into a temporary sibling directory first (`<final-dir>.tmp-<random>`), then atomic rename into place. A crash or concurrent extraction mid-way never leaves a partially-extracted directory at the final path. Mirrors `publisher_fetch.ensure_object`'s own temp-dir-then-`os.replace` pattern for the bare clone itself.
+- **Path-safety**: `tarfile.extractall(path, filter="data")` (Python 3.12+) refuses member paths that would escape `path` via `..` segments, refuses device files, and strips unsafe metadata. On Python 3.10/3.11 (this project's stated minimum), `filter="data"` is unavailable; the extraction helper MUST perform equivalent manual validation — for each tar member, resolve its target path and verify containment under the destination directory before extracting, rejecting any member that would escape (symlink or `..`-based). For symlink and hardlink members, validate the link target against the same destination root, and reject a member whose parent would traverse a link created by an earlier member; validation MUST happen in archive order so a later file cannot follow an earlier escaping link. The helper MUST NOT call an unfiltered `extractall()` as a fallback. This applies even though `git archive` only ever emits paths under the requested `molecule_path` prefix from a repository spaex itself does not control the trustworthiness of — the pinned SHA authenticates the publisher's bytes, but this extraction-time check is the same defense-in-depth principle Spec 016's `canonicalise_within` already applies at hook-invocation time (FR-014/015), just one layer earlier (at materialization time, before any file is used for anything).
+- **Atomicity and archive prefix**: let `revision_root` be the cache directory for
+  `<source-digest>/<revision>`, and let `final_dir` be
+  `revision_root / molecule_path`. Extract into a temporary sibling of
+  `revision_root` first (`<revision-root>.tmp-<random>`), preserving the
+  archive's `molecule_path` prefix. After validation and successful extraction,
+  atomically rename the temporary `molecule_path` child to `final_dir` (after
+  creating only its trusted parent directories). A crash or concurrent
+  extraction mid-way never leaves a partially-extracted directory at the
+  final path, and the returned `final_dir` directly contains `manifest.json`,
+  `constitution.md`, `install.py`, etc. — it MUST NOT contain an extra nested
+  `molecule_path` directory. This mirrors `publisher_fetch.ensure_object`'s
+  own temp-dir-then-`os.replace` pattern for the bare clone itself.
 - **Locking**: wrap extraction in a `ManifestLockContext` keyed off the destination directory (same pattern `ensure_object` uses: `repo_dir.with_name(repo_dir.name + ".lock")`), so two concurrent `spaex install` processes racing to extract the same `(source, revision, molecule_path)` don't corrupt each other's temp directories.
 - **Resulting tar entries preserve the `molecule_path` prefix** (git archive does not strip the requested pathspec's leading directory). `get_or_extract` returns `<dest>/<molecule_path>`, not `<dest>` itself, so callers get a path that directly contains `manifest.json`, `constitution.md`, `install.py`, etc. — not one nesting level up.
 
@@ -71,9 +86,38 @@ Presence of the final directory (post successful extraction) is itself the cache
 
 **`spaex.constitution.resolve.resolve_constitution_contributions`** — migrated per the 2026-09-08 operator decision to consolidate on a single molecule-content access path instead of maintaining two (git-show bytes AND store extraction) side by side:
 
+- At the start of each compound, assign
+  `revision = git_revparse.full_sha(repo_dir, revision)`. The canonical SHA
+  MUST then be used for the publisher `git show`, `get_or_extract` cache key,
+  `git archive`, `ConstitutionSource.revision`, collision tracking, and all
+  subsequent reads. This applies equally to callers that construct a
+  `CompoundEntry` directly; no caller may pass the original short or symbolic
+  revision into the store after it has been canonicalised.
 - The publisher ROOT manifest read (`git_show.show_bytes(repo_dir, revision, "manifest.json", ...)`) stays unchanged — it is needed to discover each molecule's declared path *before* extraction is even possible (chicken-and-egg: the store key requires knowing `molecule_path`, which only the publisher manifest provides), and it is a single small file with no sibling-file needs.
 - The per-molecule manifest read (currently `git_show.show_bytes(repo_dir, revision, f"{publisher_entry.path}/manifest.json", ...)`) is replaced: call `get_or_extract(...)` once for that molecule, then read `(cache_dir / "manifest.json").read_bytes()`.
-- The constitution-file body read(s) (currently `git_show.show_bytes(repo_dir, revision, contribution_path, ...)` per declared `atoms.constitution` entry) are replaced: read `(cache_dir / constitution_path).read_bytes()` from the same already-extracted `cache_dir` — no additional extraction call, since the molecule's manifest read above already triggered it.
+- The constitution-file body read(s) (currently `git_show.show_bytes(repo_dir, revision, contribution_path, ...)` per declared `atoms.constitution` entry) are replaced: first validate each `constitution_path` as a relative `RepoRelativePath`, then resolve it under `cache_dir` and require the resolved path to remain within `cache_dir`. The implementation MUST reject a symlink-based escape (including a symlink in an intermediate directory) and MUST read only that validated resolved path — never re-join the unvalidated manifest string with `cache_dir`. Read from the same already-extracted `cache_dir` — no additional extraction call, since the molecule's manifest read above already triggered it.
+
+#### Resolver error contract
+
+The store is an internal content-access layer; the resolver keeps the public
+typed errors already exposed by the `git_show` implementation. The store MUST
+not leak raw `FileNotFoundError`, `tarfile` exceptions, or subprocess errors
+through `resolve_constitution_contributions()`:
+
+- Failure to materialize or read the per-molecule `manifest.json` is translated
+  to `MissingAtomManifestError`, including a `git archive` failure that means
+  the requested molecule path is absent at the canonical revision.
+- Failure to materialize or read a declared, validated constitution path is
+  translated to `ContributionFileNotFoundError`.
+- A missing canonical revision remains `PinnedRevisionNotFoundError`; unrelated
+  extraction/IO failures are wrapped in a new typed
+  `MoleculeTreeExtractionError` and are not silently misreported as a missing
+  contribution.
+
+The resolver performs these translations at the corresponding manifest or
+contribution read boundary, so malformed archive data and unexpected IO remain
+diagnosable while the existing caller-visible missing-file contract remains
+stable.
 
 Net effect: one `git archive` call per resolved molecule (memoized across repeat calls within a process and across processes via the on-disk cache), replacing what were previously 1-2 `git show` calls per molecule. For a molecule contributing only a single small `constitution.md`, this is marginally more I/O up front (archive+extract vs. two byte reads) in exchange for a single, consistent code path. Given molecule trees are small (a manifest, a constitution fragment, occasionally a handful of hook/script files) and the result is cached indefinitely per immutable SHA, this trade is judged acceptable.
 
@@ -87,8 +131,9 @@ Spec 016's `data-model.md` described `ResolvedMolecule.cache_dir` as "Immutable 
 
 ## Testing
 
-- **Unit tests** for `get_or_extract`: extraction produces expected files; repeated calls with the same key return the same directory without re-extracting (verify via a marker file inside the source molecule that would be duplicated/corrupted by a naive re-extraction, or via mtime-stability of the returned directory); concurrent extraction (two threads/processes) does not corrupt state (lock contention test); a crafted tar member with a `..`-escaping path is rejected (path-containment test, mirroring Spec 016's `canonicalise_within` unit tests); a molecule path absent at the given revision fails cleanly with a typed error.
-- **Integration tests** for the migrated `resolve.py`: existing `tests/unit/test_resolve.py` suite (fixture-based, using real git repos per its established `_publish`/`_clone` helpers) MUST continue to pass unchanged in behavior — same constitution contributions resolved, same ordering, same error types for missing/invalid manifests. This is a refactor-with-stable-contract; no existing test should need behavioral changes, only (if needed) fixture adjustments for the new intermediate extraction step.
+- **Unit tests** for `get_or_extract`: extraction produces expected files directly under the returned directory (without an extra molecule-path level); repeated calls with the same key return the same directory without re-extracting (verify via a marker file inside the source molecule that would be duplicated/corrupted by a naive re-extraction, or via mtime-stability of the returned directory); concurrent extraction (two threads/processes) does not corrupt state (lock contention test); crafted tar members with `..`-escaping paths, absolute paths, escaping symlink targets, escaping hardlink targets, and a later member whose parent traverses an earlier symlink are rejected (path-containment tests, mirroring Spec 016's `canonicalise_within` unit tests); and a molecule path absent at the canonical revision fails cleanly with a typed error.
+- **Resolver path-safety tests** MUST cover a constitution path with an outside-targeting symlink and a symlinked intermediate directory, and confirm that neither is read or followed. A valid nested relative path remains accepted.
+- **Integration tests** for the migrated `resolve.py`: existing `tests/unit/test_resolve.py` suite (fixture-based, using real git repos per its established `_publish`/`_clone` helpers) MUST continue to pass unchanged in behavior — same constitution contributions resolved, same ordering, same error types for missing/invalid manifests. Add coverage that supplies a short or symbolic compound revision and asserts the canonical full SHA is used in the store key and `ConstitutionSource`. Add coverage for missing molecule manifests, missing constitution files, archive failures, and malformed archive/extraction failures to verify the resolver error contract above. This is a refactor-with-stable-contract; no existing test should need behavioral changes, only (if needed) fixture adjustments for the new intermediate extraction step.
 - **Cross-platform note**: `tarfile`-based extraction (not shelling out to `tar`) is chosen specifically so these tests run identically on Linux, macOS, and Windows/WSL2 without requiring a `tar` binary on `PATH`.
 
 ## Dependencies
