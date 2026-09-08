@@ -2,7 +2,9 @@
 
 **Status**: Draft (design doc; spec/plan/tasks to be generated via `/speckit-specify`)
 **Author**: brainstorming session 2026-09-08 with operator
-**Target spaex version**: 4.1.0 (MINOR feature bump, backwards-compatible)
+**Target spaex version**: 4.1.0 (MINOR feature bump; molecule manifests remain
+backwards-compatible, while the generated install-lock contract gains an
+explicit hook-status revision as described below)
 
 ## Problem
 
@@ -58,8 +60,16 @@ Rationale from the brainstorming: additional context is speculative and adds a m
 
 The molecule author knows whether the hook is essential (gitignore of a critical directory → `abort`) or best-effort (register with an optional agent harness → `warn`). Default is `abort` (fail-loud).
 
-- **`abort`**: hook exit != 0 (or interpreter missing on PATH) fails the entire `spaex install` transaction. Spec 008's install-transaction machinery rolls back atoms, `.spaex.json` is not touched. Consumer sees a clean no-op.
-- **`warn`**: hook exit != 0 is logged to stderr with a `WARN:` prefix. Install continues, `.spaex/install.lock` is written with a per-molecule `hook_status: "failed"` field. `spaex install` exits 0.
+- **`abort`**: hook exit != 0, process-launch `OSError`, cache escape, or
+  interpreter missing on PATH fails the entire `spaex install` transaction.
+  Spec 008's install-transaction machinery rolls back staged atoms; a
+  delegated `spaex add` also restores `.spaex.json`. The established
+  `install-failed` result includes the molecule and failure kind. Hook side
+  effects are not rolled back.
+- **`warn`**: hook stderr remains inherited and unmodified. After the process
+  exits, spaex may emit one post-exit `WARN:` line. Install continues,
+  `.spaex/install.lock` is written with a per-molecule
+  `hook_status: "failed"` field, and `spaex install` exits 0.
 
 ### 6. Idempotency: hook runs on every install
 
@@ -71,9 +81,25 @@ Rationale: simpler than tracking "last SHA that ran the hook" in install.lock. S
 
 Within a single molecule's install: atoms (files declared under `atoms.<category>`) are copied first, then the hook runs. The hook can assume all its atom-declared files are already in place, and can read them if needed.
 
-### 8. Multi-molecule order: existing priority field
+### 8. Multi-molecule order: existing resolver contract
 
-When multiple molecules with hooks are installed in the same `spaex install` run, they execute in the same priority order that spaex' constitution-assembly already uses (molecule `priority` field in the molecule manifest). Consistent with existing behaviour, no new ordering rule to learn.
+When multiple molecules are resolved in the same `spaex install` run, hooks
+execute in the resolver's canonical order: ascending **effective priority**,
+then ascending molecule ID by its UTF-8 byte sequence. Effective priority is
+`compounds[].config[<molecule-id>].priority` when the consumer supplies an
+override, otherwise the publisher's `manifest.priority`. Thus the hook order
+is the same deterministic order already used for constitution contributions;
+there is no separate hook-only ordering rule. A priority override is part of
+the install contract and is covered by the multi-molecule tests below.
+
+The resolver must return one `ResolvedMolecule` record for every selected
+molecule, not only for molecules that contribute `atoms.constitution`. The
+record retains the molecule manifest, publisher source and revision, the
+resolved immutable molecule-cache directory, and the effective priority. The
+constitution contribution list is derived from this complete collection, so a
+hook-only molecule is not dropped before hook execution. Duplicate IDs across
+different source/revision pairs continue to be refused by the existing
+resolver collision rule.
 
 ## Schema changes
 
@@ -92,7 +118,7 @@ Additive extension to [`src/spaex/schema/data/molecule-manifest.v4.schema.json`]
     },
     "script": {
       "$ref": "#/$defs/repoRelativePath",
-      "description": "Molecule-directory-relative path to the hook script."
+      "description": "Molecule-directory-relative path to the hook script; the resolved target must remain inside the pinned molecule cache even through symlinks."
     },
     "args": {
       "type": "array",
@@ -123,36 +149,106 @@ Concrete `install_hook` for the graphify-first-authoring bump to 1.0.3:
 
 No changes to `publisher-manifest.v4.schema.json` or `consumer-manifest.v4.schema.json`.
 
+### Manifest model and resolver contract
+
+`MoleculeManifest` gains an optional `install_hook: InstallHook | None` field.
+`InstallHook` contains exactly `interpreter`, `script`, `args`, and
+`on_failure`. `from_json()` validates the v4 schema and constructs this value;
+when `install_hook` is absent it stores `None`, and when the object is present
+but omits `on_failure`, parsing explicitly stores `on_failure="abort"`. The
+JSON-Schema `default` is documentation/validation metadata only and MUST NOT
+be relied on to mutate parsed input.
+
+The resolver exposes the parsed hook through each `ResolvedMolecule` record
+alongside its source, full pinned revision, cache directory, and effective
+priority. Hook execution consumes those resolved records; it MUST NOT re-read
+or re-interpret the raw manifest later in the install transaction. This keeps
+the change limited to manifest modelling, parsing, and resolution at this
+layer, while preserving the established `None` representation for molecules
+without a hook.
+
+The script path has two independent checks. `RepoRelativePath` rejects empty,
+absolute, and `.`/`..` path components during manifest parsing. At execution
+time, spaex resolves the script against the extracted molecule cache for the
+pinned revision and requires the canonical target to remain below that cache
+root (`relative_to(cache_root)` succeeds). A symlink that points outside the
+cache is refused with a path-containment failure; a symlink that remains
+inside the cache is allowed. The cache is the immutable, revision-pinned
+publisher tree used for the install, and no path under the consumer repository
+is used as the script source. The pinned SHA authenticates the publisher
+bytes; canonical containment is the separate execution-time boundary that
+prevents a symlink from escaping it.
+
 ## Execution model
 
 Within a single `spaex install` invocation:
 
-1. spaex materialises every declared atom for every compound (unchanged from today).
-2. Collects the list of molecules whose manifest declares an `install_hook`.
-3. Sorts by molecule `priority` (same sort as constitution-assembly).
-4. For each molecule with a hook:
+1. spaex resolves the complete, sorted `ResolvedMolecule` collection and
+   materialises every declared atom into the Spec-008 staging generation
+   (`<root>.next`), not directly into the published root.
+2. It derives the constitution payload and the hook candidate statuses from
+   that same collection. A molecule with no `install_hook` remains in the
+   resolved collection and in the generation's molecule records; it is simply
+   skipped by the hook runner.
+3. For each resolved molecule with a hook, in ascending effective priority
+   and then UTF-8 molecule-ID order:
    1. `shutil.which(interpreter)`. If missing on PATH, treat as hook failure per `on_failure`.
-   2. Builds argv: `[interpreter, <molecule-cache-dir>/<script>, *args]`.
-   3. `subprocess.run(argv, cwd=consumer_repo_root, check=False)` — **stdio inherited** from the spaex process (no `capture_output=True`). This lets the hook prompt interactively (`graphify install` needs this) and streams output live.
-   4. Exit != 0 → applies `on_failure`.
+   2. Resolve `<molecule-cache-dir>/<script>` and apply the canonical
+      containment check described above. A path-containment failure is a hook
+      failure, subject to the same policy.
+   3. Build argv: `[interpreter, <molecule-cache-dir>/<script>, *args]`.
+   4. Run `subprocess.run(argv, cwd=consumer_repo_root, check=False)` with
+      **stdio inherited** from the spaex process (no `capture_output=True`).
+      This lets the hook prompt interactively (`graphify install` needs this)
+      and streams output live.
+   5. A non-zero exit or an `OSError` raised while starting the process
+      (including permission-denied and other launch failures) is a hook
+      failure and applies `on_failure`.
 
-`--no-install-hooks` on `spaex add` or `spaex install`: skip steps 2-4 entirely, record `hook_status: "skipped"` for each declared hook in install.lock.
+Hooks run before the existing `publish_constitution(...)` commit (or its
+generalized Spec-008 publisher) seals `install.lock` and swaps the staged
+generation into place. An `abort` failure therefore reaches the established
+install rollback path before publication. No hook is run after the commit.
+
+The no-op path has one deliberate exception to the ordinary "no changes"
+return: unchanged atom bytes MUST NOT cause hooks to be skipped. spaex first
+determines whether the atom candidate is unchanged, then still runs every
+declared hook for a new install, revision bump, unchanged reinstall, and
+manual rerun. If the atom candidate is unchanged, the runner uses a hook-only
+transaction: it does not rewrite atom files, but it may publish a new
+`install.lock` generation when the resulting hook-status records differ. If
+the atom candidate and hook-status records are both unchanged, it performs the
+usual clean no-op after the hooks have run. An abort failure in this path does
+not publish a new lock; a warn failure does.
+
+`--no-install-hooks` on `spaex add` or `spaex install`: skip hook execution,
+record `hook_status: "skipped"` for each declared hook in install.lock, and
+still publish the atom generation when the atom candidate changed.
 
 ## Failure handling
 
 ### `on_failure: "abort"` (default)
 
-Hook non-zero exit (or interpreter missing) triggers the Spec-008 install-transaction rollback:
-- Atoms already materialised are removed.
+Any non-zero exit, process-launch `OSError`, missing interpreter, or
+cache-containment failure triggers the Spec-008 install-transaction rollback:
+- Staged atom output is discarded and the previous published generation is
+  retained.
 - `.spaex/install.lock` is not written.
-- `.spaex.json`'s compound entry is not updated (or is reverted if this is an update).
-- CLI exits with a distinct diagnostic key `install-hook-failed`, context includes the molecule id.
+- `.spaex.json`'s compound entry is not updated (or is reverted if this is an
+  update delegated through `spaex add`).
+- CLI exits with the established `install-failed` result, with the molecule id
+  and failure kind in context.
 
-Note that hook stderr is not captured (stdio is inherited), so the diagnostic does not include stderr content. Operator sees the hook's terminal output above the spaex error line. Molecule authors who want structured logging can write their own log file within the consumer repo.
+Hook stderr is not captured (stdio is inherited) and is written directly to
+the terminal, byte-for-byte and without a `WARN:` prefix. The operator sees
+it above the spaex error line. Molecule authors who want structured logging
+can write their own log file within the consumer repo.
 
 ### `on_failure: "warn"`
 
-- Hook stderr is logged with `WARN: molecule <id> install_hook exit <N>` (from spaex's own output, since hook output goes directly to the terminal).
+- Hook stderr remains inherited and unmodified. After the process exits, spaex
+  MAY emit one post-exit line such as `WARN: molecule <id> install_hook
+  failed (<reason>)`; it MUST NOT prefix individual inherited stderr lines.
 - Install continues; `.spaex/install.lock` is written with `hook_status: "failed"` for this molecule.
 - CLI exits 0.
 
@@ -161,6 +257,57 @@ Note that hook stderr is not captured (stdio is inherited), so the diagnostic do
 Rollback only reverses what spaex wrote itself (atoms under `.spaex/`, compound entries in `.spaex.json`). **Hook side effects are not rolled back** — spaex does not know what the hook touched. Molecule authors must design hooks so that partial progress leaves a harmless state (the existing graphify install.py is built this way — it refuses collisions, never overwrites unrelated files).
 
 Documented as a known limitation of this feature.
+
+## `install.lock` hook-status contract
+
+The existing per-molecule record is extended with one optional field:
+
+```json
+{
+  "id": "com.example.publisher.graphify-first-authoring",
+  "source": "https://github.com/haexmas/atoms",
+  "revision": "0123456789abcdef0123456789abcdef01234567",
+  "paths": [".spaex/constitution.md"],
+  "hook_status": "ok"
+}
+```
+
+`hook_status` is present only when that molecule declares `install_hook` and
+has one of exactly three values:
+
+- `ok`: hook was enabled and exited 0;
+- `failed`: hook was enabled but could not be launched, violated cache
+  containment, or exited non-zero under `on_failure="warn"`;
+- `skipped`: the global `--no-install-hooks` opt-out disabled it.
+
+An omitted field means that the molecule declared no hook. An abort failure
+never publishes a `failed` record because the generation is rolled back; the
+previous lock (or no lock for a first install) remains authoritative. No hook
+stderr, host-specific exception text, or interpreter path is persisted in the
+lock.
+
+Hook status is derived from the resolved molecule collection and the current
+invocation flags, then sealed in the same transaction as the atom paths. The
+existing canonical molecule ordering `(id, source, revision, paths)` remains
+the ordering key; `hook_status` is not an additional sort key. A no-op
+reinstall still executes hooks. If the resulting statuses equal the live lock,
+the lock is not rewritten; if they differ (for example `ok` to `skipped`), the
+hook-only transaction publishes a fresh generation with unchanged atom files.
+
+Recovery discards an uncommitted staged lock together with its staged
+generation and restores the retained previous generation before retrying. A
+hook is rerun on that retry; status is never inferred from a partially written
+lock. A status becomes durable only when its complete generation is published.
+
+The molecule-manifest contract stays v4. The install-lock schema gets a
+separately documented v4.1 shape in the 4.1 implementation: update
+`install-lock.v4.schema.json`, `InstallLock`, and its runtime tests together;
+keep `spaex_version: "4"` because it names the manifest major, and require
+4.1-capable readers before consuming a generated lock containing
+`hook_status`. Older strict readers may refuse such a lock with their normal
+schema diagnostic and must not silently execute hooks from it. A future
+incompatible lock change requires a new lock schema/version rather than
+reinterpreting these three values.
 
 ## Interactive hooks in CI
 
@@ -192,12 +339,31 @@ Integration tests in `src/spaex/install/` (or wherever `spaex install` is tested
 
 ### Multi-molecule tests
 
-- Two molecules with hooks, priorities 10 and 20 → order matches spaex' existing priority sort (which one runs first depends on that sort's direction — verify consistent with constitution-assembly behaviour).
-- One hook fails with `abort` in a multi-hook install → subsequent hooks are not invoked, rollback is total.
+- Two molecules with effective priorities 10 and 20 → the priority-10 hook
+  runs first. Repeat with a consumer `config[<id>].priority` override that
+  changes the publisher default and assert the override changes the order.
+- Equal priorities → hook order is ascending by UTF-8 molecule ID, matching
+  the constitution resolver contract.
+- The resolver result passed to the hook runner retains every resolved
+  molecule manifest and its effective priority, including a molecule with no
+  constitution contribution; no contribution-derived single-molecule gate or
+  `ConstitutionAlreadyAdoptedError` may discard the collection.
+- One hook fails with `abort` in a multi-hook install → subsequent hooks are
+  not invoked, rollback is total, and the established `install-failed` result
+  is returned.
 
 ### Idempotency tests
 
 - `spaex install` twice in succession → hook runs twice → no errors, no duplicated side effects. Fixture: use the actual graphify-first-authoring install.py as the hook, verify `.gitignore` only gains the line once.
+- An unchanged install still runs the hook; atom files are not rewritten, and
+  a changed hook status is persisted through the hook-only transaction.
+- An omitted `on_failure` parses as `abort` and exercises rollback on a failing
+  hook; this test must prove the runtime default rather than the schema
+  annotation supplies it.
+- A script symlinked outside the pinned molecule cache is refused before
+  execution, while a symlink that resolves inside the cache is accepted.
+- A process-launch `OSError` follows the same abort/warn matrix as a missing
+  interpreter and a non-zero exit.
 
 ### Publisher-side molecule test
 
