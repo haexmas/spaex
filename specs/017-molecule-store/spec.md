@@ -96,7 +96,7 @@ Today, constitution assembly (the part of `spaex install` that gathers each adop
 
 **Core materialization**
 
-- **FR-001**: The system MUST provide a way to obtain a real, on-disk directory containing the complete contents of a named subtree (a "molecule path") of a given source repository at a given pinned revision.
+- **FR-001**: The system MUST provide a way to obtain a real, on-disk directory containing the complete contents of a named subtree (a "molecule path") of a given source repository at a given pinned revision. If a successful archive for an existing molecule path contains no members, it MUST still create and atomically publish the requested empty directory; an empty successful result MUST remain distinguishable from a missing molecule path.
 - **FR-002**: The returned directory MUST directly contain the subtree's top-level entries (files and subdirectories) — it MUST NOT be nested one additional level deeper under a directory named after the requested molecule path.
 - **FR-003**: The content of every extracted file MUST be byte-identical to that file's committed content at the given revision.
 - **FR-004**: A request for a molecule path that does not exist at the given revision MUST fail with a distinct, identifiable failure kind (distinguishable from "materialization succeeded but the directory happens to be empty," from "the request was refused for safety reasons," and from "a transient IO failure occurred").

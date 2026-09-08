@@ -4,21 +4,24 @@
 
 ## Overview
 
-One new capability (`get_or_extract`), one new error type, and a migration of two existing read call sites in `constitution/resolve.py`. No new persistent, versioned, or consumer-visible data structures — everything introduced here is either an internal cache-key concept or an in-memory value used for one call's duration.
+One new capability (`get_or_extract`), two new error types, and a migration of two existing read call sites in `constitution/resolve.py`. No new persistent, versioned, or consumer-visible data structures — everything introduced here is either an internal cache-key concept or an in-memory value used for one call's duration.
 
 ## Entities
 
 ### MaterializationKey (conceptual — not necessarily a literal class)
 
-The triple that identifies one cache entry.
+The triple that identifies one cache entry. `repo_dir` is an execution input,
+not part of the key: the same source may be materialized from different local
+bare-clone paths on different devices.
 
 | Field | Type | Constraint | Description |
 |---|---|---|---|
-| `repo_dir` | `pathlib.Path` | Must be an existing, already-cloned bare git repository (produced by `publisher_fetch.ensure_object`) | The local git object store to read from. Not itself part of the cache KEY (the same content, if ever cloned to two different local paths for the same canonical source, would still be identified by `source-digest`, which `repo_dir`'s caller already derives via `clone_dir()`), but the input needed to perform extraction. |
+| `source_url` | `str` | Must be the canonical, credential-free source URL used to obtain `repo_dir` | Stable source identity used to derive the cache partition. It is part of the cache key and MUST NOT be inferred from the local filesystem path. |
+| `repo_dir` | `pathlib.Path` | Must be an existing, already-cloned **bare** git repository produced by `publisher_fetch.ensure_object` and corresponding to `source_url` | The local git object store to read from. It is an execution input, not part of the cache key. |
 | `revision` | `str` | Full 40-character lowercase hex SHA. Callers MUST supply the canonical form (resolved via `git_revparse.full_sha()` beforehand) — `get_or_extract` treats a non-canonical-looking input as a caller contract violation, not a value it will normalize itself (see contracts/get-or-extract.md). |
 | `molecule_path` | `str` | A safe, relative POSIX path (no `..` segments, no leading `/`, no control characters) — the same `RepoRelativePath` shape already validated elsewhere in the v4 manifest schema. | The publisher-declared subtree to materialize. |
 
-**Cache key derivation**: `SPAEX_STATE/molecule-store/<source-digest>/<revision>/<molecule_path>/`, where `<source-digest>` is derived from the canonical source URL using the same SHA-256-hex-16 digest scheme `clone_dir()` already uses (the caller, not `get_or_extract` itself, is responsible for deriving `repo_dir` from the source URL via the existing `clone_dir()` — `get_or_extract` receives `repo_dir` directly and derives its OWN cache-directory digest from the same source URL input the caller used to produce `repo_dir`, keeping the two digests consistent by construction. See contracts/get-or-extract.md for the exact signature.)
+**Cache key derivation**: `SPAEX_STATE/molecule-store/<source-digest>/<revision>/<molecule_path>/`, where `<source-digest>` is `clone_dir(state_root, source_url).name` — the same SHA-256-hex-16 scheme already used for the `repos/` tier. `get_or_extract` receives both `repo_dir` and `source_url`; it MUST derive the molecule-store digest from `source_url`, never from `repo_dir`.
 
 ### MaterializedDirectory (the return value)
 
@@ -43,6 +46,18 @@ Raised for: `git archive` subprocess failures other than the "pathspec did not m
 
 **Explicitly NOT raised for**: "molecule path does not exist at this revision" (this is the `git archive` exit-128 case, translated by callers — see below — into whichever existing "not found" error fits their context, not into `MoleculeTreeExtractionError`).
 
+### MoleculeTreePathNotFoundError (new)
+
+Distinct `HaexError` for a requested molecule path that does not exist at the
+pinned revision. It is intentionally separate from extraction failures and
+from a successful archive that produces an empty directory.
+
+| Field | Value |
+|---|---|
+| `diagnostic_key` | `"molecule-tree-path-not-found"` |
+| `exit_code` | `exit_codes.IO_REFUSE` |
+| `hint` | "Verify the molecule path exists in the publisher repository at the pinned revision." |
+
 ### Existing errors reused (no schema change, behavior clarified)
 
 | Error | Raised by `resolve.py` when |
@@ -62,7 +77,7 @@ ConsumerManifest (.spaex.json)
                     ├── (existing, unchanged) canonical revision resolved via git_revparse.full_sha()
                     │     — return value NOW captured and used consistently (this spec's fix)
                     │
-                    └── molecule_store.get_or_extract(repo_dir, canonical_revision, path, state_root)
+                    └── molecule_store.get_or_extract(repo_dir, source_url, canonical_revision, path, state_root)
                               │
                               └── returns: MaterializedDirectory (real directory on disk)
                                         │
