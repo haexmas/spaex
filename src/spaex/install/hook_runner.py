@@ -44,6 +44,7 @@ class HookOutcome:
 
 
 def _launch_failure(reason: str) -> HookOutcome:
+    """Build a launch-failure outcome with the supplied machine-readable reason."""
     return HookOutcome(kind=HookOutcomeKind.LAUNCH_FAILURE, reason=reason)
 
 

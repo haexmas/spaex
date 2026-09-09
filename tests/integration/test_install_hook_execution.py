@@ -51,6 +51,7 @@ sys.exit(0)
 
 
 def _git(cwd: Path, *args: str) -> str:
+    """Run Git in a fixture repository and return its stripped standard output."""
     proc = subprocess.run(
         ["git", "-C", str(cwd), *args], capture_output=True, text=True, check=True
     )
@@ -122,6 +123,7 @@ def _publish_hook_molecule(
 
 
 def _make_consumer(tmp_path: Path) -> Path:
+    """Create a minimal consumer repository for install-hook integration tests."""
     consumer = tmp_path / "consumer"
     consumer.mkdir()
     (consumer / ".spaex.json").write_text(
@@ -146,6 +148,7 @@ def _run_add(
     molecule_ids: str = _MOLECULE_ID,
     revision: str,
 ) -> int:
+    """Invoke the add command against the fixture consumer and publisher."""
     monkeypatch.setenv("SPAEX_STATE", str(state_root))
     ns = SimpleNamespace(
         repo_root=str(consumer),
@@ -163,12 +166,14 @@ def _run_install(
     state_root: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> int:
+    """Invoke the install command against the fixture consumer."""
     monkeypatch.setenv("SPAEX_STATE", str(state_root))
     ns = SimpleNamespace(repo_root=str(consumer), lock_timeout=5.0)
     return install_cli.run(ns)
 
 
 def _read_lock(consumer: Path) -> InstallLock:
+    """Read and parse the consumer's generated install lock."""
     return InstallLock.from_json(
         (consumer / ".spaex" / "install.lock").read_bytes()
     )

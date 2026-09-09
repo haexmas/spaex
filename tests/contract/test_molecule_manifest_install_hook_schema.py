@@ -23,6 +23,7 @@ def _valid() -> dict:
 
 
 def _with_hook(**overrides: object) -> dict:
+    """Return a valid manifest with an install hook customized by overrides."""
     data = _valid()
     hook: dict = {"interpreter": "python3", "script": "install.py"}
     hook.update(overrides)

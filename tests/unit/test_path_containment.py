@@ -12,6 +12,7 @@ from spaex.util.path_containment import PathEscapeError, canonicalise_within
 
 
 def test_direct_descendant_returns_canonical_target(tmp_path: Path) -> None:
+    """Return the canonical path for a direct descendant of the root."""
     root = tmp_path / "root"
     root.mkdir()
     inside = root / "install.py"
@@ -21,6 +22,7 @@ def test_direct_descendant_returns_canonical_target(tmp_path: Path) -> None:
 
 
 def test_dotdot_that_stays_inside_root_is_allowed(tmp_path: Path) -> None:
+    """Allow parent traversal when the resolved target remains inside the root."""
     root = tmp_path / "root"
     (root / "sub").mkdir(parents=True)
     target = root / "install.py"
@@ -31,6 +33,7 @@ def test_dotdot_that_stays_inside_root_is_allowed(tmp_path: Path) -> None:
 
 
 def test_dotdot_that_escapes_root_raises(tmp_path: Path) -> None:
+    """Reject parent traversal whose resolved target escapes the root."""
     root = tmp_path / "root"
     root.mkdir()
     outside = tmp_path / "outside.py"
@@ -44,6 +47,7 @@ def test_dotdot_that_escapes_root_raises(tmp_path: Path) -> None:
     sys.platform.startswith("win"), reason="symlink test skipped on Windows"
 )
 def test_symlink_pointing_outside_root_raises(tmp_path: Path) -> None:
+    """Reject a hook path whose symlink target is outside the root."""
     root = tmp_path / "root"
     root.mkdir()
     outside = tmp_path / "real_outside.py"
@@ -60,6 +64,7 @@ def test_symlink_pointing_outside_root_raises(tmp_path: Path) -> None:
 def test_internal_symlink_chain_that_stays_inside_root_is_allowed(
     tmp_path: Path,
 ) -> None:
+    """Allow a symlink chain whose final target remains inside the root."""
     root = tmp_path / "root"
     (root / "real").mkdir(parents=True)
     real_target = root / "real" / "install.py"
@@ -76,6 +81,7 @@ def test_internal_symlink_chain_that_stays_inside_root_is_allowed(
     sys.platform.startswith("win"), reason="symlink test skipped on Windows"
 )
 def test_broken_symlink_raises(tmp_path: Path) -> None:
+    """Reject a hook path that resolves through a broken symlink."""
     root = tmp_path / "root"
     root.mkdir()
     link = root / "install.py"
@@ -85,6 +91,7 @@ def test_broken_symlink_raises(tmp_path: Path) -> None:
 
 
 def test_missing_root_raises(tmp_path: Path) -> None:
+    """Reject containment checks against a missing root directory."""
     root = tmp_path / "missing"
     candidate = root / "install.py"
     with pytest.raises(PathEscapeError):
@@ -92,6 +99,7 @@ def test_missing_root_raises(tmp_path: Path) -> None:
 
 
 def test_candidate_equals_root_raises(tmp_path: Path) -> None:
+    """Reject the root itself because candidates must be strict descendants."""
     root = tmp_path / "root"
     root.mkdir()
     with pytest.raises(PathEscapeError):
