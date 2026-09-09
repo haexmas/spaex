@@ -166,6 +166,46 @@ def test_remove_hook_carrying_molecule_emits_warn(
     )
 
 
+def test_remove_duplicate_hook_carrying_molecule_emits_one_warn(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """Repeated molecule IDs remove once and emit one FR-029 WARN."""
+    canonical, head, state_root = _publish_hook_molecule(tmp_path)
+    consumer = _make_consumer(tmp_path)
+
+    monkeypatch.setenv("SPAEX_STATE", str(state_root))
+    add_rc = add_cli.run(
+        SimpleNamespace(
+            repo_root=str(consumer),
+            source_url=canonical,
+            molecule_ids=_HOOK_MOLECULE_ID,
+            revision=head,
+            all=False,
+            lock_timeout=5.0,
+        )
+    )
+    assert add_rc == 0
+    capfd.readouterr()
+
+    remove_rc = remove_cli.run(
+        SimpleNamespace(
+            repo_root=str(consumer),
+            molecule_ids=f"{_HOOK_MOLECULE_ID},{_HOOK_MOLECULE_ID}",
+            lock_timeout=5.0,
+        )
+    )
+    assert remove_rc == 0
+
+    captured = capfd.readouterr()
+    expected_warn = f"WARN: molecule {_HOOK_MOLECULE_ID} had an install_hook;"
+    assert captured.err.count(expected_warn) == 1, (
+        f"expected one FR-029 WARN on stderr, got:\n{captured.err}"
+    )
+    assert captured.out.count(f"  {_HOOK_MOLECULE_ID}\n") == 1
+
+
 # --- T044 -----------------------------------------------------------------
 
 
