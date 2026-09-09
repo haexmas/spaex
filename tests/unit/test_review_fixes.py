@@ -212,7 +212,7 @@ def test_install_allows_multiple_paths_from_one_molecule(
         lambda manifest, state_root: (contributions, []),
     )
     monkeypatch.setattr(
-        install_cli, "_is_no_op_single_source", lambda *args, **kwargs: False
+        install_cli, "_is_no_op", lambda *args, **kwargs: False
     )
     monkeypatch.setattr(install_cli, "_live_generation_id", lambda root: "generation")
     monkeypatch.setattr(
@@ -293,7 +293,7 @@ def test_install_runs_hook_only_alongside_constitution_molecule(
     )
     monkeypatch.setattr(install_cli, "run_install_hook", fake_run_install_hook)
     monkeypatch.setattr(
-        install_cli, "_is_no_op_single_source", lambda *args, **kwargs: False
+        install_cli, "_is_no_op", lambda *args, **kwargs: False
     )
     monkeypatch.setattr(install_cli, "_live_generation_id", lambda root: "generation")
     monkeypatch.setattr(install_cli, "stage_constitution", lambda *a, **kw: nullcontext())
