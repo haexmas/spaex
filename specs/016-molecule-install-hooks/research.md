@@ -67,10 +67,12 @@ The feature was fully brainstormed with the operator on 2026-09-08 and captured 
 
 ## Resolver contract
 
-- **Decision**: For every selected molecule, the resolver returns a `ResolvedMolecule` record, regardless of whether the molecule contributes an `atoms.constitution` entry. Records expose parsed `install_hook`, canonical source URL, pinned 40-hex revision, immutable molecule cache directory, and effective priority (consumer override in `compounds[].config[<molecule-id>].priority` if present, publisher `manifest.priority` otherwise).
+- **Decision**: For every selected molecule, the resolver returns a `ResolvedMolecule` record, regardless of whether the molecule contributes an `atoms.constitution` entry. Records expose parsed `install_hook`, canonical source URL, pinned lowercase 40-hex revision, local bare-clone `repo_dir`, publisher-declared `molecule_path`, and effective priority (consumer override in `compounds[].config[<molecule-id>].priority` if present, publisher `manifest.priority` otherwise).
 - **Rationale**: Without this rule, a hook-only molecule (one that ships only an install_hook, no atoms.constitution) would be dropped from the resolved collection and its hook never invoked. Constitution-only molecules and hook-only molecules must both flow through the same resolver path.
 - **Alternatives considered**:
   - Filter resolved collection to molecules-with-atoms-constitution (rejected as a regression once hook-only molecules exist).
+
+**2026-09-09 integration amendment**: T009 introduces this complete molecule-level record; the existing resolver only returns constitution contributions. The landed Spec 017 store MVP supplies the directory lazily when an enabled hook can run, using the resolved source, revision, `repo_dir`, and `molecule_path`. No pre-populated `cache_dir` is required. Spec 017's separate resolver migration T016–T021 is still pending; it will move molecule-manifest and constitution-body reads to the store while leaving publisher-root reads on `git_show`. This updates the earlier resolver-directory assumption in the source design without changing its execution-time containment requirement.
 
 ## Cache-containment for script path
 

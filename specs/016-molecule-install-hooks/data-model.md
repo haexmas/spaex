@@ -4,7 +4,7 @@
 
 ## Overview
 
-Three data structures are extended (none newly introduced). All extensions are additive and backwards-compatible with existing molecules and existing install-lock generations.
+The model introduces `InstallHook` and a complete `ResolvedMolecule` record, and extends the molecule manifest and install-lock records. The schema extensions are additive and backwards-compatible with existing molecules and existing install-lock generations.
 
 ## Entities
 
@@ -44,11 +44,11 @@ Represents the parsed `install_hook` object from a molecule manifest.
 
 All other `MoleculeManifest` fields (from Spec 007/013) are unchanged.
 
-### ResolvedMolecule (extended)
+### ResolvedMolecule (new complete resolver record)
 
-The existing resolver record (produced by the install resolver from a consumer's `.spaex.json` compounds + publisher manifests + molecule manifests).
+A complete resolver record produced from a consumer's `.spaex.json` compounds + publisher manifests + molecule manifests. The current resolver returns only `ResolvedConstitutionContribution` objects; T009 introduces this molecule-level record alongside or within an equivalent result type, retaining the existing contribution data for publication.
 
-**Extended contract** (some fields already exist; the ones marked NEW are added by this spec, the rest are documented here for clarity of what the hook runner reads):
+**Record contract** (existing resolver-local metadata is exposed to the hook runner; the parsed hook is added by this spec):
 
 | Field | Type | Origin | Description |
 |---|---|---|---|
@@ -62,7 +62,7 @@ The existing resolver record (produced by the install resolver from a consumer's
 
 **Invariants**:
 - The resolver MUST produce a `ResolvedMolecule` for EVERY molecule selected by the consumer's compounds, regardless of whether the molecule contributes any `atoms.constitution` entry (FR-007). A hook-only molecule MUST NOT be filtered out.
-- Materialization is **lazy** (Spec 017: "no eager materialization" is a hard requirement, not just a performance preference). The resolver does NOT call `get_or_extract()` itself and does NOT eagerly populate a `cache_dir` for every resolved molecule. The hook runner calls `molecule_store.get_or_extract(record.repo_dir, record.source_url, record.revision, record.molecule_path, state_root)` itself, and only for records where `install_hook != None` — a molecule with no hook never triggers a `git archive` invocation on its behalf. (Constitution-body reads follow the same lazy, on-demand pattern independently, via `resolve.py`'s own `get_or_extract()` call — see Spec 017 data-model.md.)
+- Hook materialization is **lazy**: constructing a `ResolvedMolecule` does not require extracting a tree. The hook runner calls `molecule_store.get_or_extract(record.repo_dir, record.source_url, record.revision, record.molecule_path, state_root)` only for an enabled hook with an available interpreter. Records without hooks and hooks skipped via `--no-install-hooks` cause no hook-driven extraction. Current constitution resolution still uses `git_show`; Spec 017's pending T016–T021 will independently materialize selected molecules on demand for their own manifest and constitution reads. Such resolver-driven extraction may also occur for molecules without hooks; the hook runner reuses the same cache key.
 
 ### install.lock per-molecule record (extended)
 
@@ -108,8 +108,8 @@ generation.
 There are no long-lived stateful entities introduced by this feature. Every `spaex install` invocation:
 
 1. Resolves the compounds → constructs the `ResolvedMolecule` collection (with `repo_dir`, `molecule_path`, and `install_hook` populated for every record — not just hook-carrying ones, per FR-007).
-2. Materialises atoms into the Spec-008 staging generation (via `resolve.py`'s own, independent `get_or_extract()` calls for constitution content — Spec 017).
-3. For each `ResolvedMolecule` with `install_hook != None`, in sort order: calls `molecule_store.get_or_extract(record.repo_dir, record.source_url, record.revision, record.molecule_path, state_root)` to obtain the molecule's materialized directory, then executes the hook script found there with the consumer repository root as `cwd`; hook-created side effects remain outside the staged generation.
+2. Materialises the resolved atom content into the Spec-008 staging generation. Current constitution-body reads use `git_show`; the pending Spec-017 resolver migration changes that content-read mechanism independently.
+3. For each `ResolvedMolecule` with `install_hook != None`, in sort order: if hooks are disabled, records `skipped` without invoking the runner. Otherwise the runner checks the interpreter, obtains the molecule directory lazily through `get_or_extract()`, canonicalises and checks the script against that directory, then executes it with the consumer repository root as `cwd`. Hook-created side effects remain outside the staged generation.
 4. Computes the `hook_status` for each record.
 5. Publishes the install.lock (with hook_status fields) and swaps the staged generation, OR aborts and rolls back per `on_failure: "abort"` policy.
 
@@ -124,7 +124,7 @@ ConsumerManifest (.spaex.json)
   └── compounds[] (source, revision, molecules[], config[])
         └── PublisherManifest (fetched via git_show, unchanged)
               └── molecules[molecule_id] { path, version }
-                    └── MoleculeManifest (fetched via git_show, unchanged — small single file)
+                    └── MoleculeManifest (currently git_show; Spec 017 T017 migration pending)
                           ├── atoms.<category>: [paths]
                           └── install_hook: InstallHook | None  ← NEW field
                                        │
@@ -138,10 +138,10 @@ ConsumerManifest (.spaex.json)
                                                                           │
                                                                           ▼
                                                     real, on-disk molecule directory
-                                                     (hook script executed from here)
+                                                     (canonical script target checked here, then executed)
                                                                           │
                                                                           └── writes .spaex/install.lock
                                                                                 └── per-molecule record.hook_status  ← NEW field
 ```
 
-Note: the publisher root manifest and each molecule's own `manifest.json` continue to be read via `git_show.show_bytes()` (unchanged, Spec 017 FR-016) — only hook-script execution (this spec) and constitution-body reads (Spec 017's own migration of `resolve.py`) go through `molecule_store.get_or_extract()`. No new cross-repo relationships; the feature extends the existing manifest→resolver→install.lock pipeline in-place, now sitting on top of Spec 017's materialization capability instead of assuming one existed.
+Note: the publisher root manifest continues to use `git_show.show_bytes()` under Spec 017 FR-016. Currently molecule manifests and constitution bodies also use `git_show`; their migration to `get_or_extract()` is specified by Spec 017 FR-015 but remains pending in T016–T021. That migration is separate from this hook integration. No new cross-repo relationships; this feature consumes the landed materialization API without assuming that the resolver has already migrated.
