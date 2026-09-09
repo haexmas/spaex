@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Sequence
 from contextlib import nullcontext
 from pathlib import Path
 
@@ -81,64 +82,57 @@ def _live_generation_id(repo_root: Path) -> str | None:
     return lock.generation_id
 
 
-def _is_no_op_single_source(
+def _is_no_op(
     repo_root: Path,
-    body: bytes,
-    source_id: str,
-    source_revision: str,
-    source_url: str,
-    hook_status: HookStatus | None = None,
+    expected_body: bytes | None,
+    expected_records: Sequence[MoleculeEntry],
 ) -> bool:
-    """True when on-disk publication already matches the single-source candidate.
+    """True when the published state already matches the desired body + molecule map.
 
-    Compares the constitution body byte-for-byte and the recorded source
-    identity, source URL, and revision. Fields under transaction metadata
-    (generation_id, written_at) are ignored — those change on every
+    Compares the constitution body byte-for-byte AND the complete molecule
+    list (contributor plus hook-only records with their ``hook_status``)
+    against what is currently on disk. Fields under transaction metadata
+    (generation_id, written_at) are ignored: they change on every
     publication and are the whole reason for having a no-op path.
+
+    Body semantics:
+
+    * ``expected_body`` is ``bytes``: ``constitution.md`` must exist with
+      matching bytes.
+    * ``expected_body`` is ``None``: empty-constitution state,
+      ``constitution.md`` must NOT exist.
+
+    Molecule map: ``expected_records`` is sorted with the same key that
+    ``_publish_constitution`` uses, so equality is a direct tuple compare
+    against the on-disk lock's already-sorted ``molecules`` field. This
+    covers FR-025's "atom bytes unchanged, hook_status map unchanged"
+    clean no-op case for arbitrary molecule counts (contributor +
+    hook-only), not just the single-source MVP shape.
     """
     live_root = repo_root / transaction.SPAEX_DIR
     constitution_path = live_root / transaction.CONSTITUTION_NAME
     lock_path = live_root / transaction.INSTALL_LOCK_NAME
-    if not (constitution_path.exists() and lock_path.exists()):
+    if not lock_path.exists():
         return False
-    if constitution_path.read_bytes() != body:
-        return False
+    if expected_body is None:
+        if constitution_path.exists():
+            return False
+    else:
+        if not constitution_path.exists():
+            return False
+        if constitution_path.read_bytes() != expected_body:
+            return False
     try:
         lock = InstallLock.from_json(lock_path.read_bytes())
     except (OSError, ValueError, HaexError):
         return False
-    if len(lock.molecules) != 1:
-        return False
-    recorded = lock.molecules[0]
-    if (
-        recorded.id != source_id
-        or recorded.revision != source_revision
-        or recorded.source != source_url
-    ):
-        return False
-    return (
-        recorded.paths == (CONSTITUTION_PATH,)
-        and recorded.hook_status == hook_status
+    expected_sorted = tuple(
+        sorted(
+            expected_records,
+            key=lambda m: (m.id, m.source, m.revision, m.paths),
+        )
     )
-
-
-def _is_no_op_empty(repo_root: Path) -> bool:
-    """True when the on-disk state is already the empty-constitution state.
-
-    Empty state on disk means: no constitution.md file present AND an
-    install.lock whose molecules list is empty. Either condition failing
-    means publication is required to reach the empty state.
-    """
-    live_root = repo_root / transaction.SPAEX_DIR
-    constitution_path = live_root / transaction.CONSTITUTION_NAME
-    lock_path = live_root / transaction.INSTALL_LOCK_NAME
-    if not lock_path.exists() or constitution_path.exists():
-        return False
-    try:
-        lock = InstallLock.from_json(lock_path.read_bytes())
-    except (OSError, ValueError, HaexError):
-        return False
-    return len(lock.molecules) == 0
+    return lock.molecules == expected_sorted
 
 
 def run(
@@ -199,12 +193,11 @@ def run(
                     contributing_ids=contributing_ids,
                     hook_status=hook_status,
                 )
-                # No-op only when neither a stale constitution nor any
-                # hook-only records need to be materialised in the lock.
-                # Hook-only re-installs still publish a new generation so
-                # the fresh hook_status is recorded; FR-025 idempotency
-                # comparison lands with Phase 7 (T039).
-                if not hook_only_records and _is_no_op_empty(repo_root):
+                # FR-025: publish only when the complete post-hook state
+                # (empty constitution + molecule map with hook_status)
+                # differs from disk. A hook-only re-install with an
+                # identical hook_status map is a clean no-op.
+                if _is_no_op(repo_root, None, hook_only_records):
                     inflight.clean_stale_siblings(
                         repo_root / transaction.SPAEX_DIR,
                         remove_prev=True,
@@ -245,36 +238,25 @@ def run(
                 contribution.body for contribution in contributions
             )
 
-            # Hooks MUST run on every invocation per FR-024. Execute them
-            # before the no-op check so a re-install still exercises each
-            # declared hook idempotently. Hook-only-transaction (FR-025) is
-            # deferred to T039; MVP happy path publishes when the body
-            # differs and skips otherwise, matching pre-Spec-016 idempotency.
+            # Hooks MUST run on every invocation per FR-024. Stage a
+            # candidate constitution first ONLY when atom bytes differ
+            # from what's published so the hook sees the incoming
+            # constitution; if the body is unchanged, the hook already
+            # sees the correct constitution on disk. The full no-op
+            # decision (FR-025) is made AFTER hooks run, based on the
+            # complete hook_status map.
             hook_present = any(
                 record.install_hook is not None for record in resolved
             )
             hook_enabled = hook_present and not skip_hooks
-            if any(
-                record.molecule_id in contributing_ids
-                and record.install_hook is not None
-                for record in resolved
-            ):
-                expected_hook_status: HookStatus | None = (
-                    "skipped" if skip_hooks else "ok"
-                )
-            else:
-                expected_hook_status = None
-            candidate_matches = _is_no_op_single_source(
-                repo_root,
-                assembled_body,
-                contribution.source.id,
-                contribution.source.revision,
-                contribution.source.source,
-                hook_status=expected_hook_status,
+            constitution_path = live_root / transaction.CONSTITUTION_NAME
+            body_matches_disk = (
+                constitution_path.exists()
+                and constitution_path.read_bytes() == assembled_body
             )
             stage_context = (
                 stage_constitution(contributions, repo_root, state_root=state_root)
-                if hook_enabled and not candidate_matches
+                if hook_enabled and not body_matches_disk
                 else nullcontext()
             )
             with stage_context:
@@ -290,14 +272,21 @@ def run(
                 contributing_ids=contributing_ids,
                 hook_status=hook_status,
             )
-            if not hook_only_records and _is_no_op_single_source(
-                repo_root,
-                assembled_body,
-                contribution.source.id,
-                contribution.source.revision,
-                contribution.source.source,
-                hook_status=hook_status.get(contribution.source.id),
-            ):
+            # FR-025: no-op iff the complete post-hook state (atom bytes
+            # AND every molecule's hook_status, contributor + hook-only)
+            # matches disk. A hook_status delta with unchanged atom bytes
+            # still publishes a new generation carrying only that delta.
+            expected_records: list[MoleculeEntry] = [
+                MoleculeEntry(
+                    id=contribution.source.id,
+                    source=contribution.source.source,
+                    revision=contribution.source.revision,
+                    paths=(CONSTITUTION_PATH,),
+                    hook_status=hook_status.get(contribution.source.id),
+                ),
+                *hook_only_records,
+            ]
+            if _is_no_op(repo_root, assembled_body, expected_records):
                 inflight.clean_stale_siblings(
                     repo_root / transaction.SPAEX_DIR,
                     remove_prev=True,
