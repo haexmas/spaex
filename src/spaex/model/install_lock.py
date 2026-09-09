@@ -23,13 +23,15 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from spaex.io import json_deterministic
 from spaex.model._immutable import freeze_json, thaw_json
 from spaex.model.source_url import CanonicalSourceUrl
 from spaex.schema import validator as schema_validator
 from spaex.util.errors import InstallLockSchemaInvalidError
+
+HookStatus = Literal["ok", "failed", "skipped"]
 
 _KNOWN_TOP_LEVEL_FIELDS = frozenset({"spaex_version", "generation_id", "molecules"})
 
@@ -71,6 +73,7 @@ class MoleculeEntry:
     source: str
     revision: str
     paths: tuple[str, ...]
+    hook_status: HookStatus | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "paths", tuple(self.paths))
@@ -177,15 +180,19 @@ def _parse_molecules(raw: Any) -> tuple[MoleculeEntry, ...]:
             source=CanonicalSourceUrl.validate(item["source"]),
             revision=item["revision"],
             paths=tuple(item["paths"]),
+            hook_status=item.get("hook_status"),
         )
         for item in raw
     )
 
 
 def _serialize_molecule(molecule: MoleculeEntry) -> dict[str, Any]:
-    return {
+    obj: dict[str, Any] = {
         "id": molecule.id,
         "source": molecule.source,
         "revision": molecule.revision,
         "paths": list(molecule.paths),
     }
+    if molecule.hook_status is not None:
+        obj["hook_status"] = molecule.hook_status
+    return obj
