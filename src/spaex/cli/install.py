@@ -10,13 +10,17 @@ from __future__ import annotations
 
 import argparse
 import sys
+from contextlib import nullcontext
 from pathlib import Path
 
-from spaex.constitution.publish import CONSTITUTION_PATH, publish_constitution
+from spaex.constitution.publish import (
+    CONSTITUTION_PATH,
+    publish_constitution,
+    stage_constitution,
+)
 from spaex.constitution.resolve import (
     ResolvedMolecule,
-    resolve_constitution_contributions,
-    resolve_molecules,
+    resolve_install_inputs,
 )
 from spaex.install import inflight
 from spaex.install.hook_runner import HookOutcomeKind, run_install_hook
@@ -83,6 +87,7 @@ def _is_no_op_single_source(
     source_id: str,
     source_revision: str,
     source_url: str,
+    hook_status: HookStatus | None = None,
 ) -> bool:
     """True when on-disk publication already matches the single-source candidate.
 
@@ -111,7 +116,10 @@ def _is_no_op_single_source(
         or recorded.source != source_url
     ):
         return False
-    return recorded.paths == (CONSTITUTION_PATH,)
+    return (
+        recorded.paths == (CONSTITUTION_PATH,)
+        and recorded.hook_status == hook_status
+    )
 
 
 def _is_no_op_empty(repo_root: Path) -> bool:
@@ -170,8 +178,7 @@ def run(
             inflight.clean_stale_siblings(live_root)
 
             manifest = _load_consumer_manifest(repo_root)
-            contributions = resolve_constitution_contributions(manifest, state_root)
-            resolved = resolve_molecules(manifest, state_root)
+            contributions, resolved = resolve_install_inputs(manifest, state_root)
 
             if not contributions:
                 # Empty-constitution state: valid post-`haex remove` outcome.
@@ -218,9 +225,31 @@ def run(
             # declared hook idempotently. Hook-only-transaction (FR-025) is
             # deferred to T039; MVP happy path publishes when the body
             # differs and skips otherwise, matching pre-Spec-016 idempotency.
-            hook_status = _run_hooks_for_mvp(
-                resolved, repo_root=repo_root, state_root=state_root
+            contributing_ids = {contribution.source.id for contribution in contributions}
+            hook_enabled = any(
+                record.molecule_id in contributing_ids and record.install_hook is not None
+                for record in resolved
             )
+            candidate_matches = _is_no_op_single_source(
+                repo_root,
+                assembled_body,
+                contribution.source.id,
+                contribution.source.revision,
+                contribution.source.source,
+                hook_status="ok" if hook_enabled else None,
+            )
+            stage_context = (
+                stage_constitution(contributions, repo_root, state_root=state_root)
+                if hook_enabled and not candidate_matches
+                else nullcontext()
+            )
+            with stage_context:
+                hook_status = _run_hooks_for_mvp(
+                    resolved,
+                    contributing_ids=contributing_ids,
+                    repo_root=repo_root,
+                    state_root=state_root,
+                )
 
             if _is_no_op_single_source(
                 repo_root,
@@ -228,6 +257,7 @@ def run(
                 contribution.source.id,
                 contribution.source.revision,
                 contribution.source.source,
+                hook_status=hook_status.get(contribution.source.id),
             ):
                 inflight.clean_stale_siblings(
                     repo_root / transaction.SPAEX_DIR,
@@ -280,6 +310,7 @@ def _refuse_hook_only_in_mvp(resolved: list[ResolvedMolecule]) -> None:
 def _run_hooks_for_mvp(
     resolved: list[ResolvedMolecule],
     *,
+    contributing_ids: set[str],
     repo_root: Path,
     state_root: Path,
 ) -> dict[str, HookStatus]:
@@ -294,7 +325,7 @@ def _run_hooks_for_mvp(
     """
     statuses: dict[str, HookStatus] = {}
     for record in resolved:
-        if record.install_hook is None:
+        if record.molecule_id not in contributing_ids or record.install_hook is None:
             continue
         outcome = run_install_hook(
             record, consumer_repo_root=repo_root, state_root=state_root

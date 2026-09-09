@@ -5,8 +5,11 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
+import time
+from contextlib import suppress
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -37,6 +40,10 @@ existing = (
     if gitignore.exists()
     else []
 )
+if "hello-hook demo" not in (repo / ".spaex" / "constitution.md").read_text(
+    encoding="utf-8"
+):
+    sys.exit(17)
 if LINE not in {{line.strip() for line in existing}}:
     with gitignore.open("a", encoding="utf-8") as fh:
         if existing and existing[-1] != "":
@@ -239,6 +246,26 @@ def test_hook_is_idempotent_on_second_install(
     assert lock.molecules[0].hook_status == "ok"
 
 
+def test_hook_status_is_persisted_when_legacy_lock_omits_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A successful hook fills the status in an otherwise unchanged lock."""
+    canonical, head, state_root = _publish_hook_molecule(tmp_path)
+    consumer = _make_consumer(tmp_path)
+
+    assert (
+        _run_add(consumer, state_root, monkeypatch, source_url=canonical, revision=head)
+        == 0
+    )
+    lock_path = consumer / ".spaex" / "install.lock"
+    lock_data = json.loads(lock_path.read_bytes())
+    del lock_data["molecules"][0]["hook_status"]
+    lock_path.write_bytes(json.dumps(lock_data).encode("utf-8"))
+
+    assert _run_install(consumer, state_root, monkeypatch) == 0
+    assert _read_lock(consumer).molecules[0].hook_status == "ok"
+
+
 # --- T021 AS3 (PTY prompt) ------------------------------------------------
 
 
@@ -307,29 +334,56 @@ def test_hook_interactive_prompt_via_pty(
     sel.register(parent_fd, selectors.EVENT_READ)
     buf = b""
     saw_prompt = False
-    deadline_ticks = 300  # ~30 seconds at 0.1s poll interval
-    while deadline_ticks > 0:
-        events = sel.select(timeout=0.1)
-        if not events:
-            deadline_ticks -= 1
-            continue
-        try:
-            chunk = os.read(parent_fd, 4096)
-        except OSError:
-            # On Linux, the parent-side read raises EIO once the child
-            # closes the slave fd. Treat as EOF.
+    deadline = time.monotonic() + 30.0
+    stream_open = True
+    status: int | None = None
+    while status is None:
+        waited_pid, waited_status = os.waitpid(pid, os.WNOHANG)
+        if waited_pid == pid:
+            status = waited_status
             break
-        if not chunk:
+
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            # Re-check before killing so a child that completed at the
+            # deadline is never terminated after it has already exited.
+            waited_pid, waited_status = os.waitpid(pid, os.WNOHANG)
+            if waited_pid == pid:
+                status = waited_status
+                break
+            with suppress(ProcessLookupError):
+                os.kill(pid, signal.SIGKILL)
+            _, status = os.waitpid(pid, 0)
             break
-        buf += chunk
-        if not saw_prompt and b"proceed?" in buf:
-            saw_prompt = True
-            os.write(parent_fd, b"yes\n")
-        # process may exit; loop reads until EOF.
-    _, status = os.waitpid(pid, 0)
+
+        if stream_open:
+            events = sel.select(timeout=min(0.1, remaining))
+            if not events:
+                continue
+            try:
+                chunk = os.read(parent_fd, 4096)
+            except OSError:
+                # On Linux, the parent-side read raises EIO once the child
+                # closes the slave fd. Treat the stream as closed, but keep
+                # polling the child until it exits or the wall-clock deadline.
+                stream_open = False
+                sel.unregister(parent_fd)
+                continue
+            if not chunk:
+                stream_open = False
+                sel.unregister(parent_fd)
+                continue
+            buf += chunk
+            if not saw_prompt and b"proceed?" in buf:
+                saw_prompt = True
+                os.write(parent_fd, b"yes\n")
+        else:
+            time.sleep(min(0.01, remaining))
+    sel.close()
     os.close(parent_fd)
 
     assert saw_prompt, f"prompt never appeared; captured:\n{buf.decode(errors='replace')}"
+    assert status is not None
     exit_code = os.waitstatus_to_exitcode(status)
     assert exit_code == 0, f"spaex exit code {exit_code}; captured:\n{buf.decode(errors='replace')}"
 
@@ -365,18 +419,21 @@ def test_hook_eoferror_in_non_tty_env(
     )
     consumer = _make_consumer(tmp_path)
 
-    devnull = open(os.devnull, "rb")
+    original_stdin_fd = os.dup(0)
     try:
-        monkeypatch.setattr("sys.stdin", devnull)
-        rc = _run_add(
-            consumer,
-            state_root,
-            monkeypatch,
-            source_url=canonical,
-            revision=head,
-        )
+        with open(os.devnull, "rb") as devnull:
+            os.dup2(devnull.fileno(), 0)
+            monkeypatch.setattr("sys.stdin", devnull)
+            rc = _run_add(
+                consumer,
+                state_root,
+                monkeypatch,
+                source_url=canonical,
+                revision=head,
+            )
     finally:
-        devnull.close()
+        os.dup2(original_stdin_fd, 0)
+        os.close(original_stdin_fd)
     assert rc == 0
 
     answer_file = consumer / ".hook-eoferror-answer"

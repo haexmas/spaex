@@ -28,8 +28,8 @@ import os
 import shutil
 import signal
 import sys
-from collections.abc import Callable, Iterable, Sequence
-from contextlib import suppress
+from collections.abc import Callable, Iterable, Iterator, Sequence
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -118,6 +118,80 @@ def _rollback_swap(
     if live_existed_before and prev_dir.exists():
         os.rename(str(prev_dir), str(live))
         _fsync_dir(parent)
+
+
+@contextmanager
+def stage_generation(
+    live: Path,
+    files: Iterable[StagedFile],
+    *,
+    state_root: Path | None = None,
+    repo_root: Path | None = None,
+) -> Iterator[None]:
+    """Stage and temporarily activate a generation for pre-publication work.
+
+    The candidate is fully written before it replaces ``live``. If the body
+    of the context raises, the previous generation is restored; otherwise the
+    candidate remains live and its previous generation is discarded. This is
+    used for install hooks that must inspect the new atom content before the
+    final lock, including hook status, is published.
+    """
+    files_list = list(files)
+    parent = live.parent
+    next_dir = _next_dir(live)
+    prev_dir = _prev_dir(live)
+
+    _rmtree(next_dir)
+    next_dir.mkdir(parents=True, exist_ok=False)
+    _fsync_dir(parent)
+    live_existed_before = live.exists()
+    rename_a_done = False
+
+    try:
+        _write_staging(next_dir, files_list)
+        if state_root is not None:
+            paths = transaction_paths(
+                repo_root if repo_root is not None else parent,
+                state_root,
+            )
+            write_identity_record(paths)
+
+        if live_existed_before:
+            if prev_dir.exists():
+                _rmtree(prev_dir)
+                _fsync_dir(parent)
+            os.rename(str(live), str(prev_dir))
+            _fsync_dir(parent)
+            rename_a_done = True
+        try:
+            os.rename(str(next_dir), str(live))
+        except BaseException:
+            if rename_a_done:
+                os.rename(str(prev_dir), str(live))
+                _fsync_dir(parent)
+                rename_a_done = False
+            raise
+        _fsync_dir(parent)
+
+        try:
+            yield
+        except BaseException:
+            _rollback_swap(
+                live,
+                next_dir,
+                prev_dir,
+                live_existed_before=live_existed_before,
+            )
+            rename_a_done = False
+            raise
+
+        if prev_dir.exists():
+            _rmtree(prev_dir)
+            _fsync_dir(parent)
+    except BaseException:
+        if not rename_a_done:
+            _rmtree(next_dir)
+        raise
 
 
 def publish_generation(

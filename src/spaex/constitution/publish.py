@@ -24,7 +24,8 @@ rename-swap of `.spaex/` (delete-orphans via full-directory swap).
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from pathlib import Path
 from stat import S_IMODE
 
@@ -240,3 +241,67 @@ def publish_constitution(
         repo_root,
         state_root=state_root,
     )
+
+
+@contextmanager
+def stage_constitution(
+    contributions: Sequence[ResolvedConstitutionContribution],
+    repo_root: Path,
+    *,
+    state_root: Path | None = None,
+) -> Iterator[None]:
+    """Temporarily activate a candidate constitution for install hooks.
+
+    The candidate contains the constitution and an install lock without hook
+    status. It is atomically made visible before the context body runs and is
+    rolled back if a hook raises. Successful callers must still invoke
+    ``publish_constitution`` to write the final hook status.
+    """
+    if not contributions:
+        raise ValueError("cannot stage an empty constitution")
+
+    source = contributions[0].source
+    if any(contribution.source != source for contribution in contributions[1:]):
+        raise ValueError(
+            "constitution staging received contributions from multiple molecules"
+        )
+    for contribution in contributions:
+        validate_no_plaintext_secrets(
+            contribution.body, location=f"constitution source {contribution.source.id}"
+        )
+        validate_no_concealment_instructions(contribution.body)
+
+    existing_lock = _read_existing_lock(repo_root)
+    existing_generation_id = (
+        existing_lock.generation_id if existing_lock is not None else None
+    )
+    body = b"\n".join(contribution.body for contribution in contributions)
+    generation_id = allocate_generation_id(body, existing_generation_id)
+    lock = InstallLock(
+        spaex_version="4",
+        generation_id=generation_id,
+        molecules=(
+            MoleculeEntry(
+                id=source.id,
+                source=source.source,
+                revision=source.revision,
+                paths=(CONSTITUTION_PATH,),
+            ),
+        ),
+        unknown_top_level=(
+            dict(existing_lock.unknown_top_level) if existing_lock is not None else {}
+        ),
+    )
+    lock_bytes = lock.to_json_bytes()
+    InstallLock.from_json(lock_bytes)
+
+    with transaction.stage_generation(
+        repo_root / transaction.SPAEX_DIR,
+        [
+            transaction.StagedFile(transaction.CONSTITUTION_NAME, body),
+            transaction.StagedFile(transaction.INSTALL_LOCK_NAME, lock_bytes),
+        ],
+        state_root=state_root,
+        repo_root=repo_root,
+    ):
+        yield

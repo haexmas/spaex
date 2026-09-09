@@ -57,6 +57,34 @@ def test_publish_creates_live_on_first_generation(tmp_path: Path) -> None:
     assert not (tmp_path / f"{transaction.SPAEX_DIR}.prev").exists()
 
 
+def test_stage_generation_rolls_back_when_prepublication_work_fails(
+    tmp_path: Path,
+) -> None:
+    """Restore the prior generation when a hook fails after candidate activation."""
+    state_root = _init_project(tmp_path)
+    live = tmp_path / transaction.SPAEX_DIR
+    transaction.publish_generation(
+        live,
+        _staged(b"old\n", b"old-lock\n"),
+        state_root=state_root,
+        repo_root=tmp_path,
+    )
+
+    with pytest.raises(RuntimeError, match="hook failed"), transaction.stage_generation(
+        live,
+        _staged(b"new\n", b"new-lock\n"),
+        state_root=state_root,
+        repo_root=tmp_path,
+    ):
+        assert (live / transaction.CONSTITUTION_NAME).read_bytes() == b"new\n"
+        raise RuntimeError("hook failed")
+
+    assert (live / transaction.CONSTITUTION_NAME).read_bytes() == b"old\n"
+    assert (live / transaction.INSTALL_LOCK_NAME).read_bytes() == b"old-lock\n"
+    assert not (tmp_path / f"{transaction.SPAEX_DIR}.next").exists()
+    assert not (tmp_path / f"{transaction.SPAEX_DIR}.prev").exists()
+
+
 def test_publish_replaces_previous_generation_via_rename_swap(tmp_path: Path) -> None:
     state_root = _init_project(tmp_path)
     live = tmp_path / transaction.SPAEX_DIR

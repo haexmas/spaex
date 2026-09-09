@@ -75,7 +75,7 @@ def run_install_hook(
             resolved.molecule_path,
             state_root,
         )
-    except (MoleculeTreePathNotFoundError, MoleculeTreeExtractionError):
+    except (MoleculeTreePathNotFoundError, MoleculeTreeExtractionError, OSError):
         return _launch_failure("molecule_tree_unavailable")
 
     try:
