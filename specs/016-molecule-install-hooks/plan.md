@@ -8,6 +8,7 @@
 - Preceding: [specs/014-rename-to-spaex/](../014-rename-to-spaex/) (established v4 vocabulary)
 - Foundational: [specs/007-unified-manifest-v2/](../007-unified-manifest-v2/) (atom-category model)
 - Foundational: [specs/008-install-transaction/](../008-install-transaction/) (staging-generation-then-publish machinery)
+- **Blocking dependency, landed after this plan was first written**: [specs/017-molecule-store/](../017-molecule-store/) (`spaex.git.molecule_store.get_or_extract()`, merged 2026-09-09) — surfaced mid-implementation of this spec as a missing prerequisite (no code existed to materialize a molecule's tree onto real disk for a subprocess to execute against). This plan's Project Structure and T009/T013 were amended 2026-09-09 to consume it instead of building an in-repo `util/path_containment.py`.
 
 ## Summary
 
@@ -78,16 +79,20 @@ src/spaex/
 │       ├── molecule-manifest.v4.schema.json  # Extend: new install_hook property under type=object
 │       └── install-lock.v4.schema.json       # Extend: optional hook_status enum on per-molecule record
 ├── constitution/
-│   └── resolve.py                   # Extend resolver: retain hook-only molecules, priority sort
+│   └── resolve.py                   # Extend resolver: retain hook-only molecules, priority sort,
+│                                     #   expose repo_dir/molecule_path (Spec 017 lands 2026-09-09;
+│                                     #   this spec no longer builds its own materialization/
+│                                     #   containment layer, it consumes spaex.git.molecule_store)
 ├── install/
 │   ├── manifest_lock.py             # No change
-│   └── hook_runner.py               # NEW: subprocess invocation, cache-containment check, on_failure application
-├── cli/
-│   ├── add.py                       # New flag: --no-install-hooks (propagated to install subroutine)
-│   ├── install.py                   # Orchestrate hooks before publication; reuse install-failed key
-│   └── remove.py                    # New behavior: WARN on removal of a molecule that declared install_hook
-└── util/
-    └── path_containment.py          # NEW: canonicalise + descendant-check helper (or extend existing util)
+│   └── hook_runner.py               # NEW: calls molecule_store.get_or_extract(), subprocess
+│                                     #   invocation, on_failure application. No bespoke
+│                                     #   containment check — Spec 017's own validates the whole
+│                                     #   materialized tree before this module ever sees it.
+└── cli/
+    ├── add.py                       # New flag: --no-install-hooks (propagated to install subroutine)
+    ├── install.py                   # Orchestrate hooks before publication; reuse install-failed key
+    └── remove.py                    # New behavior: WARN on removal of a molecule that declared install_hook
 
 tests/
 ├── contract/
@@ -99,9 +104,10 @@ tests/
 │   ├── test_install_hook_multi_molecule.py            # NEW: priority ordering, hook-only molecule survival
 │   └── test_install_hook_idempotency.py               # NEW: repeat spaex install, hook-only-transaction case
 └── unit/
-    ├── test_manifest_install_hook_parser.py           # NEW: MoleculeManifest.from_json populates InstallHook | None
-    └── test_path_containment.py                       # NEW: cache-containment check unit cases
+    └── test_manifest_install_hook_parser.py           # NEW: MoleculeManifest.from_json populates InstallHook | None
 ```
+
+**2026-09-09 amendment**: the original plan had this spec building its own `util/path_containment.py` (a bespoke `canonicalise_within()` escape-checker) for validating `install_hook.script` against the molecule's directory. That module and its tests (`test_path_containment.py`) are no longer needed: [Spec 017](../017-molecule-store/) (designed and implemented 2026-09-08/09, landed as three merged PRs before this spec's own implementation began) already validates every file and symlink inside a materialized molecule tree against exactly this class of escape, at materialization time, for the whole tree — a stronger and earlier guarantee than a hook-runner-local check on one path within an already-validated tree would have provided. This spec's `hook_runner.py` now calls `spaex.git.molecule_store.get_or_extract()` to obtain the molecule's directory and trusts its content is already safe. See tasks.md T009/T013's 2026-09-09 revisions and data-model.md's `ResolvedMolecule` amendment for the corrected field set (`repo_dir` + `molecule_path` replace the earlier, underspecified `cache_dir`).
 
 **Structure Decision**: Single-project layout (Option 1), matching Spec 013/014 established layout. No new top-level directories; all changes are additions within existing `src/spaex/` module tree and mirroring `tests/`.
 
@@ -122,7 +128,7 @@ Output: [research.md](./research.md)
 1. **Data model** ([data-model.md](./data-model.md)):
    - `InstallHook` dataclass: interpreter (str), script (repo-relative path str), args (list[str]), on_failure (Literal["abort", "warn"]).
    - `MoleculeManifest.install_hook: InstallHook | None` field; `from_json()` parser rules (absent → None; present with omitted `on_failure` → explicitly "abort", never rely on JSON-Schema default).
-   - `ResolvedMolecule` extension: expose `install_hook`, `source_url`, `revision` (40-hex), `cache_dir` (absolute path to extracted molecule tree), `effective_priority` (int). Hook-only molecules MUST remain in the resolved collection.
+   - `ResolvedMolecule` extension: expose `install_hook`, `source_url`, `revision` (40-hex), `repo_dir` (local bare clone) and `molecule_path` (publisher-declared path) — passed to Spec 017's `molecule_store.get_or_extract()` on demand rather than a pre-populated `cache_dir` — and `effective_priority` (int). Hook-only molecules MUST remain in the resolved collection.
    - `install.lock` per-molecule record: add optional `hook_status: Literal["ok", "failed", "skipped"] | None`. Present exactly when the molecule declares `install_hook`.
 
 2. **Contracts** ([contracts/](./contracts/)):
