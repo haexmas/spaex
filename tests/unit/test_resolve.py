@@ -16,6 +16,7 @@ from spaex.util.errors import (
     AtomIdCollisionError,
     MissingAtomManifestError,
     MissingPublisherManifestError,
+    MoleculeTreeExtractionError,
 )
 
 pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git binary required")
@@ -420,4 +421,71 @@ def test_publisher_manifest_not_found(tmp_path: Path) -> None:
         [CompoundEntry(source=canonical, revision=sha, molecules=("com.example.publisher.atom",))]
     )
     with pytest.raises(MissingPublisherManifestError):
+        resolve_constitution_contributions(manifest, state_root)
+
+
+def test_constitution_path_symlink_escape_is_refused(tmp_path: Path) -> None:
+    """FR-018 — a constitution path resolving outside cache_dir raises MoleculeTreeExtractionError.
+
+    Pre-populates the materialized cache directory so `get_or_extract` takes its
+    cache-hit fast path, then plants a symlinked `constitution.md` inside that
+    cache directory pointing at a file outside it. Exercises T018's direct-read
+    containment check, not T004's archive-member validation (no `git archive`
+    invocation reaches disk).
+    """
+    canonical = "https://github.com/example/publisher"
+    molecule_key = "com.github.example.publisher.constitution"
+    publisher = tmp_path / "publisher"
+    sha = _publish(
+        publisher,
+        {
+            "spaex_version": "4",
+            "publisher": "com.github.example.publisher",
+            "molecules": {molecule_key: {"path": "c", "version": "1.0.0"}},
+        },
+        {
+            "c": (
+                {
+                    "spaex_version": "4",
+                    "id": molecule_key,
+                    "version": "1.0.0",
+                    "priority": 100,
+                    "atoms": {"constitution": ["constitution.md"]},
+                },
+                b"body",
+            )
+        },
+    )
+    state_root = tmp_path / "state"
+    _clone(state_root, canonical, publisher)
+
+    source_digest = clone_dir(state_root, canonical).name
+    cache_dir = state_root / "molecule-store" / source_digest / sha / "c"
+    cache_dir.mkdir(parents=True)
+    (cache_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "spaex_version": "4",
+                "id": molecule_key,
+                "version": "1.0.0",
+                "priority": 100,
+                "atoms": {"constitution": ["constitution.md"]},
+            },
+            sort_keys=True,
+        )
+    )
+    outside = tmp_path / "outside.md"
+    outside.write_bytes(b"forbidden")
+    (cache_dir / "constitution.md").symlink_to(outside)
+
+    manifest = _manifest(
+        [
+            CompoundEntry(
+                source=canonical,
+                revision=sha,
+                molecules=(molecule_key,),
+            )
+        ]
+    )
+    with pytest.raises(MoleculeTreeExtractionError):
         resolve_constitution_contributions(manifest, state_root)

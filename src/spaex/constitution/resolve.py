@@ -14,6 +14,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
+from spaex.git import molecule_store
 from spaex.git import revparse as git_revparse
 from spaex.git import show as git_show
 from spaex.migrate.transform import clone_dir
@@ -27,6 +28,8 @@ from spaex.util.errors import (
     ContributionFileNotFoundError,
     MissingAtomManifestError,
     MissingPublisherManifestError,
+    MoleculeTreeExtractionError,
+    MoleculeTreePathNotFoundError,
     PublisherCloneUnavailableError,
 )
 
@@ -132,14 +135,35 @@ def resolve_install_inputs(
             )
         )
         constitution_paths = record.molecule_manifest.atoms.get("constitution", ())
+        cache_dir_resolved = record.cache_dir.resolve()
         for path_index, constitution_path in enumerate(constitution_paths):
-            contribution_path = f"{record.publisher_path}/{constitution_path}"
-            body = git_show.show_bytes(
-                record.repo_dir,
-                record.revision,
-                contribution_path,
-                not_found_error=ContributionFileNotFoundError,
-            )
+            candidate = (record.cache_dir / constitution_path).resolve()
+            if not candidate.is_relative_to(cache_dir_resolved):
+                raise MoleculeTreeExtractionError(
+                    message=(
+                        f"constitution path {constitution_path!r} for {record.molecule_id!r} "
+                        f"resolves outside the materialized molecule directory"
+                    ),
+                    context={
+                        "atom_id": record.molecule_id,
+                        "path": constitution_path,
+                    },
+                )
+            try:
+                body = candidate.read_bytes()
+            except FileNotFoundError as exc:
+                raise ContributionFileNotFoundError(
+                    message=(
+                        f"contribution file {constitution_path!r} for "
+                        f"{record.molecule_id!r} not found at "
+                        f"{record.publisher_path}/{constitution_path}"
+                    ),
+                    context={
+                        "atom_id": record.molecule_id,
+                        "path": constitution_path,
+                        "sha_short": record.revision[:12],
+                    },
+                ) from exc
             contribution = ResolvedConstitutionContribution(
                 source=ConstitutionSource(
                     id=record.molecule_id,
@@ -168,6 +192,7 @@ class _ResolverRecord:
     publisher_path: str
     molecule_manifest: MoleculeManifest
     effective_priority: int
+    cache_dir: Path
 
 
 def _iterate_resolved_molecules(
@@ -191,11 +216,11 @@ def _iterate_resolved_molecules(
                 message=f"no publisher clone found for {source!r}",
                 context={"source": source},
             )
-        git_revparse.full_sha(repo_dir, revision)
+        canonical_revision = git_revparse.full_sha(repo_dir, revision)
 
         publisher_bytes = git_show.show_bytes(
             repo_dir,
-            revision,
+            canonical_revision,
             "manifest.json",
             not_found_error=MissingPublisherManifestError,
         )
@@ -203,12 +228,15 @@ def _iterate_resolved_molecules(
             publisher = PublisherManifest.from_json(publisher_bytes)
         except (ValueError, KeyError) as exc:
             raise MissingPublisherManifestError(
-                message=f"publisher manifest at {source!r}@{revision[:12]} is invalid: {exc}",
-                context={"source": source, "sha_short": revision[:12]},
+                message=(
+                    f"publisher manifest at {source!r}@{canonical_revision[:12]} "
+                    f"is invalid: {exc}"
+                ),
+                context={"source": source, "sha_short": canonical_revision[:12]},
             ) from exc
 
         for molecule_id in compound_entry.molecules:
-            key = (source, revision)
+            key = (source, canonical_revision)
             if molecule_id in seen and seen[molecule_id] != key:
                 raise AtomIdCollisionError(
                     message=(
@@ -229,12 +257,36 @@ def _iterate_resolved_molecules(
                     context={"atom_id": molecule_id, "publisher": publisher.publisher},
                 )
 
-            molecule_bytes = git_show.show_bytes(
-                repo_dir,
-                revision,
-                f"{publisher_entry.path}/manifest.json",
-                not_found_error=MissingAtomManifestError,
-            )
+            try:
+                cache_dir = molecule_store.get_or_extract(
+                    repo_dir,
+                    source,
+                    canonical_revision,
+                    publisher_entry.path,
+                    state_root,
+                )
+            except MoleculeTreePathNotFoundError as exc:
+                raise MissingAtomManifestError(
+                    message=(
+                        f"molecule tree for {molecule_id!r} not found at "
+                        f"{publisher_entry.path!r}@{canonical_revision[:12]}"
+                    ),
+                    context={
+                        "atom_id": molecule_id,
+                        "path": publisher_entry.path,
+                        "sha_short": canonical_revision[:12],
+                    },
+                ) from exc
+            try:
+                molecule_bytes = (cache_dir / "manifest.json").read_bytes()
+            except FileNotFoundError as exc:
+                raise MissingAtomManifestError(
+                    message=(
+                        f"molecule manifest for {molecule_id!r} not found at "
+                        f"{publisher_entry.path}/manifest.json"
+                    ),
+                    context={"atom_id": molecule_id, "path": publisher_entry.path},
+                ) from exc
             try:
                 molecule_manifest = MoleculeManifest.from_json(molecule_bytes)
             except (ValueError, KeyError) as exc:
@@ -267,10 +319,11 @@ def _iterate_resolved_molecules(
 
             yield _ResolverRecord(
                 source_url=source,
-                revision=revision,
+                revision=canonical_revision,
                 repo_dir=repo_dir,
                 molecule_id=molecule_id,
                 publisher_path=publisher_entry.path,
                 molecule_manifest=molecule_manifest,
                 effective_priority=effective_priority,
+                cache_dir=cache_dir,
             )
