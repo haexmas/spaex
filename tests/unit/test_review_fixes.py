@@ -225,10 +225,10 @@ def test_install_allows_multiple_paths_from_one_molecule(
     assert captured == [contributions]
 
 
-def test_install_rejects_mixed_constitution_and_hook_only_molecules(
+def test_install_runs_hook_only_alongside_constitution_molecule(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The MVP must not silently skip a selected hook-only molecule."""
+    """Spec 016 US4 lifts the MVP restriction: hook-only molecules run alongside a constitution."""
     (tmp_path / ".spaex.json").write_text('{"identity":"com.example.project"}')
     source = ConstitutionSource(
         id="com.example.constitution",
@@ -263,6 +263,24 @@ def test_install_rejects_mixed_constitution_and_hook_only_molecules(
     contributions = [
         ResolvedConstitutionContribution(source=source, body=b"constitution")
     ]
+    from contextlib import nullcontext
+
+    from spaex.install.hook_runner import HookOutcome, HookOutcomeKind
+
+    invoked: list[str] = []
+
+    def fake_run_install_hook(record, *, consumer_repo_root, state_root):
+        del consumer_repo_root, state_root
+        invoked.append(record.molecule_id)
+        return HookOutcome(kind=HookOutcomeKind.OK)
+
+    captured_hook_only: list[tuple] = []
+
+    def capture_publish(
+        contributions_arg, repo_root, *, state_root=None, hook_status=None, hook_only_records=()
+    ):
+        captured_hook_only.append(tuple(hook_only_records))
+        del contributions_arg, repo_root, state_root, hook_status
 
     monkeypatch.setattr(install_cli, "default_state_root", lambda: tmp_path / "state")
     monkeypatch.setattr(install_cli, "_load_consumer_manifest", lambda root: object())
@@ -271,12 +289,24 @@ def test_install_rejects_mixed_constitution_and_hook_only_molecules(
         "resolve_install_inputs",
         lambda manifest, state_root: (contributions, resolved),
     )
+    monkeypatch.setattr(install_cli, "run_install_hook", fake_run_install_hook)
+    monkeypatch.setattr(
+        install_cli, "_is_no_op_single_source", lambda *args, **kwargs: False
+    )
+    monkeypatch.setattr(install_cli, "_live_generation_id", lambda root: "generation")
+    monkeypatch.setattr(install_cli, "stage_constitution", lambda *a, **kw: nullcontext())
+    monkeypatch.setattr(install_cli, "publish_constitution", capture_publish)
 
-    with pytest.raises(HaexError) as exc_info:
-        install_cli.run(SimpleNamespace(repo_root=str(tmp_path)))
+    assert install_cli.run(SimpleNamespace(repo_root=str(tmp_path))) == 0
 
-    assert exc_info.value.diagnostic_key == "install-failed"
-    assert exc_info.value.context == {"molecule_id": "com.example.hook-only"}
+    assert invoked == ["com.example.hook-only"]
+    assert len(captured_hook_only) == 1
+    entries = captured_hook_only[0]
+    assert len(entries) == 1
+    entry = entries[0]
+    assert entry.id == "com.example.hook-only"
+    assert entry.paths == ()
+    assert entry.hook_status == "ok"
 
 
 def test_models_freeze_nested_json_values() -> None:
