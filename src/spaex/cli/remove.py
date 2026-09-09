@@ -27,6 +27,7 @@ from spaex.model.consumer_manifest import (
     CompoundEntry,
     ConsumerManifest,
 )
+from spaex.model.install_lock import InstallLock
 from spaex.util import exit_codes
 from spaex.util.errors import HaexError, UnknownMoleculeIdError
 
@@ -95,6 +96,28 @@ def _apply_removal(
     )
 
 
+def _warn_hook_carriers(repo_root: Path, remove_ids: tuple[str, ...]) -> None:
+    """Emit FR-029 WARN for retracted molecules whose current install.lock
+    record carries an install-hook status (evidence that the pinned revision
+    declared install_hook). Silent when install.lock is absent (fresh-consumer
+    edge case). Order follows ``remove_ids`` for deterministic output.
+    """
+    lock_path = repo_root / ".spaex" / "install.lock"
+    if not lock_path.exists():
+        return
+    lock = InstallLock.from_json(lock_path.read_bytes())
+    hook_carriers = {m.id for m in lock.molecules if m.hook_status is not None}
+    for mid in remove_ids:
+        if mid in hook_carriers:
+            sys.stderr.write(
+                f"WARN: molecule {mid} had an install_hook; side effects "
+                "(git hooks, gitignore entries, provisioned tools, "
+                "agent-harness registrations) may remain. Consult the "
+                "molecule's README for reverse steps.\n"
+            )
+    sys.stderr.flush()
+
+
 def add_arguments(parser: argparse.ArgumentParser) -> None:
     """Attach `haex remove` arguments to ``parser``."""
     parser.add_argument(
@@ -144,6 +167,8 @@ def run(args: argparse.Namespace) -> int:
 
         new_manifest = _apply_removal(current, remove_ids)
         new_bytes = new_manifest.to_json_bytes()
+
+        _warn_hook_carriers(repo_root, remove_ids)
 
         exit_code = write_and_reinstall(repo_root, new_bytes, lock)
 
