@@ -13,6 +13,7 @@ import pytest
 
 from spaex.cli import add as add_cli
 from spaex.cli import install as install_cli
+from spaex.cli.main import _build_parser
 from spaex.migrate.transform import clone_dir
 from spaex.model.install_lock import InstallLock
 
@@ -39,6 +40,7 @@ sys.exit(0)
 
 
 def _git(cwd: Path, *args: str) -> str:
+    """Run a git command in ``cwd`` and return its trimmed stdout."""
     proc = subprocess.run(
         ["git", "-C", str(cwd), *args], capture_output=True, text=True, check=True
     )
@@ -105,6 +107,7 @@ def _publish_marker_molecule(tmp_path: Path) -> tuple[str, str, Path]:
 
 
 def _make_consumer(tmp_path: Path) -> Path:
+    """Create a minimal v4 consumer project for the integration scenario."""
     consumer = tmp_path / "consumer"
     consumer.mkdir()
     (consumer / ".spaex.json").write_text(
@@ -130,6 +133,7 @@ def _run_add(
     skip_hooks: bool = False,
     molecule_ids: str = _MOLECULE_ID,
 ) -> int:
+    """Run ``spaex add`` in-process with the requested hook policy."""
     monkeypatch.setenv("SPAEX_STATE", str(state_root))
     ns = SimpleNamespace(
         repo_root=str(consumer),
@@ -150,6 +154,7 @@ def _run_install(
     *,
     skip_hooks: bool = False,
 ) -> int:
+    """Run ``spaex install`` in-process with the requested hook policy."""
     monkeypatch.setenv("SPAEX_STATE", str(state_root))
     ns = SimpleNamespace(
         repo_root=str(consumer),
@@ -160,9 +165,23 @@ def _run_install(
 
 
 def _read_lock(consumer: Path) -> InstallLock:
+    """Read the consumer's published install lock."""
     return InstallLock.from_json(
         (consumer / ".spaex" / "install.lock").read_bytes()
     )
+
+
+def test_no_install_hooks_is_exposed_by_cli_parser() -> None:
+    """Both public commands expose the documented opt-out flag."""
+    parser = _build_parser()
+
+    install_args = parser.parse_args(["install", "--no-install-hooks"])
+    assert install_args.skip_hooks is True
+
+    add_args = parser.parse_args(
+        ["add", _CANONICAL, _MOLECULE_ID, "--no-install-hooks"]
+    )
+    assert add_args.skip_hooks is True
 
 
 # --- T032 AS1 -------------------------------------------------------------
@@ -253,3 +272,33 @@ def test_no_install_hooks_via_spaex_add_propagates(
 
     assert not (consumer / _MARKER_NAME).exists()
     assert _read_lock(consumer).molecules[0].hook_status == "skipped"
+
+
+def test_no_install_hooks_direct_install_is_per_invocation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AS2: direct install accepts the opt-out and later runs the hook again."""
+    canonical, head, state_root = _publish_marker_molecule(tmp_path)
+    consumer = _make_consumer(tmp_path)
+
+    assert (
+        _run_add(
+            consumer,
+            state_root,
+            monkeypatch,
+            source_url=canonical,
+            revision=head,
+        )
+        == 0
+    )
+    marker = consumer / _MARKER_NAME
+    assert marker.exists()
+    marker.unlink()
+
+    assert _run_install(consumer, state_root, monkeypatch, skip_hooks=True) == 0
+    assert not marker.exists()
+    assert _read_lock(consumer).molecules[0].hook_status == "skipped"
+
+    assert _run_install(consumer, state_root, monkeypatch) == 0
+    assert marker.read_text(encoding="utf-8") == "ran\n"
+    assert _read_lock(consumer).molecules[0].hook_status == "ok"
