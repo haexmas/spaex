@@ -228,11 +228,14 @@ def get_or_extract(
                 context={"molecule_path": molecule_path, "revision": revision},
             )
 
-        revision_root.mkdir(parents=True, exist_ok=True)
-        temp_dir = Path(
-            tempfile.mkdtemp(prefix=f".{revision_root.name}.tmp-", dir=str(revision_root.parent))
-        )
+        temp_dir: Path | None = None
         try:
+            revision_root.mkdir(parents=True, exist_ok=True)
+            temp_dir = Path(
+                tempfile.mkdtemp(
+                    prefix=f".{revision_root.name}.tmp-", dir=str(revision_root.parent)
+                )
+            )
             try:
                 with tarfile.open(fileobj=io.BytesIO(proc.stdout), mode="r") as tar:
                     if not tar.getmembers():
@@ -256,7 +259,17 @@ def get_or_extract(
                 )
             final_dir.parent.mkdir(parents=True, exist_ok=True)
             os.replace(temp_molecule_dir, final_dir)
+        except MoleculeTreeExtractionError:
+            raise
+        except OSError as exc:
+            raise MoleculeTreeExtractionError(
+                message=(
+                    f"could not materialize {molecule_path!r} at {revision}: {exc}"
+                ),
+                context={"molecule_path": molecule_path, "revision": revision},
+            ) from exc
         finally:
-            shutil.rmtree(temp_dir, ignore_errors=True)
+            if temp_dir is not None:
+                shutil.rmtree(temp_dir, ignore_errors=True)
 
         return final_dir
