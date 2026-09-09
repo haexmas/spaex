@@ -50,6 +50,10 @@
             "pattern": "^(?!.*(?:^|/)\\.\\.?/)(?!.*\\\\)\\.[A-Za-z0-9._-]+/[^\\u0000-\\u001F\\u007F\\\\]+$"
           },
           "description": "Unique, deterministically ordered POSIX paths relative to the consumer repository root that this molecule wrote. Every path implicitly names its participating root (its leading dot-segment); there is no separate participating_roots list."
+        },
+        "hook_status": {
+          "enum": ["ok", "failed", "skipped"],
+          "description": "Outcome of this molecule's install_hook invocation for the current generation. Present ONLY when the pinned molecule manifest declared install_hook. 'ok' = hook was enabled and exited 0. 'failed' = hook could not be launched, violated cache containment, or exited non-zero under on_failure='warn'. 'skipped' = operator supplied --no-install-hooks. A hook failure under on_failure='abort' produces no record because the entire generation rolls back."
         }
       }
     }
