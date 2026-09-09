@@ -205,7 +205,17 @@ def get_or_extract(
 
         try:
             proc = subprocess.run(
-                ["git", "-C", str(repo_dir), "archive", revision, "--", molecule_path],
+                [
+                    "git",
+                    "-C",
+                    str(repo_dir),
+                    "-c",
+                    "core.autocrlf=false",
+                    "archive",
+                    revision,
+                    "--",
+                    molecule_path,
+                ],
                 capture_output=True,
                 timeout=_GIT_ARCHIVE_TIMEOUT_SECONDS,
                 check=False,
