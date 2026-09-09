@@ -146,7 +146,8 @@ def run(args: argparse.Namespace) -> int:
             hint="Nothing to retract; there is no consumer manifest here.",
         )
 
-    remove_ids = _parse_ids(args.molecule_ids)
+    # A molecule is removed once even if the operator repeats its ID.
+    remove_ids = tuple(dict.fromkeys(_parse_ids(args.molecule_ids)))
 
     lock = ManifestLockContext(
         repo_root / ".spaex.json.lock",
