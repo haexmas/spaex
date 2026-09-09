@@ -20,6 +20,7 @@ from spaex.constitution.publish import (
     stage_constitution,
 )
 from spaex.constitution.resolve import (
+    ResolvedConstitutionContribution,
     ResolvedMolecule,
     resolve_install_inputs,
 )
@@ -133,6 +134,29 @@ def _is_no_op(
         )
     )
     return lock.molecules == expected_sorted
+
+
+def _constitution_contributor_matches_disk(
+    repo_root: Path,
+    contribution: ResolvedConstitutionContribution,
+) -> bool:
+    """Return whether disk records the current constitution contributor."""
+    lock_path = repo_root / transaction.SPAEX_DIR / transaction.INSTALL_LOCK_NAME
+    if not lock_path.exists():
+        return False
+    try:
+        lock = InstallLock.from_json(lock_path.read_bytes())
+    except (OSError, ValueError, HaexError):
+        return False
+
+    source = contribution.source
+    return any(
+        record.id == source.id
+        and record.source == source.source
+        and record.revision == source.revision
+        and record.paths == (CONSTITUTION_PATH,)
+        for record in lock.molecules
+    )
 
 
 def run(
@@ -254,9 +278,13 @@ def run(
                 constitution_path.exists()
                 and constitution_path.read_bytes() == assembled_body
             )
+            contributor_matches_disk = (
+                body_matches_disk
+                and _constitution_contributor_matches_disk(repo_root, contribution)
+            )
             stage_context = (
                 stage_constitution(contributions, repo_root, state_root=state_root)
-                if hook_enabled and not body_matches_disk
+                if hook_enabled and not contributor_matches_disk
                 else nullcontext()
             )
             with stage_context:

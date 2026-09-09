@@ -25,7 +25,7 @@ from spaex.migrate.transform import (
     migrate_v1_to_v2,
 )
 from spaex.model.consumer_manifest import ConsumerManifest
-from spaex.model.install_lock import ConstitutionSource, InstallLock
+from spaex.model.install_lock import ConstitutionSource, InstallLock, MoleculeEntry
 from spaex.model.molecule_manifest import InstallHook, MoleculeManifest
 from spaex.model.publisher_manifest import PublisherManifest
 from spaex.schema.validator import _json_pointer
@@ -309,6 +309,82 @@ def test_install_runs_hook_only_alongside_constitution_molecule(
     assert entry.id == "com.example.hook-only"
     assert entry.paths == ()
     assert entry.hook_status == "ok"
+
+
+def test_install_stages_same_body_when_constitution_revision_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Hooks must see a staged lock when the contributor identity changes."""
+    from contextlib import nullcontext
+
+    (tmp_path / ".spaex.json").write_text('{"identity":"com.example.project"}')
+    live_root = tmp_path / ".spaex"
+    live_root.mkdir()
+    body = b"same constitution body"
+    (live_root / "constitution.md").write_bytes(body)
+    old_revision = "1" * 40
+    new_revision = "2" * 40
+    (live_root / "install.lock").write_bytes(
+        InstallLock(
+            spaex_version="4",
+            generation_id="g_20260909T120000Z_old1",
+            molecules=(
+                MoleculeEntry(
+                    id="com.example.constitution",
+                    source="https://example.com/publisher",
+                    revision=old_revision,
+                    paths=(".spaex/constitution.md",),
+                ),
+            ),
+        ).to_json_bytes()
+    )
+    source = ConstitutionSource(
+        id="com.example.constitution",
+        revision=new_revision,
+        source="https://example.com/publisher",
+    )
+    contributions = [ResolvedConstitutionContribution(source=source, body=body)]
+    resolved = [
+        ResolvedMolecule(
+            molecule_id=source.id,
+            source_url=source.source,
+            revision=source.revision,
+            repo_dir=tmp_path / "publisher",
+            molecule_path="constitution",
+            install_hook=InstallHook(
+                interpreter="python3",
+                script="install.py",
+                args=(),
+                on_failure="warn",
+            ),
+            effective_priority=10,
+        )
+    ]
+    staged: list[bool] = []
+
+    monkeypatch.setattr(install_cli, "default_state_root", lambda: tmp_path / "state")
+    monkeypatch.setattr(install_cli, "_load_consumer_manifest", lambda root: object())
+    monkeypatch.setattr(
+        install_cli,
+        "resolve_install_inputs",
+        lambda manifest, state_root: (contributions, resolved),
+    )
+    monkeypatch.setattr(
+        install_cli,
+        "_run_hooks",
+        lambda *args, **kwargs: {source.id: "ok"},
+    )
+    monkeypatch.setattr(install_cli, "_is_no_op", lambda *args, **kwargs: False)
+    monkeypatch.setattr(install_cli, "_live_generation_id", lambda root: "generation")
+    monkeypatch.setattr(
+        install_cli,
+        "stage_constitution",
+        lambda *args, **kwargs: (staged.append(True) or nullcontext()),
+    )
+    monkeypatch.setattr(install_cli, "publish_constitution", lambda *args, **kwargs: None)
+
+    assert install_cli.run(SimpleNamespace(repo_root=str(tmp_path))) == 0
+    assert staged == [True]
 
 
 def test_models_freeze_nested_json_values() -> None:
