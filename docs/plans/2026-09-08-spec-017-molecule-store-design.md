@@ -1,6 +1,6 @@
 # Spec 017 — Molecule tree materialization store
 
-**Status**: Draft design doc; supersedes the unimplemented half of Spec 007's D15 with a scoped, current-vocabulary version.
+**Status**: Implementation effectively complete on `main` as of 2026-09-09. Foundational store (`spaex.git.molecule_store.get_or_extract` with tar-member validation), US1 core materialization + US3 extraction safety (MVP), US2 concurrency/durability (Phase 5), and US4 constitution-resolve migration (Phase 6) are all merged. Only open task is T023 (manual quickstart walk); no code work remains. The 4.1.0 payload will ship this together with Spec 016 once that finishes. Originally supersedes the unimplemented half of Spec 007's D15 with a scoped, current-vocabulary version.
 **Author**: discovered mid-implementation of Spec 016 (2026-09-08); operator recalled the original D15 decision from the Spec 007 design session.
 **Target spaex version**: 4.1.0 (ships alongside Spec 016; both land before the 4.1.0 release)
 
