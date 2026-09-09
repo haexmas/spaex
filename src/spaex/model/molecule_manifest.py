@@ -12,13 +12,23 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from spaex.model._immutable import freeze_json
 from spaex.model.molecule_id import MoleculeId
 from spaex.model.repo_relative_path import RepoRelativePath
 from spaex.schema import validator as schema_validator
 from spaex.util.errors import MoleculeAtomsCategoryOverlapError
+
+
+@dataclass(frozen=True)
+class InstallHook:
+    """Parsed install_hook object from a molecule manifest (Spec 016)."""
+
+    interpreter: str
+    script: str
+    args: tuple[str, ...]
+    on_failure: Literal["abort", "warn"]
 
 
 @dataclass(frozen=True)
@@ -30,6 +40,7 @@ class MoleculeManifest:
     atoms: Mapping[str, tuple[str, ...]]
     defaults: Mapping[str, Any] = field(default_factory=dict)
     config_schema: str | None = None
+    install_hook: InstallHook | None = None
 
     @staticmethod
     def from_json(raw: bytes) -> MoleculeManifest:
@@ -64,6 +75,8 @@ class MoleculeManifest:
                 f"molecule {data['id']!r} defaults MUST NOT declare priority"
             )
 
+        install_hook = _parse_install_hook(data.get("install_hook"))
+
         return MoleculeManifest(
             spaex_version=data["spaex_version"],
             id=data["id"],
@@ -72,4 +85,18 @@ class MoleculeManifest:
             atoms=freeze_json(data["atoms"]),
             defaults=freeze_json(defaults),
             config_schema=config_schema,
+            install_hook=install_hook,
         )
+
+
+def _parse_install_hook(raw: Any) -> InstallHook | None:
+    """Explicit InstallHook construction. Schema default is documentation-only."""
+    if raw is None:
+        return None
+    args_raw = raw.get("args", [])
+    return InstallHook(
+        interpreter=raw["interpreter"],
+        script=raw["script"],
+        args=tuple(args_raw),
+        on_failure=raw.get("on_failure", "abort"),
+    )
