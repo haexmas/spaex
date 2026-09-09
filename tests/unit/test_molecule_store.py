@@ -22,6 +22,7 @@ _SOURCE_URL = "https://example.invalid/example/publisher"
 
 
 def _git(repo: Path, *args: str) -> str:
+    """Run a Git command in ``repo`` and return its stripped standard output."""
     proc = subprocess.run(
         ["git", "-C", str(repo), *args], capture_output=True, text=True, check=True
     )
@@ -29,6 +30,7 @@ def _git(repo: Path, *args: str) -> str:
 
 
 def _init_repo(root: Path) -> None:
+    """Initialize a repository with the test author's deterministic identity."""
     _git(root, "init", "-q")
     _git(root, "config", "user.email", "haex-test@example.com")
     _git(root, "config", "user.name", "haex-test")
@@ -49,6 +51,7 @@ def _publish_molecule(publisher: Path, files: dict[str, bytes]) -> str:
 
 
 def _clone(state_root: Path, canonical: str, publisher: Path) -> Path:
+    """Copy ``publisher`` to its canonical clone-cache path and return that path."""
     target = clone_dir(state_root, canonical)
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(publisher, target)
@@ -186,6 +189,7 @@ def test_empty_archive_succeeds_with_empty_directory(tmp_path: Path) -> None:
     real_run = subprocess.run
 
     def fake_run(cmd, *args, **kwargs):
+        """Return the empty archive for archive calls and delegate all other calls."""
         if "archive" in cmd:
             return subprocess.CompletedProcess(cmd, 0, stdout=empty_tar_buf.getvalue(), stderr=b"")
         return real_run(cmd, *args, **kwargs)

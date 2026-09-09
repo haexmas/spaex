@@ -33,6 +33,7 @@ _SOURCE_URL = "https://example.invalid/example/publisher"
 
 
 def _git(repo: Path, *args: str) -> str:
+    """Run a Git command in ``repo`` and return its stripped standard output."""
     proc = subprocess.run(
         ["git", "-C", str(repo), *args], capture_output=True, text=True, check=True
     )
@@ -40,6 +41,7 @@ def _git(repo: Path, *args: str) -> str:
 
 
 def _build_and_validate(add_members, destination: Path) -> None:
+    """Build a tar with ``add_members`` and validate its extraction."""
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tar:
         add_members(tar)
@@ -52,6 +54,7 @@ def test_dotdot_escaping_path_is_rejected(tmp_path: Path) -> None:
     """Worked example (a): a member whose own path escapes via `..`."""
 
     def add(tar: tarfile.TarFile) -> None:
+        """Add a regular-file member whose path escapes the destination."""
         info = tarfile.TarInfo(name="../../etc/passwd")
         info.size = 0
         tar.addfile(info, io.BytesIO(b""))
@@ -67,6 +70,7 @@ def test_absolute_symlink_target_is_rejected_unconditionally(tmp_path: Path) -> 
     (no resolution is even attempted)."""
 
     def add(tar: tarfile.TarFile) -> None:
+        """Add a symlink member with an absolute target."""
         info = tarfile.TarInfo(name="innocuous.txt")
         info.type = tarfile.SYMTYPE
         info.linkname = "/etc/passwd"
@@ -80,6 +84,7 @@ def test_relative_escaping_symlink_target_is_rejected(tmp_path: Path) -> None:
     """Worked example (c): relative link target that resolves outside destination."""
 
     def add(tar: tarfile.TarFile) -> None:
+        """Add a directory containing a symlink that targets outside it."""
         subdir = tarfile.TarInfo(name="subdir")
         subdir.type = tarfile.DIRTYPE
         tar.addfile(subdir)
@@ -99,6 +104,7 @@ def test_nesting_under_a_rejected_symlink_is_also_rejected(tmp_path: Path) -> No
     2 too, since 'escape' was never established as a safe directory."""
 
     def add(tar: tarfile.TarFile) -> None:
+        """Add an escaping symlink followed by a member nested beneath it."""
         link = tarfile.TarInfo(name="escape")
         link.type = tarfile.SYMTYPE
         link.linkname = "../outside"
@@ -122,6 +128,7 @@ def test_escape_through_an_accepted_symlink_via_own_dotdot_is_rejected(
     symlink must still land outside destination and be refused."""
 
     def add(tar: tarfile.TarFile) -> None:
+        """Add a safe symlink followed by a member that escapes through it."""
         real = tarfile.TarInfo(name="real")
         real.type = tarfile.DIRTYPE
         tar.addfile(real)
@@ -142,6 +149,7 @@ def test_legitimate_internal_symlink_is_accepted(tmp_path: Path) -> None:
     extracted normally."""
 
     def add(tar: tarfile.TarFile) -> None:
+        """Add a regular file and a relative symlink to that file."""
         target = tarfile.TarInfo(name="real-file.txt")
         content = b"hello\n"
         target.size = len(content)
@@ -166,6 +174,7 @@ def test_benign_nesting_under_an_accepted_non_escaping_symlink_is_accepted(
     legitimate internal symlinks as path components."""
 
     def add(tar: tarfile.TarFile) -> None:
+        """Add a safe directory symlink followed by a nested regular file."""
         real = tarfile.TarInfo(name="real")
         real.type = tarfile.DIRTYPE
         tar.addfile(real)
@@ -192,6 +201,7 @@ def test_ordinary_nested_files_and_directories_extract_successfully(tmp_path: Pa
     extracts successfully without false refusals."""
 
     def add(tar: tarfile.TarFile) -> None:
+        """Add ordinary nested directories and a regular file."""
         a = tarfile.TarInfo(name="a")
         a.type = tarfile.DIRTYPE
         tar.addfile(a)
@@ -213,6 +223,7 @@ def test_hardlink_with_absolute_target_is_rejected(tmp_path: Path) -> None:
     not just symlinks."""
 
     def add(tar: tarfile.TarFile) -> None:
+        """Add a hardlink member with an absolute target."""
         info = tarfile.TarInfo(name="innocuous.txt")
         info.type = tarfile.LNKTYPE
         info.linkname = "/etc/passwd"
@@ -228,6 +239,7 @@ def test_member_resolving_to_destination_itself_is_rejected(tmp_path: Path) -> N
     no-op."""
 
     def add(tar: tarfile.TarFile) -> None:
+        """Add a directory member whose path resolves to the destination."""
         info = tarfile.TarInfo(name=".")
         info.type = tarfile.DIRTYPE
         tar.addfile(info)
@@ -237,6 +249,7 @@ def test_member_resolving_to_destination_itself_is_rejected(tmp_path: Path) -> N
 
 
 def _init_repo(root: Path) -> None:
+    """Initialize a repository with the test author's deterministic identity."""
     _git(root, "init", "-q")
     _git(root, "config", "user.email", "haex-test@example.com")
     _git(root, "config", "user.name", "haex-test")
@@ -298,6 +311,7 @@ def test_materialization_failure_leaves_no_final_directory(tmp_path: Path) -> No
     real_run = subprocess.run
 
     def fake_run(cmd, *args, **kwargs):
+        """Return the hostile archive for archive calls and delegate all others."""
         if "archive" in cmd:
             return subprocess.CompletedProcess(cmd, 0, stdout=hostile_tar.getvalue(), stderr=b"")
         return real_run(cmd, *args, **kwargs)
@@ -312,6 +326,7 @@ def test_materialization_failure_leaves_no_final_directory(tmp_path: Path) -> No
 
 
 def _publish_dummy_repo(publisher: Path) -> str:
+    """Create a minimal publisher repository and return its commit SHA."""
     publisher.mkdir()
     _init_repo(publisher)
     mol = publisher / "mol"
