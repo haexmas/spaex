@@ -27,6 +27,14 @@ def _git(cwd: Path, *args: str) -> str:
     return proc.stdout.strip()
 
 
+def _git_bytes(cwd: Path, *args: str) -> bytes:
+    """Run Git and return raw stdout without working-tree newline conversion."""
+    proc = subprocess.run(
+        ["git", "-C", str(cwd), *args], capture_output=True, check=True
+    )
+    return proc.stdout
+
+
 def _publish(publisher: Path) -> str:
     publisher.mkdir(parents=True, exist_ok=True)
     _git(publisher, "init", "-q")
@@ -87,9 +95,11 @@ def test_concurrent_requests_for_same_key_both_succeed(tmp_path: Path) -> None:
     final = Path(results[0])
     assert final.is_dir()
     manifest_contents = (final / "manifest.json").read_bytes()
-    assert manifest_contents == (publisher / "mol" / "manifest.json").read_bytes()
+    assert manifest_contents == _git_bytes(publisher, "show", f"{sha}:mol/manifest.json")
     constitution_contents = (final / "constitution.md").read_bytes()
-    assert constitution_contents == (publisher / "mol" / "constitution.md").read_bytes()
+    assert constitution_contents == _git_bytes(
+        publisher, "show", f"{sha}:mol/constitution.md"
+    )
 
 
 # --- T015 [US2] ------------------------------------------------------------
