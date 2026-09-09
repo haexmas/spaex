@@ -20,6 +20,7 @@ pytestmark = pytest.mark.skipif(
 
 
 def _git(repo: Path, *args: str) -> str:
+    """Run Git in a fixture repository and return its stripped standard output."""
     proc = subprocess.run(
         ["git", "-C", str(repo), *args], capture_output=True, text=True, check=True
     )
@@ -27,6 +28,7 @@ def _git(repo: Path, *args: str) -> str:
 
 
 def _init_repo(root: Path) -> None:
+    """Initialize a deterministic Git repository for resolver fixtures."""
     _git(root, "init", "-q")
     _git(root, "config", "user.email", "haex-test@example.com")
     _git(root, "config", "user.name", "haex-test")
@@ -34,6 +36,7 @@ def _init_repo(root: Path) -> None:
 
 
 def _publish(publisher: Path, publisher_manifest: dict, molecules: dict[str, dict]) -> str:
+    """Commit publisher and molecule manifests, returning the commit revision."""
     publisher.mkdir(parents=True, exist_ok=True)
     _init_repo(publisher)
     (publisher / "manifest.json").write_text(
@@ -51,12 +54,14 @@ def _publish(publisher: Path, publisher_manifest: dict, molecules: dict[str, dic
 
 
 def _clone(state_root: Path, canonical: str, publisher: Path) -> None:
+    """Copy a publisher repository into its canonical state-root clone path."""
     target = clone_dir(state_root, canonical)
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(publisher, target)
 
 
 def _manifest(compounds: list[CompoundEntry]) -> ConsumerManifest:
+    """Build a consumer manifest from the supplied compound entries."""
     return ConsumerManifest(
         spaex_version="4",
         identity="com.github.example.consumer",

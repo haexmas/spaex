@@ -26,6 +26,7 @@ pytestmark = pytest.mark.skipif(
 
 
 def _git(repo: Path, *args: str) -> str:
+    """Run Git in a fixture repository and return its stripped standard output."""
     proc = subprocess.run(
         ["git", "-C", str(repo), *args], capture_output=True, text=True, check=True
     )
@@ -33,6 +34,7 @@ def _git(repo: Path, *args: str) -> str:
 
 
 def _init_repo(root: Path) -> None:
+    """Initialize a deterministic Git repository for hook-runner fixtures."""
     _git(root, "init", "-q")
     _git(root, "config", "user.email", "haex-test@example.com")
     _git(root, "config", "user.name", "haex-test")
@@ -48,6 +50,7 @@ def _make_resolved(
     on_failure: str = "warn",
     interpreter: str = "python3",
 ) -> ResolvedMolecule:
+    """Build a resolved molecule with a configurable install hook."""
     return ResolvedMolecule(
         molecule_id="com.example.publisher.mol",
         source_url="https://example.invalid/example/publisher",
@@ -78,6 +81,7 @@ class _StoreRecorder:
         molecule_path: str,
         state_root: Path,
     ) -> Path:
+        """Record a store request and materialize a minimal hook script."""
         self.call_args = (repo_dir, source_url, revision, molecule_path, state_root)
         target = state_root / "extracted" / molecule_path
         target.mkdir(parents=True, exist_ok=True)
@@ -94,6 +98,7 @@ class _SubprocessRecorder:
     call_kwargs: dict | None = None
 
     def __call__(self, argv: list[str], **kwargs) -> subprocess.CompletedProcess:
+        """Record a subprocess request, then return or raise the canned result."""
         self.call_kwargs = {"argv": argv, **kwargs}
         if self.raise_ is not None:
             raise self.raise_
@@ -101,6 +106,7 @@ class _SubprocessRecorder:
 
 
 def test_zero_exit_returns_ok(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Map a successful hook process to an OK outcome."""
     resolved = _make_resolved(tmp_path)
     monkeypatch.setattr(hook_runner.shutil, "which", lambda name: "/usr/bin/" + name)
     store = _StoreRecorder()
@@ -116,6 +122,7 @@ def test_zero_exit_returns_ok(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
 def test_nonzero_exit_returns_nonzero_exit(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Preserve a hook's nonzero exit code in the outcome."""
     resolved = _make_resolved(tmp_path)
     monkeypatch.setattr(hook_runner.shutil, "which", lambda name: "/usr/bin/" + name)
     monkeypatch.setattr(hook_runner.molecule_store, "get_or_extract", _StoreRecorder())
@@ -130,6 +137,7 @@ def test_nonzero_exit_returns_nonzero_exit(
 def test_argv_uses_canonical_target_cwd_and_no_env_override(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Launch the canonical script with inherited process state and consumer cwd."""
     resolved = _make_resolved(tmp_path, args=("--verbose",))
     monkeypatch.setattr(hook_runner.shutil, "which", lambda name: "/usr/bin/" + name)
     store = _StoreRecorder()
@@ -159,6 +167,7 @@ def test_argv_uses_canonical_target_cwd_and_no_env_override(
 def test_store_is_called_with_record_fields(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Forward every resolved-molecule field required by the molecule store."""
     resolved = _make_resolved(tmp_path)
     monkeypatch.setattr(hook_runner.shutil, "which", lambda name: "/usr/bin/" + name)
     store = _StoreRecorder()
@@ -179,6 +188,7 @@ def test_store_is_called_with_record_fields(
 def test_missing_interpreter_does_not_call_store(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Avoid materializing a molecule when its hook interpreter is unavailable."""
     resolved = _make_resolved(tmp_path, interpreter="nonexistent-xyz")
     monkeypatch.setattr(hook_runner.shutil, "which", lambda name: None)
     store = _StoreRecorder()
@@ -204,6 +214,7 @@ def test_missing_interpreter_does_not_call_store(
 def test_store_error_maps_to_molecule_tree_unavailable(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, raised: Exception
 ) -> None:
+    """Map molecule-store failures to a stable launch-failure reason."""
     resolved = _make_resolved(tmp_path)
     monkeypatch.setattr(hook_runner.shutil, "which", lambda name: "/usr/bin/" + name)
 
@@ -225,6 +236,7 @@ def test_store_error_maps_to_molecule_tree_unavailable(
 def test_broken_symlink_returns_path_containment_failure(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Reject a broken hook-script symlink before launching a process."""
     resolved = _make_resolved(tmp_path)
     monkeypatch.setattr(hook_runner.shutil, "which", lambda name: "/usr/bin/" + name)
 
@@ -249,6 +261,7 @@ def test_broken_symlink_returns_path_containment_failure(
 def test_internal_symlink_is_ok_with_canonical_target(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Allow an internal symlink while launching its canonical target."""
     resolved = _make_resolved(tmp_path, script="hop.py")
     monkeypatch.setattr(hook_runner.shutil, "which", lambda name: "/usr/bin/" + name)
 
@@ -275,6 +288,7 @@ def test_internal_symlink_is_ok_with_canonical_target(
 def test_process_launch_oserror_returns_launch_failure(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Map an operating-system launch error to a launch-failure outcome."""
     resolved = _make_resolved(tmp_path)
     monkeypatch.setattr(hook_runner.shutil, "which", lambda name: "/usr/bin/" + name)
     monkeypatch.setattr(hook_runner.molecule_store, "get_or_extract", _StoreRecorder())
@@ -293,6 +307,7 @@ def test_process_launch_oserror_returns_launch_failure(
 def test_keyboard_interrupt_returns_interrupted(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """Map an operator interrupt to an interrupted hook outcome."""
     resolved = _make_resolved(tmp_path)
     monkeypatch.setattr(hook_runner.shutil, "which", lambda name: "/usr/bin/" + name)
     monkeypatch.setattr(hook_runner.molecule_store, "get_or_extract", _StoreRecorder())
@@ -334,6 +349,7 @@ def _publish_sibling_escape_repo(publisher: Path) -> str:
 
 
 def _clone(state_root: Path, canonical: str, publisher: Path) -> Path:
+    """Copy a publisher repository into its canonical state-root clone path."""
     target = clone_dir(state_root, canonical)
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(publisher, target)

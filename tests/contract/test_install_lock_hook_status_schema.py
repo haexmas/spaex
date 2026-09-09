@@ -28,6 +28,7 @@ def _valid_lock() -> dict:
 
 
 def _with_hook_status(status: object) -> dict:
+    """Return a valid lock whose molecule carries the supplied hook status."""
     data = _valid_lock()
     data["molecules"][0]["hook_status"] = status
     return data

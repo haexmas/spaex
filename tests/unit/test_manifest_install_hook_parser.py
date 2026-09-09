@@ -16,6 +16,7 @@ from spaex.schema import validator as schema_validator
 
 
 def _base_manifest() -> dict:
+    """Return a valid molecule manifest without an install hook."""
     return {
         "spaex_version": "4",
         "id": "com.example.publisher.alpha",
@@ -28,15 +29,18 @@ def _base_manifest() -> dict:
 
 
 def _encode(data: dict) -> bytes:
+    """Encode a manifest mapping as UTF-8 JSON bytes."""
     return json.dumps(data).encode("utf-8")
 
 
 def test_absent_field_parses_to_none() -> None:
+    """Parse a missing install_hook field as None."""
     manifest = MoleculeManifest.from_json(_encode(_base_manifest()))
     assert manifest.install_hook is None
 
 
 def test_present_min_form_produces_dataclass() -> None:
+    """Parse the minimal install-hook form with explicit default values."""
     data = _base_manifest()
     data["install_hook"] = {"interpreter": "python3", "script": "install.py"}
     manifest = MoleculeManifest.from_json(_encode(data))
@@ -49,6 +53,7 @@ def test_present_min_form_produces_dataclass() -> None:
 
 
 def test_all_fields_populated() -> None:
+    """Preserve every explicitly populated install-hook field."""
     data = _base_manifest()
     data["install_hook"] = {
         "interpreter": "bash",
@@ -66,6 +71,7 @@ def test_all_fields_populated() -> None:
 
 
 def test_args_are_immutable_tuple() -> None:
+    """Freeze the parsed hook argument list as a tuple."""
     data = _base_manifest()
     data["install_hook"] = {
         "interpreter": "python3",
