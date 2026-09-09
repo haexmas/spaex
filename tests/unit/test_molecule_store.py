@@ -14,7 +14,7 @@ import pytest
 from spaex.git import revparse
 from spaex.git.molecule_store import get_or_extract
 from spaex.migrate.transform import clone_dir
-from spaex.util.errors import MoleculeTreePathNotFoundError
+from spaex.util.errors import MoleculeTreeExtractionError, MoleculeTreePathNotFoundError
 
 pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git binary required")
 
@@ -35,6 +35,9 @@ def _init_repo(root: Path) -> None:
     _git(root, "config", "user.email", "haex-test@example.com")
     _git(root, "config", "user.name", "haex-test")
     _git(root, "config", "commit.gpgsign", "false")
+    _git(root, "config", "core.autocrlf", "false")
+    _git(root, "config", "core.eol", "lf")
+    (root / ".gitattributes").write_bytes(b"* -text\n")
 
 
 def _publish_molecule(publisher: Path, files: dict[str, bytes]) -> str:
@@ -169,6 +172,21 @@ def test_nonexistent_molecule_path_fails_distinctly(tmp_path: Path) -> None:
     digest = clone_dir(state_root, _SOURCE_URL).name
     would_be_final_dir = state_root / "molecule-store" / digest / canonical_sha / "widgets" / "nope"
     assert not would_be_final_dir.exists()
+
+
+def test_tracked_file_at_molecule_path_is_rejected(tmp_path: Path) -> None:
+    """A tracked file cannot be published as the molecule directory."""
+    publisher = tmp_path / "publisher"
+    sha = _publish_molecule(publisher, {"mol": b"not a directory"})
+    state_root = tmp_path / "state"
+    repo_dir = _clone(state_root, _SOURCE_URL, publisher)
+    canonical_sha = revparse.full_sha(repo_dir, sha)
+
+    with pytest.raises(MoleculeTreeExtractionError):
+        get_or_extract(repo_dir, _SOURCE_URL, canonical_sha, "mol", state_root)
+
+    final_dir = state_root / "molecule-store" / clone_dir(state_root, _SOURCE_URL).name
+    assert not (final_dir / canonical_sha / "mol").exists()
 
 
 def test_empty_archive_succeeds_with_empty_directory(tmp_path: Path) -> None:

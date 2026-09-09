@@ -29,6 +29,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 from pathlib import Path
@@ -50,7 +51,19 @@ def _is_absolute_link_target(target: str) -> bool:
     clarification) — an absolute path baked into a molecule's tree is
     inherently non-portable and there is no legitimate reason for one.
     """
-    return target.startswith("/") or bool(_WINDOWS_DRIVE_RE.match(target)) or target.startswith("\\")
+    return (
+        target.startswith("/")
+        or bool(_WINDOWS_DRIVE_RE.match(target))
+        or target.startswith("\\")
+    )
+
+
+def _extract_member(tar: tarfile.TarFile, member: tarfile.TarInfo, destination: Path) -> None:
+    """Extract one already-validated member on every supported Python version."""
+    if sys.version_info >= (3, 11, 4):
+        tar.extract(member, path=destination, set_attrs=False, filter="data")
+    else:
+        tar.extract(member, path=destination, set_attrs=False)
 
 
 def _validate_and_extract(tar: tarfile.TarFile, destination: Path) -> None:
@@ -99,7 +112,10 @@ def _validate_and_extract(tar: tarfile.TarFile, destination: Path) -> None:
         if member.issym() or member.islnk():
             if _is_absolute_link_target(member.linkname):
                 raise MoleculeTreeExtractionError(
-                    message=f"tar member {member.name!r} has an absolute link target {member.linkname!r}",
+                    message=(
+                        f"tar member {member.name!r} has an absolute link target "
+                        f"{member.linkname!r}"
+                    ),
                     context={"member": member.name, "linkname": member.linkname},
                 )
             resolved_target = (member_path.parent / member.linkname).resolve()
@@ -113,7 +129,7 @@ def _validate_and_extract(tar: tarfile.TarFile, destination: Path) -> None:
                     ),
                     context={"member": member.name, "linkname": member.linkname},
                 ) from None
-            tar.extract(member, path=destination, set_attrs=False)
+            _extract_member(tar, member, destination)
             # Not added to safe_dirs directly: a later member nested under
             # this symlink resolves (via Path.resolve() above) through the
             # real filesystem link we just created, so its ancestor check
@@ -126,7 +142,7 @@ def _validate_and_extract(tar: tarfile.TarFile, destination: Path) -> None:
             safe_dirs.add(member_path)
             continue
 
-        tar.extract(member, path=destination, set_attrs=False)
+        _extract_member(tar, member, destination)
 
 
 def get_or_extract(
@@ -208,6 +224,14 @@ def get_or_extract(
                 ) from exc
 
             temp_molecule_dir = temp_dir / molecule_path
+            if not temp_molecule_dir.is_dir():
+                raise MoleculeTreeExtractionError(
+                    message=(
+                        f"archive for {molecule_path!r} at {revision} did not yield a "
+                        "directory tree at that path"
+                    ),
+                    context={"molecule_path": molecule_path, "revision": revision},
+                )
             final_dir.parent.mkdir(parents=True, exist_ok=True)
             os.replace(temp_molecule_dir, final_dir)
         finally:
