@@ -354,6 +354,12 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=DEFAULT_LOCK_TIMEOUT_SECONDS,
         help="Manifest-lock timeout in seconds (default 30; 0 = fail-fast)",
     )
+    parser.add_argument(
+        "--no-install-hooks",
+        dest="skip_hooks",
+        action="store_true",
+        help="Skip per-molecule install_hook execution (Spec 016 FR-027)",
+    )
 
 
 def run(args: argparse.Namespace) -> int:
@@ -410,7 +416,12 @@ def run(args: argparse.Namespace) -> int:
         )
         new_bytes = new_manifest.to_json_bytes()
 
-        exit_code = write_and_reinstall(repo_root, new_bytes, lock)
+        exit_code = write_and_reinstall(
+            repo_root,
+            new_bytes,
+            lock,
+            skip_hooks=bool(getattr(args, "skip_hooks", False)),
+        )
 
         sys.stdout.write(
             f"added {len(molecule_ids)} molecule(s) at {canonical_source}@{sha[:12]}:\n"

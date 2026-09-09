@@ -155,6 +155,7 @@ def run(
     """
     repo_root = Path(args.repo_root).resolve()
     state_root = default_state_root()
+    skip_hooks = bool(getattr(args, "skip_hooks", False))
     timeout_seconds = getattr(args, "lock_timeout", DEFAULT_LOCK_TIMEOUT_SECONDS)
     if timeout_seconds is None:
         timeout_seconds = DEFAULT_LOCK_TIMEOUT_SECONDS
@@ -226,17 +227,24 @@ def run(
             # declared hook idempotently. Hook-only-transaction (FR-025) is
             # deferred to T039; MVP happy path publishes when the body
             # differs and skips otherwise, matching pre-Spec-016 idempotency.
-            hook_enabled = any(
+            hook_present = any(
                 record.molecule_id in contributing_ids and record.install_hook is not None
                 for record in resolved
             )
+            hook_enabled = hook_present and not skip_hooks
+            if hook_present:
+                expected_hook_status: HookStatus | None = (
+                    "skipped" if skip_hooks else "ok"
+                )
+            else:
+                expected_hook_status = None
             candidate_matches = _is_no_op_single_source(
                 repo_root,
                 assembled_body,
                 contribution.source.id,
                 contribution.source.revision,
                 contribution.source.source,
-                hook_status="ok" if hook_enabled else None,
+                hook_status=expected_hook_status,
             )
             stage_context = (
                 stage_constitution(contributions, repo_root, state_root=state_root)
@@ -249,6 +257,7 @@ def run(
                     contributing_ids=contributing_ids,
                     repo_root=repo_root,
                     state_root=state_root,
+                    skip_hooks=skip_hooks,
                 )
 
             if _is_no_op_single_source(
@@ -317,6 +326,7 @@ def _run_hooks_for_mvp(
     contributing_ids: set[str],
     repo_root: Path,
     state_root: Path,
+    skip_hooks: bool = False,
 ) -> dict[str, HookStatus]:
     """Hook orchestration with per-molecule on_failure policy.
 
@@ -332,10 +342,19 @@ def _run_hooks_for_mvp(
     reason (after the hook subprocess has exited so its inherited stderr
     is never prefixed, FR-019), and continues with the next molecule
     (FR-018, FR-022).
+
+    When ``skip_hooks`` is true (Spec 016 FR-026), no hook subprocess is
+    launched; every resolved molecule declaring ``install_hook`` is
+    recorded as ``hook_status="skipped"`` (FR-023, FR-028).
     """
     statuses: dict[str, HookStatus] = {}
     for record in resolved:
-        if record.molecule_id not in contributing_ids or record.install_hook is None:
+        if record.install_hook is None:
+            continue
+        if skip_hooks:
+            statuses[record.molecule_id] = "skipped"
+            continue
+        if record.molecule_id not in contributing_ids:
             continue
         outcome = run_install_hook(
             record, consumer_repo_root=repo_root, state_root=state_root
