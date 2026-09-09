@@ -13,8 +13,13 @@ import sys
 from pathlib import Path
 
 from spaex.constitution.publish import CONSTITUTION_PATH, publish_constitution
-from spaex.constitution.resolve import resolve_constitution_contributions
+from spaex.constitution.resolve import (
+    ResolvedMolecule,
+    resolve_constitution_contributions,
+    resolve_molecules,
+)
 from spaex.install import inflight
+from spaex.install.hook_runner import HookOutcomeKind, run_install_hook
 from spaex.install.lock import OwnerToken
 from spaex.install.manifest_lock import (
     DEFAULT_LOCK_TIMEOUT_SECONDS,
@@ -26,7 +31,7 @@ from spaex.io import transaction
 from spaex.io.state import default_state_root, transaction_paths
 from spaex.io.writer_lock import ConstitutionWriterLock
 from spaex.model.consumer_manifest import ConsumerManifest
-from spaex.model.install_lock import InstallLock
+from spaex.model.install_lock import HookStatus, InstallLock
 from spaex.util import exit_codes
 from spaex.util.errors import ConstitutionAlreadyAdoptedError, HaexError
 
@@ -166,12 +171,17 @@ def run(
 
             manifest = _load_consumer_manifest(repo_root)
             contributions = resolve_constitution_contributions(manifest, state_root)
+            resolved = resolve_molecules(manifest, state_root)
 
             if not contributions:
                 # Empty-constitution state: valid post-`haex remove` outcome.
                 # If the on-disk state is already empty, skip publication;
                 # otherwise publish install.lock alone so orphan-cleanup via
                 # the rename-swap removes any stale constitution.md.
+                # Hook-only molecules (declared install_hook, no
+                # atoms.constitution) are US4 scope; MVP does not run their
+                # hooks. Detect and refuse rather than silently drop.
+                _refuse_hook_only_in_mvp(resolved)
                 if _is_no_op_empty(repo_root):
                     inflight.clean_stale_siblings(
                         repo_root / transaction.SPAEX_DIR,
@@ -202,6 +212,16 @@ def run(
             assembled_body = b"\n".join(
                 contribution.body for contribution in contributions
             )
+
+            # Hooks MUST run on every invocation per FR-024. Execute them
+            # before the no-op check so a re-install still exercises each
+            # declared hook idempotently. Hook-only-transaction (FR-025) is
+            # deferred to T039; MVP happy path publishes when the body
+            # differs and skips otherwise, matching pre-Spec-016 idempotency.
+            hook_status = _run_hooks_for_mvp(
+                resolved, repo_root=repo_root, state_root=state_root
+            )
+
             if _is_no_op_single_source(
                 repo_root,
                 assembled_body,
@@ -220,6 +240,7 @@ def run(
                 contributions,
                 repo_root,
                 state_root=state_root,
+                hook_status=hook_status.get(contribution.source.id),
             )
             new_generation_id = _live_generation_id(repo_root)
             sys.stdout.write(f"installed generation {new_generation_id}\n")
@@ -232,3 +253,70 @@ def run(
             diagnostic_key="install-failed",
             exit_code=exit_codes.INPUT_REFUSE,
         ) from exc
+
+
+def _refuse_hook_only_in_mvp(resolved: list[ResolvedMolecule]) -> None:
+    """MVP (US1) does not support molecules with install_hook and no constitution.
+
+    Called on the branch where `resolve_constitution_contributions` returned
+    empty: any surviving molecule with an install_hook is by definition a
+    hook-only molecule, whose orchestration lands with User Story 4
+    (T035-T038). Refusing early avoids silently dropping the hook.
+    """
+    for record in resolved:
+        if record.install_hook is not None:
+            raise HaexError(
+                message=(
+                    f"molecule {record.molecule_id!r} declares install_hook but "
+                    "no atoms.constitution; hook-only molecules are out of scope "
+                    "for the Spec 016 MVP (US1)"
+                ),
+                context={"molecule_id": record.molecule_id},
+                diagnostic_key="install-failed",
+                exit_code=exit_codes.INPUT_REFUSE,
+            )
+
+
+def _run_hooks_for_mvp(
+    resolved: list[ResolvedMolecule],
+    *,
+    repo_root: Path,
+    state_root: Path,
+) -> dict[str, HookStatus]:
+    """MVP hook orchestration for User Story 1.
+
+    Runs each resolved molecule's declared install_hook in the (already
+    sorted by resolve_molecules) order. All molecules use the default
+    on_failure="abort" for MVP: any non-OK outcome raises install-failed
+    with molecule_id + hook_failure context (FR-016, FR-017). US2 (T023)
+    refines per-molecule on_failure. Returns a per-molecule-id status map
+    limited to OK for MVP; non-OK never returns (raised above).
+    """
+    statuses: dict[str, HookStatus] = {}
+    for record in resolved:
+        if record.install_hook is None:
+            continue
+        outcome = run_install_hook(
+            record, consumer_repo_root=repo_root, state_root=state_root
+        )
+        if outcome.kind is HookOutcomeKind.OK:
+            statuses[record.molecule_id] = "ok"
+            continue
+        # Everything else is treated as an abort-policy failure in MVP.
+        reason = outcome.reason or (
+            f"exit_{outcome.exit_code}"
+            if outcome.exit_code is not None
+            else outcome.kind.name.lower()
+        )
+        raise HaexError(
+            message=(
+                f"install_hook for molecule {record.molecule_id!r} failed: {reason}"
+            ),
+            context={
+                "molecule_id": record.molecule_id,
+                "hook_failure": reason,
+            },
+            diagnostic_key="install-failed",
+            exit_code=exit_codes.INPUT_REFUSE,
+        )
+    return statuses
