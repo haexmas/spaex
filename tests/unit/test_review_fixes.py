@@ -12,7 +12,7 @@ import pytest
 from spaex.cli import install as install_cli
 from spaex.cli.diagnostics import emit_refuse
 from spaex.cli.main import main
-from spaex.constitution.resolve import ResolvedConstitutionContribution
+from spaex.constitution.resolve import ResolvedConstitutionContribution, ResolvedMolecule
 from spaex.constitution.safety import (
     validate_no_plaintext_secrets,
     validate_terminal_safe_display,
@@ -26,7 +26,7 @@ from spaex.migrate.transform import (
 )
 from spaex.model.consumer_manifest import ConsumerManifest
 from spaex.model.install_lock import ConstitutionSource, InstallLock
-from spaex.model.molecule_manifest import MoleculeManifest
+from spaex.model.molecule_manifest import InstallHook, MoleculeManifest
 from spaex.model.publisher_manifest import PublisherManifest
 from spaex.schema.validator import _json_pointer
 from spaex.util.errors import (
@@ -223,6 +223,60 @@ def test_install_allows_multiple_paths_from_one_molecule(
 
     assert install_cli.run(SimpleNamespace(repo_root=str(tmp_path))) == 0
     assert captured == [contributions]
+
+
+def test_install_rejects_mixed_constitution_and_hook_only_molecules(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The MVP must not silently skip a selected hook-only molecule."""
+    (tmp_path / ".spaex.json").write_text('{"identity":"com.example.project"}')
+    source = ConstitutionSource(
+        id="com.example.constitution",
+        revision="0" * 40,
+        source="https://example.com/publisher",
+    )
+    resolved = [
+        ResolvedMolecule(
+            molecule_id=source.id,
+            source_url=source.source,
+            revision=source.revision,
+            repo_dir=tmp_path / "publisher",
+            molecule_path="constitution",
+            install_hook=None,
+            effective_priority=10,
+        ),
+        ResolvedMolecule(
+            molecule_id="com.example.hook-only",
+            source_url=source.source,
+            revision=source.revision,
+            repo_dir=tmp_path / "publisher",
+            molecule_path="hook-only",
+            install_hook=InstallHook(
+                interpreter="python3",
+                script="install.py",
+                args=(),
+                on_failure="warn",
+            ),
+            effective_priority=20,
+        ),
+    ]
+    contributions = [
+        ResolvedConstitutionContribution(source=source, body=b"constitution")
+    ]
+
+    monkeypatch.setattr(install_cli, "default_state_root", lambda: tmp_path / "state")
+    monkeypatch.setattr(install_cli, "_load_consumer_manifest", lambda root: object())
+    monkeypatch.setattr(
+        install_cli,
+        "resolve_install_inputs",
+        lambda manifest, state_root: (contributions, resolved),
+    )
+
+    with pytest.raises(HaexError) as exc_info:
+        install_cli.run(SimpleNamespace(repo_root=str(tmp_path)))
+
+    assert exc_info.value.diagnostic_key == "install-failed"
+    assert exc_info.value.context == {"molecule_id": "com.example.hook-only"}
 
 
 def test_models_freeze_nested_json_values() -> None:

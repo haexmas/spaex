@@ -179,16 +179,17 @@ def run(
 
             manifest = _load_consumer_manifest(repo_root)
             contributions, resolved = resolve_install_inputs(manifest, state_root)
+            contributing_ids = {contribution.source.id for contribution in contributions}
+            _refuse_hook_only_in_mvp(
+                resolved,
+                contributing_ids=contributing_ids,
+            )
 
             if not contributions:
                 # Empty-constitution state: valid post-`haex remove` outcome.
                 # If the on-disk state is already empty, skip publication;
                 # otherwise publish install.lock alone so orphan-cleanup via
                 # the rename-swap removes any stale constitution.md.
-                # Hook-only molecules (declared install_hook, no
-                # atoms.constitution) are US4 scope; MVP does not run their
-                # hooks. Detect and refuse rather than silently drop.
-                _refuse_hook_only_in_mvp(resolved)
                 if _is_no_op_empty(repo_root):
                     inflight.clean_stale_siblings(
                         repo_root / transaction.SPAEX_DIR,
@@ -225,7 +226,6 @@ def run(
             # declared hook idempotently. Hook-only-transaction (FR-025) is
             # deferred to T039; MVP happy path publishes when the body
             # differs and skips otherwise, matching pre-Spec-016 idempotency.
-            contributing_ids = {contribution.source.id for contribution in contributions}
             hook_enabled = any(
                 record.molecule_id in contributing_ids and record.install_hook is not None
                 for record in resolved
@@ -285,16 +285,20 @@ def run(
         ) from exc
 
 
-def _refuse_hook_only_in_mvp(resolved: list[ResolvedMolecule]) -> None:
+def _refuse_hook_only_in_mvp(
+    resolved: list[ResolvedMolecule], *, contributing_ids: set[str]
+) -> None:
     """MVP (US1) does not support molecules with install_hook and no constitution.
 
-    Called on the branch where `resolve_constitution_contributions` returned
-    empty: any surviving molecule with an install_hook is by definition a
-    hook-only molecule, whose orchestration lands with User Story 4
-    (T035-T038). Refusing early avoids silently dropping the hook.
+    Refusing early avoids silently dropping a hook-only molecule when it is
+    selected alongside a constitution-contributing molecule. Support for
+    running hook-only molecules lands with User Story 4 (T035-T038).
     """
     for record in resolved:
-        if record.install_hook is not None:
+        if (
+            record.install_hook is not None
+            and record.molecule_id not in contributing_ids
+        ):
             raise HaexError(
                 message=(
                     f"molecule {record.molecule_id!r} declares install_hook but "
