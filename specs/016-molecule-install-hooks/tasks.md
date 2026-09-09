@@ -51,8 +51,8 @@ description: "Task list for Spec 016 — Molecule install-hooks in spaex install
 
 ### Path containment helper
 
-- [ ] T011 [P] Create `src/spaex/util/path_containment.py` exposing `canonicalise_within(root: Path, candidate: Path) -> Path`: raises `PathEscapeError` when the canonicalised candidate (symlinks followed, `..` resolved) is not a descendant of the canonicalised `root`. Never follows into `root`'s parent. Returns the canonical target on success. Verifies FR-014, FR-015.
-- [ ] T012 [P] Add unit tests in `tests/unit/test_path_containment.py`: descendant path returns canonical target; symlink pointing outside root raises; `..` segment resolving inside root allowed; `..` segment escaping root raises; symlink chain that stays inside root allowed; broken symlink raises. Verifies FR-014, FR-015.
+- [x] T011 [P] Create `src/spaex/util/path_containment.py` exposing `canonicalise_within(root: Path, candidate: Path) -> Path`: raises `PathEscapeError` when the canonicalised candidate (symlinks followed, `..` resolved) is not a descendant of the canonicalised `root`. Never follows into `root`'s parent. Returns the canonical target on success. Verifies FR-014, FR-015.
+- [x] T012 [P] Add unit tests in `tests/unit/test_path_containment.py`: descendant path returns canonical target; symlink pointing outside root raises; `..` segment resolving inside root allowed; `..` segment escaping root raises; symlink chain that stays inside root allowed; broken symlink raises. Verifies FR-014, FR-015.
 
 ### Hook runner
 
