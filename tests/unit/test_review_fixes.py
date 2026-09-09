@@ -211,6 +211,11 @@ def test_install_allows_multiple_paths_from_one_molecule(
         "resolve_constitution_contributions",
         lambda manifest, state_root: contributions,
     )
+    monkeypatch.setattr(
+        install_cli,
+        "resolve_molecules",
+        lambda manifest, state_root: [],
+    )
     monkeypatch.setattr(install_cli, "_is_no_op_single_source", lambda *args: False)
     monkeypatch.setattr(install_cli, "_live_generation_id", lambda root: "generation")
     monkeypatch.setattr(

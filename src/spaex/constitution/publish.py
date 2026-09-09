@@ -35,7 +35,7 @@ from spaex.constitution.safety import (
 )
 from spaex.install.generation import allocate_generation_id
 from spaex.io import atomic, transaction
-from spaex.model.install_lock import InstallLock, MoleculeEntry
+from spaex.model.install_lock import HookStatus, InstallLock, MoleculeEntry
 from spaex.util.errors import HaexError, PostWriteValidationError
 
 CONSTITUTION_PATH = f"{transaction.SPAEX_DIR}/{transaction.CONSTITUTION_NAME}"
@@ -191,6 +191,7 @@ def publish_constitution(
     repo_root: Path,
     *,
     state_root: Path | None = None,
+    hook_status: HookStatus | None = None,
 ) -> None:
     """Join all declared constitution files from one molecule and publish.
 
@@ -203,6 +204,10 @@ def publish_constitution(
     When ``contributions`` is empty the empty state is published:
     ``install.lock`` alone with ``molecules=()`` and any pre-existing
     ``constitution.md`` disappears via the rename-swap of ``.spaex/``.
+
+    Optional ``hook_status`` records the Spec 016 install_hook outcome on
+    the contributing molecule's install.lock entry. Pass ``None`` when the
+    molecule declared no install_hook; the writer omits the field then.
     """
     if not contributions:
         _publish_constitution(None, None, repo_root, state_root=state_root)
@@ -227,6 +232,7 @@ def publish_constitution(
         source=source.source,
         revision=source.revision,
         paths=(CONSTITUTION_PATH,),
+        hook_status=hook_status,
     )
     _publish_constitution(
         molecule,
