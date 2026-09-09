@@ -35,7 +35,7 @@ from spaex.io import transaction
 from spaex.io.state import default_state_root, transaction_paths
 from spaex.io.writer_lock import ConstitutionWriterLock
 from spaex.model.consumer_manifest import ConsumerManifest
-from spaex.model.install_lock import HookStatus, InstallLock
+from spaex.model.install_lock import HookStatus, InstallLock, MoleculeEntry
 from spaex.util import exit_codes
 from spaex.util.errors import ConstitutionAlreadyAdoptedError, HaexError
 
@@ -181,28 +181,51 @@ def run(
             manifest = _load_consumer_manifest(repo_root)
             contributions, resolved = resolve_install_inputs(manifest, state_root)
             contributing_ids = {contribution.source.id for contribution in contributions}
-            _refuse_hook_only_in_mvp(
-                resolved,
-                contributing_ids=contributing_ids,
-            )
 
             if not contributions:
-                # Empty-constitution state: valid post-`haex remove` outcome.
-                # If the on-disk state is already empty, skip publication;
-                # otherwise publish install.lock alone so orphan-cleanup via
-                # the rename-swap removes any stale constitution.md.
-                if _is_no_op_empty(repo_root):
+                # Empty-constitution state: valid post-`haex remove` outcome
+                # OR a set of hook-only molecules (no atoms.constitution).
+                # Hook-only molecules must still see their install_hook run
+                # and land a per-molecule hook_status record in install.lock
+                # (Spec 016 FR-007, FR-021).
+                hook_status = _run_hooks(
+                    resolved,
+                    repo_root=repo_root,
+                    state_root=state_root,
+                    skip_hooks=skip_hooks,
+                )
+                hook_only_records = _hook_only_records(
+                    resolved,
+                    contributing_ids=contributing_ids,
+                    hook_status=hook_status,
+                )
+                # No-op only when neither a stale constitution nor any
+                # hook-only records need to be materialised in the lock.
+                # Hook-only re-installs still publish a new generation so
+                # the fresh hook_status is recorded; FR-025 idempotency
+                # comparison lands with Phase 7 (T039).
+                if not hook_only_records and _is_no_op_empty(repo_root):
                     inflight.clean_stale_siblings(
                         repo_root / transaction.SPAEX_DIR,
                         remove_prev=True,
                     )
                     sys.stdout.write("no changes\n")
                     return exit_codes.SUCCESS
-                publish_constitution([], repo_root, state_root=state_root)
-                new_generation_id = _live_generation_id(repo_root)
-                sys.stdout.write(
-                    f"installed empty generation {new_generation_id}\n"
+                publish_constitution(
+                    [],
+                    repo_root,
+                    state_root=state_root,
+                    hook_only_records=tuple(hook_only_records),
                 )
+                new_generation_id = _live_generation_id(repo_root)
+                if hook_only_records:
+                    sys.stdout.write(
+                        f"installed generation {new_generation_id}\n"
+                    )
+                else:
+                    sys.stdout.write(
+                        f"installed empty generation {new_generation_id}\n"
+                    )
                 return exit_codes.SUCCESS
 
             molecule_ids = sorted(
@@ -228,11 +251,14 @@ def run(
             # deferred to T039; MVP happy path publishes when the body
             # differs and skips otherwise, matching pre-Spec-016 idempotency.
             hook_present = any(
-                record.molecule_id in contributing_ids and record.install_hook is not None
-                for record in resolved
+                record.install_hook is not None for record in resolved
             )
             hook_enabled = hook_present and not skip_hooks
-            if hook_present:
+            if any(
+                record.molecule_id in contributing_ids
+                and record.install_hook is not None
+                for record in resolved
+            ):
                 expected_hook_status: HookStatus | None = (
                     "skipped" if skip_hooks else "ok"
                 )
@@ -252,15 +278,19 @@ def run(
                 else nullcontext()
             )
             with stage_context:
-                hook_status = _run_hooks_for_mvp(
+                hook_status = _run_hooks(
                     resolved,
-                    contributing_ids=contributing_ids,
                     repo_root=repo_root,
                     state_root=state_root,
                     skip_hooks=skip_hooks,
                 )
 
-            if _is_no_op_single_source(
+            hook_only_records = _hook_only_records(
+                resolved,
+                contributing_ids=contributing_ids,
+                hook_status=hook_status,
+            )
+            if not hook_only_records and _is_no_op_single_source(
                 repo_root,
                 assembled_body,
                 contribution.source.id,
@@ -280,6 +310,7 @@ def run(
                 repo_root,
                 state_root=state_root,
                 hook_status=hook_status.get(contribution.source.id),
+                hook_only_records=tuple(hook_only_records),
             )
             new_generation_id = _live_generation_id(repo_root)
             sys.stdout.write(f"installed generation {new_generation_id}\n")
@@ -294,54 +325,30 @@ def run(
         ) from exc
 
 
-def _refuse_hook_only_in_mvp(
-    resolved: list[ResolvedMolecule], *, contributing_ids: set[str]
-) -> None:
-    """MVP (US1) does not support molecules with install_hook and no constitution.
-
-    Refusing early avoids silently dropping a hook-only molecule when it is
-    selected alongside a constitution-contributing molecule. Support for
-    running hook-only molecules lands with User Story 4 (T035-T038).
-    """
-    for record in resolved:
-        if (
-            record.install_hook is not None
-            and record.molecule_id not in contributing_ids
-        ):
-            raise HaexError(
-                message=(
-                    f"molecule {record.molecule_id!r} declares install_hook but "
-                    "no atoms.constitution; hook-only molecules are out of scope "
-                    "for the Spec 016 MVP (US1)"
-                ),
-                context={"molecule_id": record.molecule_id},
-                diagnostic_key="install-failed",
-                exit_code=exit_codes.INPUT_REFUSE,
-            )
-
-
-def _run_hooks_for_mvp(
+def _run_hooks(
     resolved: list[ResolvedMolecule],
     *,
-    contributing_ids: set[str],
     repo_root: Path,
     state_root: Path,
     skip_hooks: bool = False,
 ) -> dict[str, HookStatus]:
     """Hook orchestration with per-molecule on_failure policy.
 
-    Iterates resolved molecules in resolver order (ascending effective
-    priority, ties broken by UTF-8 molecule id) and runs each declared
-    install_hook. A non-OK outcome under ``on_failure="abort"`` raises
-    ``install-failed`` with ``molecule_id`` + ``hook_failure`` context
-    (FR-016, FR-017), which trips the Spec-008 stage-generation rollback
-    via the enclosing ``stage_constitution`` context and, upstream,
-    ``write_and_reinstall``'s ``.spaex.json`` restore. A non-OK outcome
-    under ``on_failure="warn"`` records ``hook_status="failed"``, emits
-    ONE ``WARN:`` line on stderr naming the molecule id and failure
-    reason (after the hook subprocess has exited so its inherited stderr
-    is never prefixed, FR-019), and continues with the next molecule
-    (FR-018, FR-022).
+    Iterates ``resolved`` in the resolver's canonical order (the sort
+    key ``(effective_priority, molecule_id.encode("utf-8"))`` applied
+    ascending in `resolve_install_inputs`), satisfying FR-010. Every
+    declared install_hook is invoked, whether the molecule contributes
+    to the constitution or is hook-only (FR-007).
+
+    A non-OK outcome under ``on_failure="abort"`` raises ``install-failed``
+    with ``molecule_id`` + ``hook_failure`` context (FR-016, FR-017),
+    which trips the Spec-008 stage-generation rollback via the enclosing
+    ``stage_constitution`` context and, upstream, ``write_and_reinstall``'s
+    ``.spaex.json`` restore. A non-OK outcome under ``on_failure="warn"``
+    records ``hook_status="failed"``, emits ONE ``WARN:`` line on stderr
+    naming the molecule id and failure reason (after the hook subprocess
+    has exited so its inherited stderr is never prefixed, FR-019), and
+    continues with the next molecule (FR-018, FR-022).
 
     When ``skip_hooks`` is true (Spec 016 FR-026), no hook subprocess is
     launched; every resolved molecule declaring ``install_hook`` is
@@ -353,8 +360,6 @@ def _run_hooks_for_mvp(
             continue
         if skip_hooks:
             statuses[record.molecule_id] = "skipped"
-            continue
-        if record.molecule_id not in contributing_ids:
             continue
         outcome = run_install_hook(
             record, consumer_repo_root=repo_root, state_root=state_root
@@ -387,3 +392,34 @@ def _run_hooks_for_mvp(
             exit_code=exit_codes.INPUT_REFUSE,
         )
     return statuses
+
+
+def _hook_only_records(
+    resolved: list[ResolvedMolecule],
+    *,
+    contributing_ids: set[str],
+    hook_status: dict[str, HookStatus],
+) -> list[MoleculeEntry]:
+    """Build install.lock records for hook-only molecules (paths=()).
+
+    A record is emitted for every resolved molecule that declares
+    ``install_hook`` and does NOT contribute an ``atoms.constitution``
+    file. The constitution-contributing molecule's record is created
+    elsewhere by ``publish_constitution``. Records only appear here for
+    molecules whose hook actually reached a status in ``hook_status``
+    (i.e. skipped by the caller when a preceding abort short-circuited
+    later hooks).
+    """
+    return [
+        MoleculeEntry(
+            id=record.molecule_id,
+            source=record.source_url,
+            revision=record.revision,
+            paths=(),
+            hook_status=hook_status.get(record.molecule_id),
+        )
+        for record in resolved
+        if record.install_hook is not None
+        and record.molecule_id not in contributing_ids
+        and record.molecule_id in hook_status
+    ]

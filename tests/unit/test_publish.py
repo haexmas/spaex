@@ -63,7 +63,7 @@ def test_publish_rejects_mismatched_published_generation(
     monkeypatch.setattr(transaction, "publish_generation", corrupting_publish)
 
     with pytest.raises(PostWriteValidationError):
-        _publish_constitution(_molecule(), body, tmp_path)
+        _publish_constitution((_molecule(),), body, tmp_path)
 
 
 def test_publish_allocates_generation_id_after_existing_generation(
@@ -92,7 +92,7 @@ def test_publish_allocates_generation_id_after_existing_generation(
                 captured.update(json.loads(staged.data))
 
     monkeypatch.setattr(transaction, "publish_generation", capture_publish)
-    _publish_constitution(_molecule(), b"# New Constitution\n", tmp_path)
+    _publish_constitution((_molecule(),), b"# New Constitution\n", tmp_path)
 
     new_generation_id = captured["generation_id"]
     assert new_generation_id != existing_generation_id
@@ -110,8 +110,8 @@ def test_single_source_assembles_all_constitution_paths(
     ]
     captured: dict[str, object] = {}
 
-    def capture_publish(molecule, body, repo_root, **kwargs) -> None:
-        captured["molecule"] = molecule
+    def capture_publish(molecules, body, repo_root, **kwargs) -> None:
+        captured["molecules"] = tuple(molecules)
         captured["body"] = body
         del repo_root, kwargs
 
@@ -120,7 +120,7 @@ def test_single_source_assembles_all_constitution_paths(
     publish_constitution(contributions, tmp_path)
 
     assert captured == {
-        "molecule": _molecule(),
+        "molecules": (_molecule(),),
         "body": b"# First\n# Second",
     }
 
@@ -131,8 +131,8 @@ def test_publish_constitution_with_empty_contributions_stages_lock_only(
     """An empty contribution list publishes install.lock alone with molecules=()."""
     captured: dict[str, object] = {}
 
-    def capture_publish(molecule, body, repo_root, **kwargs) -> None:
-        captured["molecule"] = molecule
+    def capture_publish(molecules, body, repo_root, **kwargs) -> None:
+        captured["molecules"] = tuple(molecules)
         captured["body"] = body
         del repo_root, kwargs
 
@@ -140,7 +140,7 @@ def test_publish_constitution_with_empty_contributions_stages_lock_only(
 
     publish_constitution([], tmp_path)
 
-    assert captured == {"molecule": None, "body": None}
+    assert captured == {"molecules": (), "body": None}
 
 
 def test_publish_constitution_empty_publishes_lock_without_constitution_file(
@@ -157,7 +157,7 @@ def test_publish_constitution_empty_publishes_lock_without_constitution_file(
 
     monkeypatch.setattr(transaction, "publish_generation", capture_publish)
 
-    _publish_constitution(None, None, tmp_path)
+    _publish_constitution((), None, tmp_path)
 
     assert staged_files_captured == [transaction.INSTALL_LOCK_NAME]
 
@@ -178,29 +178,52 @@ def test_publish_constitution_empty_records_empty_molecules_in_lock(
 
     monkeypatch.setattr(transaction, "publish_generation", capture_publish)
 
-    _publish_constitution(None, None, tmp_path)
+    _publish_constitution((), None, tmp_path)
 
     assert captured_lock["spaex_version"] == "4"
     assert captured_lock["molecules"] == []
     assert "generation_id" in captured_lock
 
 
-def test_publish_constitution_molecule_and_body_must_agree_on_none(
-    tmp_path: Path,
+def test_publish_constitution_hook_only_records_stage_lock_without_constitution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Mixing None and non-None across (molecule, body) is a programmer error."""
-    from spaex.model.install_lock import MoleculeEntry
+    """Hook-only molecules (paths=()) round-trip through the lock without a body."""
+    from spaex.io import transaction
 
-    molecule = MoleculeEntry(
-        id=_SOURCE.id,
+    hook_only = MoleculeEntry(
+        id="com.example.hookonly",
         source=_SOURCE.source,
         revision=_SOURCE.revision,
-        paths=(CONSTITUTION_PATH,),
+        paths=(),
+        hook_status="ok",
     )
-    with pytest.raises(ValueError, match="both be None or both be set"):
-        _publish_constitution(molecule, None, tmp_path)
-    with pytest.raises(ValueError, match="both be None or both be set"):
-        _publish_constitution(None, b"# body\n", tmp_path)
+    staged_files_captured: list[str] = []
+    captured_lock: dict[str, object] = {}
+
+    def capture_publish(live_dir, files, **kwargs) -> None:
+        del live_dir, kwargs
+        for staged in files:
+            staged_files_captured.append(staged.relative_path)
+            if staged.relative_path == transaction.INSTALL_LOCK_NAME:
+                captured_lock.update(json.loads(staged.data))
+
+    monkeypatch.setattr(transaction, "publish_generation", capture_publish)
+
+    _publish_constitution((hook_only,), None, tmp_path)
+
+    # No constitution.md is staged (only the lock), but the lock records
+    # the hook-only molecule so orphan cleanup and lock readers see it.
+    assert staged_files_captured == [transaction.INSTALL_LOCK_NAME]
+    assert captured_lock["molecules"] == [
+        {
+            "id": "com.example.hookonly",
+            "source": _SOURCE.source,
+            "revision": _SOURCE.revision,
+            "paths": [],
+            "hook_status": "ok",
+        }
+    ]
 
 
 def test_single_source_rejects_concealment_instruction(tmp_path: Path) -> None:
@@ -291,7 +314,7 @@ def test_orphan_cleanup_restores_prior_deletions_on_failure(
     monkeypatch.setattr(Path, "unlink", fail_on_b)
 
     with pytest.raises(OSError, match="simulated orphan cleanup failure"):
-        _publish_constitution(_molecule(), b"# New\n", tmp_path)
+        _publish_constitution((_molecule(),), b"# New\n", tmp_path)
 
     assert (live / "constitution.md").read_bytes() == b"# Old\n"
     assert (

@@ -103,7 +103,7 @@ def _read_existing_lock(repo_root: Path) -> InstallLock | None:
 
 
 def _publish_constitution(
-    molecule: MoleculeEntry | None,
+    molecules: Sequence[MoleculeEntry],
     body: bytes | None,
     repo_root: Path,
     *,
@@ -115,23 +115,23 @@ def _publish_constitution(
     publishes every output file as one rename-swap generation with
     post-write verification.
 
-    When ``molecule`` is ``None`` (empty state), ``body`` must also be
-    ``None``: only ``install.lock`` is staged with ``molecules=()`` and
-    any pre-existing ``constitution.md`` disappears with the rename-swap
-    of ``.spaex/`` (delete-orphans via full-directory swap).
+    When ``body`` is ``None`` (no constitution to publish), only
+    ``install.lock`` is staged and any pre-existing ``constitution.md``
+    disappears with the rename-swap of ``.spaex/`` (delete-orphans via
+    full-directory swap). Hook-only molecule records (paths=()) may still
+    be present in ``molecules`` alongside the empty-body case.
 
     Args:
-        molecule: The installed molecule this generation records, or None
-            for the empty state.
-        body: Effective constitution content, or None for the empty state.
+        molecules: Every molecule record to write to install.lock: the
+            constitution contributor (if any) plus hook-only molecule
+            records. Sorted canonically before publication.
+        body: Effective constitution content, or None when no molecule
+            contributes an ``atoms.constitution`` file this generation.
         repo_root: Repository root path.
 
     Raises:
         PostWriteValidationError: If the published files disagree.
     """
-    if (molecule is None) != (body is None):
-        raise ValueError("molecule and body must both be None or both be set")
-
     existing_lock = _read_existing_lock(repo_root)
     unknown_top_level = (
         dict(existing_lock.unknown_top_level) if existing_lock is not None else {}
@@ -142,8 +142,11 @@ def _publish_constitution(
     # advances deterministically past any prior generation.
     generation_seed = body if body is not None else b""
     generation_id = allocate_generation_id(generation_seed, existing_generation_id)
-    molecules_tuple: tuple[MoleculeEntry, ...] = (
-        () if molecule is None else (molecule,)
+    molecules_tuple: tuple[MoleculeEntry, ...] = tuple(
+        sorted(
+            molecules,
+            key=lambda m: (m.id, m.source, m.revision, m.paths),
+        )
     )
     lock = InstallLock(
         spaex_version="4",
@@ -193,6 +196,7 @@ def publish_constitution(
     *,
     state_root: Path | None = None,
     hook_status: HookStatus | None = None,
+    hook_only_records: Sequence[MoleculeEntry] = (),
 ) -> None:
     """Join all declared constitution files from one molecule and publish.
 
@@ -202,16 +206,24 @@ def publish_constitution(
     records that molecule once, with ``.spaex/constitution.md`` as
     its sole contributed path.
 
-    When ``contributions`` is empty the empty state is published:
-    ``install.lock`` alone with ``molecules=()`` and any pre-existing
-    ``constitution.md`` disappears via the rename-swap of ``.spaex/``.
+    When ``contributions`` is empty the empty-constitution state is
+    published: ``install.lock`` with only the ``hook_only_records`` (if
+    any) and any pre-existing ``constitution.md`` disappears via the
+    rename-swap of ``.spaex/``.
 
     Optional ``hook_status`` records the Spec 016 install_hook outcome on
     the contributing molecule's install.lock entry. Pass ``None`` when the
     molecule declared no install_hook; the writer omits the field then.
+
+    Optional ``hook_only_records`` carries per-molecule install.lock
+    entries for hook-only molecules (paths=()) whose install_hook ran
+    during this generation. They are merged into the sorted molecules
+    array alongside the constitution contributor's record.
     """
     if not contributions:
-        _publish_constitution(None, None, repo_root, state_root=state_root)
+        _publish_constitution(
+            tuple(hook_only_records), None, repo_root, state_root=state_root
+        )
         return
 
     source = contributions[0].source
@@ -236,7 +248,7 @@ def publish_constitution(
         hook_status=hook_status,
     )
     _publish_constitution(
-        molecule,
+        (molecule, *hook_only_records),
         b"\n".join(contribution.body for contribution in contributions),
         repo_root,
         state_root=state_root,
