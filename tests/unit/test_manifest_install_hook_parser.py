@@ -8,6 +8,7 @@ schema validator so nothing from schema-space can populate the value.
 from __future__ import annotations
 
 import json
+from dataclasses import FrozenInstanceError
 
 import pytest
 
@@ -105,7 +106,7 @@ def test_manifest_is_frozen() -> None:
     data = _base_manifest()
     data["install_hook"] = {"interpreter": "python3", "script": "install.py"}
     manifest = MoleculeManifest.from_json(_encode(data))
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         manifest.install_hook.interpreter = "other"  # type: ignore[misc]
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         manifest.install_hook = None  # type: ignore[misc]

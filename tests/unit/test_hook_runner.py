@@ -185,6 +185,24 @@ def test_store_is_called_with_record_fields(
     )
 
 
+def test_store_oserror_returns_tree_unavailable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An OSError while materializing the molecule is a launch failure."""
+    resolved = _make_resolved(tmp_path)
+    monkeypatch.setattr(hook_runner.shutil, "which", lambda name: "/usr/bin/" + name)
+
+    def fail(*args, **kwargs):
+        raise OSError("store unavailable")
+
+    monkeypatch.setattr(hook_runner.molecule_store, "get_or_extract", fail)
+
+    outcome = run_install_hook(resolved, tmp_path / "consumer", tmp_path / "state")
+
+    assert outcome.kind is HookOutcomeKind.LAUNCH_FAILURE
+    assert outcome.reason == "molecule_tree_unavailable"
+
+
 def test_missing_interpreter_does_not_call_store(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

@@ -84,9 +84,53 @@ def resolve_constitution_contributions(
         AtomIdCollisionError: If a molecule-id resolves to multiple (source, revision) pairs.
         ContributionFileNotFoundError: If a declared contribution file is not found.
     """
-    pending: list[tuple[int, str, int, ResolvedConstitutionContribution]] = []
+    contributions, _ = resolve_install_inputs(manifest, state_root)
+    return contributions
 
-    for record in _iterate_resolved_molecules(manifest, state_root):
+
+def resolve_molecules(
+    manifest: ConsumerManifest, state_root: Path
+) -> list[ResolvedMolecule]:
+    """Resolve every molecule the consumer selects, hook-only molecules included.
+
+    Same publisher / molecule-manifest fetch and cross-check work as
+    `resolve_constitution_contributions`, but the returned records carry
+    the metadata the install-hook runner needs (repo_dir, molecule_path,
+    install_hook, effective_priority) and every selected molecule is
+    represented, whether or not it contributes an `atoms.constitution`
+    entry. Records are sorted by (effective_priority ascending, molecule_id
+    UTF-8 byte order ascending), matching the constitution-assembly rule.
+    """
+    _, resolved = resolve_install_inputs(manifest, state_root)
+    return resolved
+
+
+def resolve_install_inputs(
+    manifest: ConsumerManifest, state_root: Path
+) -> tuple[list[ResolvedConstitutionContribution], list[ResolvedMolecule]]:
+    """Resolve constitution contributions and molecule records in one pass.
+
+    The shared resolver records contain all manifest metadata needed by both
+    consumers. Only contribution bodies are read after the records have been
+    collected, so the publisher and molecule manifests are fetched once per
+    install invocation.
+    """
+    records = list(_iterate_resolved_molecules(manifest, state_root))
+    pending: list[tuple[int, str, int, ResolvedConstitutionContribution]] = []
+    resolved: list[ResolvedMolecule] = []
+
+    for record in records:
+        resolved.append(
+            ResolvedMolecule(
+                molecule_id=record.molecule_id,
+                source_url=record.source_url,
+                revision=record.revision.lower(),
+                repo_dir=record.repo_dir,
+                molecule_path=record.publisher_path,
+                install_hook=record.molecule_manifest.install_hook,
+                effective_priority=record.effective_priority,
+            )
+        )
         constitution_paths = record.molecule_manifest.atoms.get("constitution", ())
         for path_index, constitution_path in enumerate(constitution_paths):
             contribution_path = f"{record.publisher_path}/{constitution_path}"
@@ -109,36 +153,8 @@ def resolve_constitution_contributions(
             )
 
     pending.sort(key=lambda item: (item[0], item[1].encode("utf-8"), item[2]))
-    return [item[3] for item in pending]
-
-
-def resolve_molecules(
-    manifest: ConsumerManifest, state_root: Path
-) -> list[ResolvedMolecule]:
-    """Resolve every molecule the consumer selects, hook-only molecules included.
-
-    Same publisher / molecule-manifest fetch and cross-check work as
-    `resolve_constitution_contributions`, but the returned records carry
-    the metadata the install-hook runner needs (repo_dir, molecule_path,
-    install_hook, effective_priority) and every selected molecule is
-    represented, whether or not it contributes an `atoms.constitution`
-    entry. Records are sorted by (effective_priority ascending, molecule_id
-    UTF-8 byte order ascending), matching the constitution-assembly rule.
-    """
-    resolved = [
-        ResolvedMolecule(
-            molecule_id=record.molecule_id,
-            source_url=record.source_url,
-            revision=record.revision.lower(),
-            repo_dir=record.repo_dir,
-            molecule_path=record.publisher_path,
-            install_hook=record.molecule_manifest.install_hook,
-            effective_priority=record.effective_priority,
-        )
-        for record in _iterate_resolved_molecules(manifest, state_root)
-    ]
     resolved.sort(key=lambda m: (m.effective_priority, m.molecule_id.encode("utf-8")))
-    return resolved
+    return [item[3] for item in pending], resolved
 
 
 @dataclass(frozen=True)

@@ -6,9 +6,9 @@
 
 ## Content Quality
 
-- [x] No implementation details (languages, frameworks, APIs); deliberate load-bearing anchors documented in Notes
-- [x] Focused on user value and business needs; technical anchors serve the maintainer/author audience (see Notes)
-- [x] Written for non-technical stakeholders; internal-tool spec convention is technical per Notes
+- [ ] No implementation details (languages, frameworks, APIs); deliberate load-bearing anchors documented in Notes
+- [ ] Focused on user value and business needs; technical anchors serve the maintainer/author audience (see Notes)
+- [ ] Written for non-technical stakeholders; internal-tool spec convention is technical per Notes
 - [x] All mandatory sections completed
 
 ## Requirement Completeness
