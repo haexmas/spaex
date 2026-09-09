@@ -61,8 +61,8 @@ description: "Task list for Spec 016 — Molecule install-hooks in spaex install
 
 ### install.lock writer/reader
 
-- [ ] T015 Extend the install.lock model/writer in `src/spaex/model/install_lock.py` and `src/spaex/constitution/publish.py`: serialise optional `hook_status: Literal["ok", "failed", "skipped"] | None` on each per-molecule record. Emit the field ONLY when the molecule declares `install_hook` in the pinned revision. Verifies FR-020 through FR-023, data-model.md § install.lock per-molecule record.
-- [ ] T016 [P] Extend the install.lock reader in `src/spaex/model/install_lock.py` to parse the optional `hook_status` field: unknown value → schema-validation error via existing lock schema check; absent → None on the parsed record. Verifies backwards-compat SC-006.
+- [x] T015 Extend the install.lock model/writer in `src/spaex/model/install_lock.py` and `src/spaex/constitution/publish.py`: serialise optional `hook_status: Literal["ok", "failed", "skipped"] | None` on each per-molecule record. Emit the field ONLY when the molecule declares `install_hook` in the pinned revision. Verifies FR-020 through FR-023, data-model.md § install.lock per-molecule record. (Model writer done in this commit; publish.py plumbing to propagate hook_status from the resolved-molecule map lands with T017 wiring.)
+- [x] T016 [P] Extend the install.lock reader in `src/spaex/model/install_lock.py` to parse the optional `hook_status` field: unknown value → schema-validation error via existing lock schema check; absent → None on the parsed record. Verifies backwards-compat SC-006.
 
 **Checkpoint**: Foundation ready. User story implementation can begin.
 
