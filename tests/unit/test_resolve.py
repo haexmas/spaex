@@ -14,6 +14,7 @@ from spaex.migrate.transform import clone_dir
 from spaex.model.consumer_manifest import CompoundEntry, ConfigEntry, ConsumerManifest
 from spaex.util.errors import (
     AtomIdCollisionError,
+    ContributionFileNotFoundError,
     MissingAtomManifestError,
     MissingPublisherManifestError,
     MoleculeTreeExtractionError,
@@ -488,4 +489,121 @@ def test_constitution_path_symlink_escape_is_refused(tmp_path: Path) -> None:
         ]
     )
     with pytest.raises(MoleculeTreeExtractionError):
+        resolve_constitution_contributions(manifest, state_root)
+
+
+def test_missing_molecule_tree_preserves_manifest_path_in_context(tmp_path: Path) -> None:
+    canonical = "https://github.com/example/publisher"
+    molecule_key = "com.github.example.publisher.constitution"
+    publisher = tmp_path / "publisher"
+    publisher.mkdir()
+    _init_repo(publisher)
+    (publisher / "manifest.json").write_text(
+        json.dumps(
+            {
+                "spaex_version": "4",
+                "publisher": "com.github.example.publisher",
+                "molecules": {molecule_key: {"path": "c", "version": "1.0.0"}},
+            },
+            sort_keys=True,
+        )
+    )
+    _git(publisher, "add", ".")
+    _git(publisher, "commit", "-q", "-m", "publish root manifest only")
+    sha = _git(publisher, "rev-parse", "HEAD")
+
+    state_root = tmp_path / "state"
+    _clone(state_root, canonical, publisher)
+    manifest = _manifest(
+        [CompoundEntry(source=canonical, revision=sha, molecules=(molecule_key,))]
+    )
+
+    with pytest.raises(MissingAtomManifestError) as exc_info:
+        resolve_constitution_contributions(manifest, state_root)
+
+    assert exc_info.value.context["path"] == "c/manifest.json"
+
+
+def test_non_file_molecule_manifest_is_typed(tmp_path: Path) -> None:
+    canonical = "https://github.com/example/publisher"
+    molecule_key = "com.github.example.publisher.constitution"
+    publisher = tmp_path / "publisher"
+    sha = _publish(
+        publisher,
+        {
+            "spaex_version": "4",
+            "publisher": "com.github.example.publisher",
+            "molecules": {molecule_key: {"path": "c", "version": "1.0.0"}},
+        },
+        {
+            "c": (
+                {
+                    "spaex_version": "4",
+                    "id": molecule_key,
+                    "version": "1.0.0",
+                    "priority": 100,
+                    "atoms": {"constitution": ["constitution.md"]},
+                },
+                b"body",
+            )
+        },
+    )
+    state_root = tmp_path / "state"
+    _clone(state_root, canonical, publisher)
+    cache_dir = state_root / "molecule-store" / clone_dir(state_root, canonical).name / sha / "c"
+    (cache_dir / "manifest.json").mkdir(parents=True)
+
+    manifest = _manifest(
+        [CompoundEntry(source=canonical, revision=sha, molecules=(molecule_key,))]
+    )
+    with pytest.raises(MissingAtomManifestError):
+        resolve_constitution_contributions(manifest, state_root)
+
+
+def test_non_file_constitution_path_is_typed(tmp_path: Path) -> None:
+    canonical = "https://github.com/example/publisher"
+    molecule_key = "com.github.example.publisher.constitution"
+    publisher = tmp_path / "publisher"
+    sha = _publish(
+        publisher,
+        {
+            "spaex_version": "4",
+            "publisher": "com.github.example.publisher",
+            "molecules": {molecule_key: {"path": "c", "version": "1.0.0"}},
+        },
+        {
+            "c": (
+                {
+                    "spaex_version": "4",
+                    "id": molecule_key,
+                    "version": "1.0.0",
+                    "priority": 100,
+                    "atoms": {"constitution": ["constitution.md"]},
+                },
+                b"body",
+            )
+        },
+    )
+    state_root = tmp_path / "state"
+    _clone(state_root, canonical, publisher)
+    cache_dir = state_root / "molecule-store" / clone_dir(state_root, canonical).name / sha / "c"
+    cache_dir.mkdir(parents=True)
+    (cache_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "spaex_version": "4",
+                "id": molecule_key,
+                "version": "1.0.0",
+                "priority": 100,
+                "atoms": {"constitution": ["constitution.md"]},
+            },
+            sort_keys=True,
+        )
+    )
+    (cache_dir / "constitution.md").mkdir()
+
+    manifest = _manifest(
+        [CompoundEntry(source=canonical, revision=sha, molecules=(molecule_key,))]
+    )
+    with pytest.raises(ContributionFileNotFoundError):
         resolve_constitution_contributions(manifest, state_root)
