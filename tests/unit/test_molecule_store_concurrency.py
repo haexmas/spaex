@@ -11,6 +11,7 @@ import pytest
 
 from spaex.git.molecule_store import get_or_extract
 from spaex.migrate.transform import clone_dir
+from spaex.util.errors import MoleculeTreeExtractionError
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None, reason="git binary required"
@@ -50,7 +51,7 @@ def _clone(state_root: Path, canonical: str, publisher: Path) -> Path:
     return target
 
 
-def _worker(args: tuple[Path, str, str, str, Path], barrier_name: str | None) -> str:
+def _worker(args: tuple[Path, str, str, str, Path]) -> str:
     """Subprocess worker that calls get_or_extract and returns the dir string."""
     repo_dir, source_url, revision, molecule_path, state_root = args
     result = get_or_extract(repo_dir, source_url, revision, molecule_path, state_root)
@@ -73,9 +74,12 @@ def test_concurrent_requests_for_same_key_both_succeed(tmp_path: Path) -> None:
     repo_dir = _clone(state_root, _CANONICAL, publisher)
 
     args = (repo_dir, _CANONICAL, sha, "mol", state_root)
-    ctx = multiprocessing.get_context("fork")
+    # Use the platform default: Windows does not provide the POSIX-only
+    # ``fork`` context, while the default still gives us separate processes
+    # everywhere and therefore exercises the file-lock path.
+    ctx = multiprocessing.get_context()
     with ctx.Pool(processes=2) as pool:
-        results = pool.starmap(_worker, [(args, None), (args, None)])
+        results = pool.map(_worker, [args, args])
 
     assert len(results) == 2
     assert results[0] == results[1]
@@ -120,8 +124,9 @@ def test_interrupted_materialization_does_not_corrupt_final_path(
 
     monkeypatch.setattr(molecule_store.os, "replace", _flaky_replace)
 
-    with pytest.raises(OSError, match="simulated crash"):
+    with pytest.raises(MoleculeTreeExtractionError, match="simulated crash") as error:
         get_or_extract(repo_dir, _CANONICAL, sha, "mol", state_root)
+    assert isinstance(error.value.__cause__, OSError)
 
     source_digest = clone_dir(state_root, _CANONICAL).name
     final_dir = state_root / "molecule-store" / source_digest / sha / "mol"
