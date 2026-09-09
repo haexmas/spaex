@@ -8,7 +8,7 @@
 - Preceding: [specs/014-rename-to-spaex/](../014-rename-to-spaex/) (established v4 vocabulary)
 - Foundational: [specs/007-unified-manifest-v2/](../007-unified-manifest-v2/) (atom-category model)
 - Foundational: [specs/008-install-transaction/](../008-install-transaction/) (staging-generation-then-publish machinery)
-- **Blocking dependency, landed after this plan was first written**: [specs/017-molecule-store/](../017-molecule-store/) (`spaex.git.molecule_store.get_or_extract()`, merged 2026-09-09) — surfaced mid-implementation of this spec as a missing prerequisite (no code existed to materialize a molecule's tree onto real disk for a subprocess to execute against). This plan's Project Structure and T009/T013 were amended 2026-09-09 to consume it instead of building an in-repo `util/path_containment.py`.
+- **Blocking dependency, landed after this plan was first written**: [specs/017-molecule-store/](../017-molecule-store/) (`spaex.git.molecule_store.get_or_extract()`, merged 2026-09-09) — surfaced mid-implementation of this spec as a missing prerequisite (no code existed to materialize a molecule's tree onto real disk for a subprocess to execute against). This plan's Project Structure and T009/T013 were amended 2026-09-09 to consume its landed store MVP. Execution-time script containment remains required; Spec 017's resolver migration (T016–T021) is still pending and is not a prerequisite for hook materialization.
 
 ## Summary
 
@@ -81,14 +81,15 @@ src/spaex/
 ├── constitution/
 │   └── resolve.py                   # Extend resolver: retain hook-only molecules, priority sort,
 │                                     #   expose repo_dir/molecule_path (Spec 017 lands 2026-09-09;
-│                                     #   this spec no longer builds its own materialization/
-│                                     #   containment layer, it consumes spaex.git.molecule_store)
+│                                     #   this spec consumes spaex.git.molecule_store
+│                                     #   for lazy hook materialization)
 ├── install/
 │   ├── manifest_lock.py             # No change
 │   └── hook_runner.py               # NEW: calls molecule_store.get_or_extract(), subprocess
-│                                     #   invocation, on_failure application. No bespoke
-│                                     #   containment check — Spec 017's own validates the whole
-│                                     #   materialized tree before this module ever sees it.
+│                                     #   invocation, execution-time molecule containment,
+│                                     #   on_failure application
+├── util/
+│   └── path_containment.py          # NEW: canonicalise + strict descendant check for hook target
 └── cli/
     ├── add.py                       # New flag: --no-install-hooks (propagated to install subroutine)
     ├── install.py                   # Orchestrate hooks before publication; reuse install-failed key
@@ -104,10 +105,12 @@ tests/
 │   ├── test_install_hook_multi_molecule.py            # NEW: priority ordering, hook-only molecule survival
 │   └── test_install_hook_idempotency.py               # NEW: repeat spaex install, hook-only-transaction case
 └── unit/
-    └── test_manifest_install_hook_parser.py           # NEW: MoleculeManifest.from_json populates InstallHook | None
+    ├── test_manifest_install_hook_parser.py           # NEW: MoleculeManifest.from_json populates InstallHook | None
+    ├── test_path_containment.py                       # NEW: canonical target and symlink cases
+    └── test_hook_runner.py                            # NEW: store inputs, failures, execution containment
 ```
 
-**2026-09-09 amendment**: the original plan had this spec building its own `util/path_containment.py` (a bespoke `canonicalise_within()` escape-checker) for validating `install_hook.script` against the molecule's directory. That module and its tests (`test_path_containment.py`) are no longer needed: [Spec 017](../017-molecule-store/) (designed and implemented 2026-09-08/09, landed as three merged PRs before this spec's own implementation began) already validates every file and symlink inside a materialized molecule tree against exactly this class of escape, at materialization time, for the whole tree — a stronger and earlier guarantee than a hook-runner-local check on one path within an already-validated tree would have provided. This spec's `hook_runner.py` now calls `spaex.git.molecule_store.get_or_extract()` to obtain the molecule's directory and trusts its content is already safe. See tasks.md T009/T013's 2026-09-09 revisions and data-model.md's `ResolvedMolecule` amendment for the corrected field set (`repo_dir` + `molecule_path` replace the earlier, underspecified `cache_dir`).
+**2026-09-09 amendment (corrected during PR #88 review)**: consume the landed [Spec 017](../017-molecule-store/) store MVP for lazy materialization, using `repo_dir` + `molecule_path` instead of an assumed pre-populated `cache_dir`. Retain `util/path_containment.py` and T011/T012: the store validates archive members against the temporary extraction root, which contains the molecule subtree. A committed `mol/install.py -> ../sibling/install.py` can pass extraction validation but resolve outside the returned molecule directory after publication when the sibling is cached. Cache hits also return without revalidation. Therefore the hook runner MUST canonicalise and check its script against the returned molecule directory immediately before execution (FR-014/FR-015), on both fresh extraction and cache hits. These checks enforce different boundaries. Spec 017's pending constitution-resolver migration likewise retains a read-time check (FR-018, T018/T021); it does not make this hook check redundant.
 
 **Structure Decision**: Single-project layout (Option 1), matching Spec 013/014 established layout. No new top-level directories; all changes are additions within existing `src/spaex/` module tree and mirroring `tests/`.
 
