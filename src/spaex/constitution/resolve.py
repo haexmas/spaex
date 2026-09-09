@@ -151,7 +151,7 @@ def resolve_install_inputs(
                 )
             try:
                 body = candidate.read_bytes()
-            except FileNotFoundError as exc:
+            except OSError as exc:
                 raise ContributionFileNotFoundError(
                     message=(
                         f"contribution file {constitution_path!r} for "
@@ -273,19 +273,22 @@ def _iterate_resolved_molecules(
                     ),
                     context={
                         "atom_id": molecule_id,
-                        "path": publisher_entry.path,
+                        "path": f"{publisher_entry.path}/manifest.json",
                         "sha_short": canonical_revision[:12],
                     },
                 ) from exc
             try:
                 molecule_bytes = (cache_dir / "manifest.json").read_bytes()
-            except FileNotFoundError as exc:
+            except OSError as exc:
                 raise MissingAtomManifestError(
                     message=(
                         f"molecule manifest for {molecule_id!r} not found at "
                         f"{publisher_entry.path}/manifest.json"
                     ),
-                    context={"atom_id": molecule_id, "path": publisher_entry.path},
+                    context={
+                        "atom_id": molecule_id,
+                        "path": f"{publisher_entry.path}/manifest.json",
+                    },
                 ) from exc
             try:
                 molecule_manifest = MoleculeManifest.from_json(molecule_bytes)
