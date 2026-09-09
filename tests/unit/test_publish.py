@@ -111,6 +111,7 @@ def test_single_source_assembles_all_constitution_paths(
     captured: dict[str, object] = {}
 
     def capture_publish(molecules, body, repo_root, **kwargs) -> None:
+        """Capture the assembled molecules and constitution body."""
         captured["molecules"] = tuple(molecules)
         captured["body"] = body
         del repo_root, kwargs
@@ -132,6 +133,7 @@ def test_publish_constitution_with_empty_contributions_stages_lock_only(
     captured: dict[str, object] = {}
 
     def capture_publish(molecules, body, repo_root, **kwargs) -> None:
+        """Capture the empty publication passed to the low-level publisher."""
         captured["molecules"] = tuple(molecules)
         captured["body"] = body
         del repo_root, kwargs
@@ -202,6 +204,7 @@ def test_publish_constitution_hook_only_records_stage_lock_without_constitution(
     captured_lock: dict[str, object] = {}
 
     def capture_publish(live_dir, files, **kwargs) -> None:
+        """Capture staged paths and decode the generated install lock."""
         del live_dir, kwargs
         for staged in files:
             staged_files_captured.append(staged.relative_path)

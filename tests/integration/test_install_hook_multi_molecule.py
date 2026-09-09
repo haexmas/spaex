@@ -161,6 +161,7 @@ def _run_add(
 
 
 def _read_lock(consumer: Path) -> InstallLock:
+    """Read the consumer repository's published install lock."""
     return InstallLock.from_json(
         (consumer / ".spaex" / "install.lock").read_bytes()
     )
