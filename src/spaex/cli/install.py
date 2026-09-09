@@ -314,14 +314,20 @@ def _run_hooks_for_mvp(
     repo_root: Path,
     state_root: Path,
 ) -> dict[str, HookStatus]:
-    """MVP hook orchestration for User Story 1.
+    """Hook orchestration with per-molecule on_failure policy.
 
-    Runs each resolved molecule's declared install_hook in the (already
-    sorted by resolve_molecules) order. All molecules use the default
-    on_failure="abort" for MVP: any non-OK outcome raises install-failed
-    with molecule_id + hook_failure context (FR-016, FR-017). US2 (T023)
-    refines per-molecule on_failure. Returns a per-molecule-id status map
-    limited to OK for MVP; non-OK never returns (raised above).
+    Iterates resolved molecules in resolver order (ascending effective
+    priority, ties broken by UTF-8 molecule id) and runs each declared
+    install_hook. A non-OK outcome under ``on_failure="abort"`` raises
+    ``install-failed`` with ``molecule_id`` + ``hook_failure`` context
+    (FR-016, FR-017), which trips the Spec-008 stage-generation rollback
+    via the enclosing ``stage_constitution`` context and, upstream,
+    ``write_and_reinstall``'s ``.spaex.json`` restore. A non-OK outcome
+    under ``on_failure="warn"`` records ``hook_status="failed"``, emits
+    ONE ``WARN:`` line on stderr naming the molecule id and failure
+    reason (after the hook subprocess has exited so its inherited stderr
+    is never prefixed, FR-019), and continues with the next molecule
+    (FR-018, FR-022).
     """
     statuses: dict[str, HookStatus] = {}
     for record in resolved:
@@ -333,12 +339,19 @@ def _run_hooks_for_mvp(
         if outcome.kind is HookOutcomeKind.OK:
             statuses[record.molecule_id] = "ok"
             continue
-        # Everything else is treated as an abort-policy failure in MVP.
         reason = outcome.reason or (
             f"exit_{outcome.exit_code}"
             if outcome.exit_code is not None
             else outcome.kind.name.lower()
         )
+        if record.install_hook.on_failure == "warn":
+            statuses[record.molecule_id] = "failed"
+            sys.stderr.write(
+                f"WARN: molecule {record.molecule_id} install_hook failed "
+                f"({reason})\n"
+            )
+            sys.stderr.flush()
+            continue
         raise HaexError(
             message=(
                 f"install_hook for molecule {record.molecule_id!r} failed: {reason}"
