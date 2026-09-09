@@ -135,6 +135,31 @@ def test_materialize_returns_correct_directly_nested_content(tmp_path: Path) -> 
     assert (materialized / "helper.txt").read_bytes() == b"hello from the molecule\n"
 
 
+def test_materialization_preserves_blob_bytes_with_autocrlf_enabled(tmp_path: Path) -> None:
+    """FR-003: archive extraction must not apply Windows worktree conversion."""
+    publisher = tmp_path / "publisher"
+    publisher.mkdir()
+    _init_repo(publisher)
+    (publisher / ".gitattributes").write_bytes(b"* text=auto\n")
+    molecule_file = publisher / "widgets" / "hello" / "constitution.md"
+    molecule_file.parent.mkdir(parents=True)
+    molecule_file.write_bytes(b"one\ntwo\n")
+    _git(publisher, "add", ".")
+    _git(publisher, "commit", "-q", "-m", "publish")
+    _git(publisher, "config", "core.autocrlf", "true")
+    sha = _git(publisher, "rev-parse", "HEAD")
+
+    state_root = tmp_path / "state"
+    repo_dir = _clone(state_root, _SOURCE_URL, publisher)
+    canonical_sha = revparse.full_sha(repo_dir, sha)
+
+    materialized = get_or_extract(
+        repo_dir, _SOURCE_URL, canonical_sha, "widgets/hello", state_root
+    )
+
+    assert (materialized / "constitution.md").read_bytes() == b"one\ntwo\n"
+
+
 def test_repeated_request_is_a_cache_hit_no_reextraction(tmp_path: Path) -> None:
     """AS2/FR-005/SC-002: a second identical request returns the same
     directory without a second `git archive` subprocess call."""
