@@ -40,6 +40,33 @@
     "config_schema": {
       "$ref": "#/$defs/repoRelativePath",
       "description": "Path (molecule-directory-relative) to the molecule's config JSON Schema."
+    },
+    "install_hook": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["interpreter", "script"],
+      "properties": {
+        "interpreter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Program name looked up on PATH (python3, bash, node, ...). spaex verifies existence via shutil.which() before invocation; a missing interpreter is a hook failure subject to on_failure policy."
+        },
+        "script": {
+          "$ref": "#/$defs/repoRelativePath",
+          "description": "Molecule-directory-relative path to the hook script. spaex resolves it against the pinned molecule cache directory; the canonical target must remain inside that directory even through symlinks (path-containment check enforced at execution time on every invocation, including cache hits)."
+        },
+        "args": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Additional positional arguments passed after the script. Optional; absent parses to an empty list."
+        },
+        "on_failure": {
+          "enum": ["abort", "warn"],
+          "default": "abort",
+          "description": "Failure policy. 'abort' triggers Spec-008 install-transaction rollback on any hook failure (non-zero exit, OSError on launch, missing interpreter on PATH, path-containment failure). 'warn' records hook_status:failed in install.lock and continues, exit 0. Default is 'abort'; the parser MUST set the value explicitly rather than relying on this default metadata."
+        }
+      },
+      "description": "Optional side-effect script that spaex install invokes after atom materialization, per molecule in effective-priority order. Runs with cwd = consumer repo root, inherits stdio AND the invoking spaex process's complete environment. Side effects are not reversible by spaex remove; spaex remove emits a WARN when removing a molecule that declared install_hook."
     }
   },
   "$defs": {

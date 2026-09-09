@@ -23,7 +23,7 @@ description: "Task list for Spec 016 — Molecule install-hooks in spaex install
 
 **Purpose**: Verify baseline before touching code.
 
-- [ ] T001 Verify branch `016-molecule-install-hooks` is at `origin/main` HEAD in worktree `~/Projekte/spaex-016`; capture pre-implementation baseline test count via `pytest --collect-only -q | tail -3` and record in a note for later diff.
+- [x] T001 Verify branch `016-molecule-install-hooks` is at `origin/main` HEAD in worktree `~/Projekte/spaex-016`; capture pre-implementation baseline test count via `pytest --collect-only -q | tail -3` and record in a note for later diff. Baseline: 367/376 collected (9 deselected), branch `016-implement` at origin/main HEAD, recorded 2026-09-09.
 
 ---
 
@@ -33,10 +33,10 @@ description: "Task list for Spec 016 — Molecule install-hooks in spaex install
 
 ### Schemas
 
-- [ ] T002 [P] Extend `src/spaex/schema/data/molecule-manifest.v4.schema.json` with the optional `install_hook` object property per [contracts/molecule-manifest-v4-install-hook.schema.json](./contracts/molecule-manifest-v4-install-hook.schema.json). Preserve `additionalProperties: false` on the manifest root and on the hook object. Verifies FR-001.
-- [ ] T003 [P] Extend `src/spaex/schema/data/install-lock.v4.schema.json` with optional `hook_status` enum (`"ok" | "failed" | "skipped"`) on the per-molecule record per [contracts/install-lock-v4-hook-status.schema.json](./contracts/install-lock-v4-hook-status.schema.json). Verifies FR-020.
-- [ ] T004 [P] Add contract-level schema tests in `tests/contract/test_molecule_manifest_install_hook_schema.py`: accept min form (interpreter + script), accept full form (with args + on_failure), reject missing interpreter, reject missing script, reject unknown top-level keys under install_hook, reject non-object install_hook (string, null, array, number, boolean), reject on_failure outside `{abort, warn}`, backwards-compat (manifest without install_hook stays valid). Verifies FR-001 through FR-004, SC-006.
-- [ ] T005 [P] Add contract-level schema tests in `tests/contract/test_install_lock_hook_status_schema.py`: accept "ok"/"failed"/"skipped", accept absent, reject unknown values, backwards-compat (existing lock records without hook_status stay valid). Verifies FR-020 through FR-023.
+- [x] T002 [P] Extend `src/spaex/schema/data/molecule-manifest.v4.schema.json` with the optional `install_hook` object property per [contracts/molecule-manifest-v4-install-hook.schema.json](./contracts/molecule-manifest-v4-install-hook.schema.json). Preserve `additionalProperties: false` on the manifest root and on the hook object. Verifies FR-001.
+- [x] T003 [P] Extend `src/spaex/schema/data/install-lock.v4.schema.json` with optional `hook_status` enum (`"ok" | "failed" | "skipped"`) on the per-molecule record per [contracts/install-lock-v4-hook-status.schema.json](./contracts/install-lock-v4-hook-status.schema.json). Verifies FR-020.
+- [x] T004 [P] Add contract-level schema tests in `tests/contract/test_molecule_manifest_install_hook_schema.py`: accept min form (interpreter + script), accept full form (with args + on_failure), reject missing interpreter, reject missing script, reject unknown top-level keys under install_hook, reject non-object install_hook (string, null, array, number, boolean), reject on_failure outside `{abort, warn}`, backwards-compat (manifest without install_hook stays valid). Verifies FR-001 through FR-004, SC-006.
+- [x] T005 [P] Add contract-level schema tests in `tests/contract/test_install_lock_hook_status_schema.py`: accept "ok"/"failed"/"skipped", accept absent, reject unknown values, backwards-compat (existing lock records without hook_status stay valid). Verifies FR-020 through FR-023.
 
 ### Model layer
 
