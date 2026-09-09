@@ -270,6 +270,7 @@ def test_install_runs_hook_only_alongside_constitution_molecule(
     invoked: list[str] = []
 
     def fake_run_install_hook(record, *, consumer_repo_root, state_root):
+        """Record each hook invocation and report a successful outcome."""
         del consumer_repo_root, state_root
         invoked.append(record.molecule_id)
         return HookOutcome(kind=HookOutcomeKind.OK)
@@ -279,6 +280,7 @@ def test_install_runs_hook_only_alongside_constitution_molecule(
     def capture_publish(
         contributions_arg, repo_root, *, state_root=None, hook_status=None, hook_only_records=()
     ):
+        """Capture hook-only records forwarded to constitution publication."""
         captured_hook_only.append(tuple(hook_only_records))
         del contributions_arg, repo_root, state_root, hook_status
 
