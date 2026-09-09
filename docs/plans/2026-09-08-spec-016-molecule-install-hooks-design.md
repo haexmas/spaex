@@ -1,6 +1,6 @@
 # Spec 016 — Molecule install-hooks in `spaex install`
 
-**Status**: Draft (design doc; spec/plan/tasks to be generated via `/speckit-specify`)
+**Status**: Implementation in flight. Phases 1-5 landed on `main` as of 2026-09-09 (foundational schema/model/runner, US1 hook execution, US2 per-molecule failure policy, US3 `--no-install-hooks` opt-out). Remaining: Phase 6 (US4 multi-molecule + hook-only), Phase 7 (FR-025 hook-only transaction), Phase 8 (`spaex remove` WARN), Phase 9 (polish: `--help` docs, `README.md`, quickstart walk, schema-desc updates, backwards-compat validation, and the `pyproject.toml` bump to 4.1.0). See `specs/016-molecule-install-hooks/tasks.md` for the per-task status.
 **Author**: brainstorming session 2026-09-08 with operator
 **Target spaex version**: 4.1.0 (MINOR feature bump; molecule manifests remain
 backwards-compatible, while the generated install-lock contract gains an
