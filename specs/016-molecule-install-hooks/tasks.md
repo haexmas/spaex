@@ -166,9 +166,9 @@ description: "Task list for Spec 016 — Molecule install-hooks in spaex install
 
 ## Phase 8: `spaex remove` interaction
 
-- [ ] T042 In `src/spaex/cli/remove.py`, when removing a molecule whose install.lock record has `hook_status` present (indicating the molecule declared `install_hook` in the pinned revision), emit a WARN to stderr: `WARN: molecule <id> had an install_hook; side effects (git hooks, gitignore entries, provisioned tools, agent-harness registrations) may remain. Consult the molecule's README for reverse steps.` Do NOT change the CLI exit code. Verifies FR-029.
-- [ ] T043 [P] Add integration test in `tests/integration/test_install_hook_remove_warn.py::test_remove_hook_carrying_molecule_emits_warn`: after installing a hook-carrying molecule, run `spaex remove`; assert stderr contains the WARN line with the molecule id; CLI exits 0. Verifies FR-029.
-- [ ] T044 [P] Add integration test `::test_remove_hook_less_molecule_no_warn`: after installing a molecule WITHOUT install_hook, run `spaex remove`; assert stderr does NOT contain any install_hook-related WARN. Verifies FR-029 specificity (WARN only when appropriate).
+- [X] T042 In `src/spaex/cli/remove.py`, when removing a molecule whose install.lock record has `hook_status` present (indicating the molecule declared `install_hook` in the pinned revision), emit a WARN to stderr: `WARN: molecule <id> had an install_hook; side effects (git hooks, gitignore entries, provisioned tools, agent-harness registrations) may remain. Consult the molecule's README for reverse steps.` Do NOT change the CLI exit code. Verifies FR-029. (Implemented as `_warn_hook_carriers(repo_root, remove_ids)` invoked from `run()` after `_apply_removal` and before `write_and_reinstall`, so the pre-removal install.lock is what's inspected. Missing lock is silent for the fresh-consumer edge case; WARN order follows `remove_ids` for deterministic output.)
+- [X] T043 [P] Add integration test in `tests/integration/test_install_hook_remove_warn.py::test_remove_hook_carrying_molecule_emits_warn`: after installing a hook-carrying molecule, run `spaex remove`; assert stderr contains the WARN line with the molecule id; CLI exits 0. Verifies FR-029.
+- [X] T044 [P] Add integration test `::test_remove_hook_less_molecule_no_warn`: after installing a molecule WITHOUT install_hook, run `spaex remove`; assert stderr does NOT contain any install_hook-related WARN. Verifies FR-029 specificity (WARN only when appropriate).
 
 ---
 
