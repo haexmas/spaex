@@ -40,9 +40,9 @@ description: "Task list for Spec 016 — Molecule install-hooks in spaex install
 
 ### Model layer
 
-- [ ] T006 Create `InstallHook` dataclass (frozen, slots) in `src/spaex/model/molecule_manifest.py`: fields `interpreter: str`, `script: str`, `args: tuple[str, ...]` (immutable), `on_failure: Literal["abort", "warn"]`. No behaviour methods, pure value type. Verifies data-model.md § InstallHook.
-- [ ] T007 Update `MoleculeManifest.from_json()` in `src/spaex/model/molecule_manifest.py`: parse optional `install_hook` field into `InstallHook | None`. When `install_hook` object is present but omits `on_failure`, EXPLICITLY set `on_failure="abort"` in Python (do NOT rely on the JSON-Schema `default`). When `args` is omitted, use `()`. When top-level `install_hook` is absent, store `None`. Verifies FR-005, FR-006.
-- [ ] T008 [P] Add unit tests in `tests/unit/test_manifest_install_hook_parser.py`: absent field → None; present min form → dataclass with on_failure="abort" explicitly (do NOT rely on JSON-Schema default; test uses a stub parser to prove the parser sets the value); present with all fields → dataclass with all fields; parses `args` as tuple (immutable). Verifies FR-005, FR-006.
+- [x] T006 Create `InstallHook` dataclass (frozen, slots) in `src/spaex/model/molecule_manifest.py`: fields `interpreter: str`, `script: str`, `args: tuple[str, ...]` (immutable), `on_failure: Literal["abort", "warn"]`. No behaviour methods, pure value type. Verifies data-model.md § InstallHook.
+- [x] T007 Update `MoleculeManifest.from_json()` in `src/spaex/model/molecule_manifest.py`: parse optional `install_hook` field into `InstallHook | None`. When `install_hook` object is present but omits `on_failure`, EXPLICITLY set `on_failure="abort"` in Python (do NOT rely on the JSON-Schema `default`). When `args` is omitted, use `()`. When top-level `install_hook` is absent, store `None`. Verifies FR-005, FR-006.
+- [x] T008 [P] Add unit tests in `tests/unit/test_manifest_install_hook_parser.py`: absent field → None; present min form → dataclass with on_failure="abort" explicitly (do NOT rely on JSON-Schema default; test uses a stub parser to prove the parser sets the value); present with all fields → dataclass with all fields; parses `args` as tuple (immutable). Verifies FR-005, FR-006.
 
 ### Resolver
 
