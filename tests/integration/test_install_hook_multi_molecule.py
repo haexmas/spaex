@@ -19,6 +19,7 @@ from spaex.cli import add as add_cli
 from spaex.migrate.transform import clone_dir
 from spaex.model.consumer_manifest import ConsumerManifest
 from spaex.model.install_lock import InstallLock
+from spaex.util.errors import HaexError
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None, reason="git binary required"
@@ -40,7 +41,6 @@ def _molecule_manifest(
     molecule_id: str,
     priority: int,
     *,
-    hook_body: str,
     on_failure: str = "abort",
     include_constitution: bool = False,
 ) -> dict:
@@ -214,12 +214,12 @@ def test_priority_order_execution(
         [
             (
                 "low",
-                _molecule_manifest(low_id, priority=10, hook_body=""),
+                _molecule_manifest(low_id, priority=10),
                 _LOG_APPEND_HOOK.format(molecule_id=low_id),
             ),
             (
                 "high",
-                _molecule_manifest(high_id, priority=20, hook_body=""),
+                _molecule_manifest(high_id, priority=20),
                 _LOG_APPEND_HOOK.format(molecule_id=high_id),
             ),
         ],
@@ -256,7 +256,7 @@ def test_hook_only_molecule_hook_runs(
         [
             (
                 "hook-only",
-                _molecule_manifest(hook_only_id, priority=10, hook_body=""),
+                _molecule_manifest(hook_only_id, priority=10),
                 _MARKER_HOOK.format(molecule_id=hook_only_id),
             ),
         ],
@@ -303,19 +303,19 @@ def test_abort_stops_later_hooks_total_rollback(
         [
             (
                 "aa-first",
-                _molecule_manifest(first_id, priority=10, hook_body=""),
+                _molecule_manifest(first_id, priority=10),
                 _LOG_APPEND_HOOK.format(molecule_id=first_id),
             ),
             (
                 "bb-middle",
                 _molecule_manifest(
-                    middle_id, priority=20, hook_body="", on_failure="abort"
+                    middle_id, priority=20, on_failure="abort"
                 ),
                 _ABORTING_HOOK.format(molecule_id=middle_id),
             ),
             (
                 "cc-third",
-                _molecule_manifest(third_id, priority=30, hook_body=""),
+                _molecule_manifest(third_id, priority=30),
                 _LOG_APPEND_HOOK.format(molecule_id=third_id),
             ),
         ],
@@ -323,7 +323,7 @@ def test_abort_stops_later_hooks_total_rollback(
     consumer = _make_consumer(tmp_path)
     original_spaex_json_bytes = (consumer / ".spaex.json").read_bytes()
 
-    with pytest.raises(Exception) as exc_info:
+    with pytest.raises(HaexError) as exc_info:
         _run_add(
             consumer,
             state_root,
@@ -332,16 +332,16 @@ def test_abort_stops_later_hooks_total_rollback(
             molecule_ids=f"{first_id},{middle_id},{third_id}",
             revision=head,
         )
-    # The aborted install propagates as an install-transaction failure.
-    assert "install_hook" in str(exc_info.value) or "install-failed" in str(
-        exc_info.value
-    ) or "install" in str(exc_info.value).lower()
+    # `spaex add` wraps the install failure but preserves its diagnostic key
+    # and failing-molecule context in the transaction error.
+    assert exc_info.value.context.get("install_key") == "install-failed"
+    cause = exc_info.value.__cause__
+    assert isinstance(cause, HaexError)
+    assert cause.diagnostic_key == "install-failed"
+    assert cause.context.get("molecule_id") == middle_id
 
     log_path = consumer / "hook-log.txt"
-    if log_path.exists():
-        log = log_path.read_text(encoding="utf-8").splitlines()
-    else:
-        log = []
+    log = log_path.read_text(encoding="utf-8").splitlines() if log_path.exists() else []
     # The first two hooks appended (first cleanly, middle before exiting 1);
     # the third never ran.
     assert third_id not in log, (
