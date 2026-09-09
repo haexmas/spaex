@@ -98,6 +98,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_LOCK_TIMEOUT_SECONDS,
         help="Manifest-lock timeout in seconds (default 30; 0 = fail-fast)",
     )
+    install.add_argument(
+        "--no-install-hooks",
+        dest="skip_hooks",
+        action="store_true",
+        help="Skip per-molecule install_hook execution (Spec 016 FR-026)",
+    )
 
     from spaex.cli import add as add_cli
 

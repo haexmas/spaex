@@ -125,15 +125,15 @@ description: "Task list for Spec 016 — Molecule install-hooks in spaex install
 
 ### CLI plumbing
 
-- [ ] T029 [P] [US3] Add `--no-install-hooks` boolean flag to `spaex install` CLI in `src/spaex/cli/install.py`. Follows the existing argparse pattern. No short form, no inverse flag. Threaded through to the install orchestration layer (T017) as a `skip_hooks: bool` parameter. Verifies FR-026.
-- [ ] T030 [P] [US3] Add `--no-install-hooks` boolean flag to `spaex add` CLI in `src/spaex/cli/add.py`. When set, propagate through to the internal `spaex install` invocation (same `skip_hooks: bool` parameter). Verifies FR-027.
-- [ ] T031 [US3] In hook orchestration (T017): when `skip_hooks=True`, DO NOT call `hook_runner.run_install_hook()`; instead record `hook_status="skipped"` for every `ResolvedMolecule` with `install_hook != None`; continue publishing atoms and install.lock as normal. Verifies FR-023, FR-026, FR-028.
+- [x] T029 [P] [US3] Add `--no-install-hooks` boolean flag to `spaex install` CLI in `src/spaex/cli/install.py`. Follows the existing argparse pattern. No short form, no inverse flag. Threaded through to the install orchestration layer (T017) as a `skip_hooks: bool` parameter. Verifies FR-026.
+- [x] T030 [P] [US3] Add `--no-install-hooks` boolean flag to `spaex add` CLI in `src/spaex/cli/add.py`. When set, propagate through to the internal `spaex install` invocation (same `skip_hooks: bool` parameter). Verifies FR-027.
+- [x] T031 [US3] In hook orchestration (T017): when `skip_hooks=True`, DO NOT call `hook_runner.run_install_hook()`; instead record `hook_status="skipped"` for every `ResolvedMolecule` with `install_hook != None`; continue publishing atoms and install.lock as normal. Verifies FR-023, FR-026, FR-028.
 
 ### Integration tests
 
-- [ ] T032 [P] [US3] Add integration test in `tests/integration/test_install_hook_opt_out.py::test_no_install_hooks_skips_execution` (AS1): fixture molecule with a marker-writing hook; `spaex add --no-install-hooks`; assert marker file NOT created, atoms materialised, install.lock has `hook_status: "skipped"`, CLI exits 0. Verifies FR-026, FR-023.
-- [ ] T033 [P] [US3] Add integration test `::test_no_install_hooks_is_per_invocation` (AS2): run `spaex add --no-install-hooks` then run `spaex install` WITHOUT the flag; assert second run executes the hook (marker file appears), install.lock hook_status flips from "skipped" to "ok". Verifies FR-028.
-- [ ] T034 [P] [US3] Add integration test `::test_no_install_hooks_via_spaex_add_propagates` (FR-027 specific): `spaex add --no-install-hooks`; assert the internal install did NOT invoke hooks (verified by absence of marker file + hook_status=skipped). Verifies FR-027.
+- [x] T032 [P] [US3] Add integration test in `tests/integration/test_install_hook_opt_out.py::test_no_install_hooks_skips_execution` (AS1): fixture molecule with a marker-writing hook; `spaex add --no-install-hooks`; assert marker file NOT created, atoms materialised, install.lock has `hook_status: "skipped"`, CLI exits 0. Verifies FR-026, FR-023.
+- [x] T033 [P] [US3] Add integration test `::test_no_install_hooks_is_per_invocation` (AS2): run `spaex add --no-install-hooks` then run `spaex install` WITHOUT the flag; assert second run executes the hook (marker file appears), install.lock hook_status flips from "skipped" to "ok". Verifies FR-028.
+- [x] T034 [P] [US3] Add integration test `::test_no_install_hooks_via_spaex_add_propagates` (FR-027 specific): `spaex add --no-install-hooks`; assert the internal install did NOT invoke hooks (verified by absence of marker file + hook_status=skipped). Verifies FR-027.
 
 **Checkpoint**: US3 complete. Opt-out flag works on both commands with correct propagation and non-persistence.
 

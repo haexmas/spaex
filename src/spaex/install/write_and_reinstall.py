@@ -39,6 +39,8 @@ def write_and_reinstall(
     repo_root: Path,
     new_manifest_bytes: bytes,
     held_manifest_lock: ManifestLockContext,
+    *,
+    skip_hooks: bool = False,
 ) -> int:
     """Publish the mutated manifest and delegate to ``haex install`` in-process."""
     from spaex.cli import install as install_cli
@@ -51,7 +53,7 @@ def write_and_reinstall(
     try:
         atomic.write_replace(manifest_path, new_manifest_bytes)
         return install_cli.run(
-            argparse.Namespace(repo_root=str(repo_root)),
+            argparse.Namespace(repo_root=str(repo_root), skip_hooks=skip_hooks),
             held_manifest_lock=held_manifest_lock,
         )
     except BaseException as exc:
