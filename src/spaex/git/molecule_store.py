@@ -164,6 +164,28 @@ def get_or_extract(
 
     Idempotent: a second call for the identical (source_url, revision,
     molecule_path) returns the same directory without re-extracting.
+
+    Caller contract:
+    - Return value is a `pathlib.Path` to a real, on-disk directory that
+      contains `molecule_path`'s subtree content directly (NOT nested under
+      another `molecule_path`-named level). Callers may read files with the
+      standard filesystem APIs and hand paths to subprocesses.
+    - Failure modes: `MoleculeTreePathNotFoundError` when the given
+      `molecule_path` does not exist at `revision`; `MoleculeTreeExtractionError`
+      for any other extraction failure (git launch failure, malformed
+      archive, path-containment violation on a hostile publisher). A
+      caller-contract violation (bad `molecule_path` shape or non-canonical
+      `revision`) raises `ValueError` before any subprocess or filesystem
+      operation runs.
+    - Concurrent callers: safe. Each per-`final_dir` `ManifestLockContext`
+      serialises extractions for the same key across processes on the same
+      host; a losing concurrent caller sees the cache hit on its own next
+      attempt with no re-extraction (FR-005, FR-008).
+    - Content integrity is deliberately NOT verified here — the archive is
+      re-read from a bare git clone tracked by SHA, which the caller trusts
+      as its content anchor. A separate integrity-verification tier belongs
+      with `spaex verify` or the Spec-010 compiler, whichever consumer
+      motivates it, per Spec 017 non-goals.
     """
     RepoRelativePath.validate(molecule_path)
     if not _SHA40_RE.match(revision):
