@@ -201,7 +201,9 @@ class ContributionFileNotFoundError(HaexError):
 class MoleculeTreePathNotFoundError(HaexError):
     diagnostic_key: str = "molecule-tree-path-not-found"
     exit_code: int = exit_codes.IO_REFUSE
-    hint: str = "Verify the molecule path exists in the publisher repository at the pinned revision."
+    hint: str = (
+        "Verify the molecule path exists in the publisher repository at the pinned revision."
+    )
 
 
 @dataclass

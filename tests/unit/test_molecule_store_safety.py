@@ -254,6 +254,9 @@ def _init_repo(root: Path) -> None:
     _git(root, "config", "user.email", "haex-test@example.com")
     _git(root, "config", "user.name", "haex-test")
     _git(root, "config", "commit.gpgsign", "false")
+    _git(root, "config", "core.autocrlf", "false")
+    _git(root, "config", "core.eol", "lf")
+    (root / ".gitattributes").write_bytes(b"* -text\n")
 
 
 @_requires_git
@@ -316,13 +319,53 @@ def test_materialization_failure_leaves_no_final_directory(tmp_path: Path) -> No
             return subprocess.CompletedProcess(cmd, 0, stdout=hostile_tar.getvalue(), stderr=b"")
         return real_run(cmd, *args, **kwargs)
 
-    with mock.patch("subprocess.run", side_effect=fake_run):
-        with pytest.raises(MoleculeTreeExtractionError):
-            get_or_extract(repo_dir, _SOURCE_URL, canonical_sha, "mol", state_root)
+    with (
+        mock.patch("subprocess.run", side_effect=fake_run),
+        pytest.raises(MoleculeTreeExtractionError),
+    ):
+        get_or_extract(repo_dir, _SOURCE_URL, canonical_sha, "mol", state_root)
 
     digest = clone_dir(state_root, _SOURCE_URL).name
     would_be_final_dir = state_root / "molecule-store" / digest / canonical_sha / "mol"
     assert not would_be_final_dir.exists()
+
+
+@_requires_git
+def test_archive_without_requested_prefix_is_rejected(tmp_path: Path) -> None:
+    """An archive that omits the requested molecule prefix raises a typed error."""
+    publisher = tmp_path / "publisher"
+    sha = _publish_dummy_repo(publisher)
+
+    state_root = tmp_path / "state"
+    repo_dir = clone_dir(state_root, _SOURCE_URL)
+    repo_dir.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(publisher, repo_dir)
+    canonical_sha = revparse.full_sha(repo_dir, sha)
+
+    wrong_prefix = io.BytesIO()
+    with tarfile.open(fileobj=wrong_prefix, mode="w") as tar:
+        directory = tarfile.TarInfo(name="other")
+        directory.type = tarfile.DIRTYPE
+        tar.addfile(directory)
+        member = tarfile.TarInfo(name="other/file.txt")
+        member.size = 2
+        tar.addfile(member, io.BytesIO(b"no"))
+
+    real_run = subprocess.run
+
+    def fake_run(cmd, *args, **kwargs):
+        """Return an archive with a prefix different from the requested path."""
+        if "archive" in cmd:
+            return subprocess.CompletedProcess(
+                cmd, 0, stdout=wrong_prefix.getvalue(), stderr=b""
+            )
+        return real_run(cmd, *args, **kwargs)
+
+    with (
+        mock.patch("subprocess.run", side_effect=fake_run),
+        pytest.raises(MoleculeTreeExtractionError),
+    ):
+        get_or_extract(repo_dir, _SOURCE_URL, canonical_sha, "mol", state_root)
 
 
 def _publish_dummy_repo(publisher: Path) -> str:
