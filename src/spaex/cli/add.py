@@ -358,7 +358,14 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "--no-install-hooks",
         dest="skip_hooks",
         action="store_true",
-        help="Skip per-molecule install_hook execution (Spec 016 FR-027)",
+        help=(
+            "Skip per-molecule install_hook execution during the internal "
+            "install triggered by this add. Every molecule declaring "
+            "install_hook records hook_status='skipped' in install.lock; "
+            "atoms still materialize. Per-invocation only; a later "
+            "`spaex install` without this flag runs the hooks (Spec 016 "
+            "FR-027)."
+        ),
     )
 
 

@@ -102,7 +102,14 @@ def _build_parser() -> argparse.ArgumentParser:
         "--no-install-hooks",
         dest="skip_hooks",
         action="store_true",
-        help="Skip per-molecule install_hook execution (Spec 016 FR-026)",
+        help=(
+            "Skip per-molecule install_hook execution for this invocation. "
+            "Every molecule declaring install_hook records hook_status='skipped' "
+            "in install.lock; atoms still materialize. Per-invocation only; "
+            "the next `spaex install` without this flag runs the hooks again. "
+            "Use for sandboxed / CI runs or when auditing a molecule before "
+            "letting its hook touch the repo (Spec 016 FR-026, FR-028)."
+        ),
     )
 
     from spaex.cli import add as add_cli

@@ -66,7 +66,7 @@
           "description": "Failure policy. 'abort' triggers Spec-008 install-transaction rollback on any hook failure (non-zero exit, OSError on launch, missing interpreter on PATH, path-containment failure). 'warn' records hook_status:failed in install.lock and continues, exit 0. Default is 'abort'; the parser MUST set the value explicitly rather than relying on this default metadata."
         }
       },
-      "description": "Optional side-effect script that spaex install invokes after atom materialization, per molecule in effective-priority order. Runs with cwd = consumer repo root, inherits stdio AND the invoking spaex process's complete environment. Side effects are not reversible by spaex remove; spaex remove emits a WARN when removing a molecule that declared install_hook."
+      "description": "Optional side-effect script that spaex install invokes after atom materialization, per molecule in effective-priority order. Runs with cwd = consumer repo root, inherits stdio AND the invoking spaex process's complete environment. Interactive prompts work in TTY environments (the hook may read from stdin, e.g. Python's input()); in non-TTY contexts (CI, piped stdin) input() raises EOFError, so molecule authors must supply a non-interactive fallback path. Side effects are not reversible by spaex remove; spaex remove emits a WARN when removing a molecule that declared install_hook. Consumers can globally opt out for a single invocation via `spaex install --no-install-hooks` or `spaex add --no-install-hooks`."
     }
   },
   "$defs": {

@@ -1,6 +1,6 @@
 # spaex — reproducible coding harnesses for any repo and development environment
 
-**Status**: `4.0.0.dev0` (v4 vocabulary landed as part of Spec 014, first PyPI release upcoming). Portmanteau of `spec` and `haex`. See [docs/adr/0011-rename-to-spaex.md](docs/adr/0011-rename-to-spaex.md) for the rename decision and [specs/014-rename-to-spaex/](specs/014-rename-to-spaex/) for the full spec.
+**Status**: `4.1.0` (adds molecule install-hooks and the on-demand molecule store; see [Spec 016](specs/016-molecule-install-hooks/) and [Spec 017](specs/017-molecule-store/)). Portmanteau of `spec` and `haex`. See [docs/adr/0011-rename-to-spaex.md](docs/adr/0011-rename-to-spaex.md) for the rename decision and [specs/014-rename-to-spaex/](specs/014-rename-to-spaex/) for the full spec.
 
 ## What it is
 
@@ -13,6 +13,10 @@ spaex composes a coding harness for a single repo out of reusable pieces (skills
 - `spaex install`: publish adopted molecules atomically into their participating roots. Writes `.spaex/install.lock`.
 - `spaex migrate`: read v1/v2/v3 legacy manifests (`.haex-hive.json`, `manifest.json`) and emit v4 `.migrated` sidecar proposals with adoption instructions.
 - `spaex constitution show`: print the effective constitution to stdout, assembled from adopted molecules per `install.lock`.
+
+## Molecule install-hooks
+
+A molecule may declare an optional `install_hook` in its `manifest.json`. `spaex install` invokes it as a normal subprocess (arbitrary code, consumer-user permissions, full environment inheritance) after atom materialization and before publishing the install.lock generation. Per-molecule `on_failure: "abort" | "warn"` selects between transaction rollback and continue-with-`hook_status`-recorded. Consumers can opt out for a single invocation via `spaex install --no-install-hooks` (or `spaex add --no-install-hooks`). See [docs/install-hooks.md](docs/install-hooks.md) for the full contract: declaration schema, execution semantics, the four failure kinds, idempotency, non-reversibility, and the trust model.
 
 ## Atom-category conventions
 
