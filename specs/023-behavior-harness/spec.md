@@ -11,27 +11,38 @@
 - `specs/016-molecule-install-hooks/` (install-time side-effect machinery reused for fragment materialization)
 - `specs/017-molecule-store/` (content-access pattern reused by fragment reads)
 
+## Clarifications
+
+### Session 2026-09-10
+
+- Q: Fragment identifier scoping rule → A: Molecule-namespaced (`<molecule-id>/<fragment-id>`); cross-molecule collisions are impossible by construction, deletions stay surgical, semantic contradictions across molecules surface only through the Composer, not the mechanical pre-check.
+- Q: When and how hard does the semantic plausibility check run → A: Warn-not-block on `spaex add` and `spaex remove` (Composer runs, contradictions are flagged with provenance, the composition writes anyway but is marked "stale, unresolved"); hard abort on `spaex install` when reconciliation is missing (FR-010a).
+- Q: How does the composed constitution reach the agent → A: Two-layer emission. A one-time GLOBAL bootstrap writes a small spaex-managed block into the user-global agent instruction file (`~/.claude/CLAUDE.md`, `~/.config/.../AGENTS.md`) that tells the agent "if `.spaex.md` exists in the current project root, read it and treat its content as project instructions". Per project, `spaex install` writes the composed constitution to a single file `.spaex.md` at the repo root; the entire file is spaex-owned. spaex NEVER modifies project-level `CLAUDE.md` or `AGENTS.md`.
+- Q: Delimiter format for the spaex-managed section in the user-global instruction file → A: Paired HTML comment markers with a version attribute: `<!-- spaex-bootstrap:start version="1" -->` ... `<!-- spaex-bootstrap:end -->`. The version attribute lets spaex safely upgrade the block across releases without heuristic content analysis, and HTML comments are invisible in Markdown rendering while remaining git-merge-friendly.
+- Q: What invalidates a persisted clarification answer → A: Content-hash of the involved fragment bodies (SHA256 over the Markdown body of every fragment cited in the clarification). Any character change to any involved fragment invalidates and triggers exactly one re-ask. Deterministic and conservative; whitespace normalization is optional.
+- Q: What happens when the Composer fails (timeout, runtime error, malformed output) → A: Abort install with a diagnostic that names the specific failure category (timeout, invalid-output, runtime-error, quota-exceeded). If `.spaex.md` already exists, it is not touched; if it does not, none is created. Consumer decides whether to retry, switch runtime, or reduce the fragment set. Silent degradation to raw concatenation is explicitly rejected.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Consumer receives a composed behavior harness after install (Priority: P1)
 
-A developer works in a project that has adopted several molecules through `.spaex.json`. Each molecule contributes one or more atoms, some of which carry behavior directives (for example a `strict-testing` molecule contributes "run the test suite before every commit"; a `speckit-strict` molecule contributes "every non-trivial feature goes through spec-first authoring"). The developer runs `spaex install`. When it finishes, the repo contains a composed constitution at a well-known path that lists every active directive grouped by modality (MUST, SHOULD, MAY), each with a visible source. The developer's agent runtime (Claude Code, Codex CLI, or Gemini CLI) picks up the harness automatically because the composed constitution has been emitted into the artifacts that runtime reads at session start.
+A developer has previously run the one-time global bootstrap (Clarification Q3), so their agent runtimes (Claude Code, Codex CLI, Gemini CLI) already know to look for a `.spaex.md` file when they enter any project. They now work in a project that has adopted several molecules through `.spaex.json`. Each molecule contributes one or more atoms, some of which carry behavior directives (for example a `strict-testing` molecule contributes "run the test suite before every commit"; a `speckit-strict` molecule contributes "every non-trivial feature goes through spec-first authoring"). The developer runs `spaex install`. When it finishes, the repo contains a single `.spaex.md` file at the root that lists every active directive grouped by modality (MUST, SHOULD, MAY), each with a visible source. The developer opens their agent runtime in this project; it reads `.spaex.md` per the global bootstrap and respects the harness. Switching runtimes does not change the harness because every runtime reads the same `.spaex.md`.
 
 **Why this priority**: this is the entire raison d'être of the feature. Without this outcome, the operator cannot get a per-project behavior harness that any agent respects.
 
-**Independent Test**: given a fixture project with two pinned molecules that ship at least one behavior fragment each, running `spaex install` produces a composed constitution artifact at the documented path, and the documented artifact contains directives from both molecules with visible provenance.
+**Independent Test**: given a fixture project with two pinned molecules that ship at least one behavior fragment each, running `spaex install` produces a `.spaex.md` at the repo root containing directives from both molecules with visible provenance. A runtime that has been through the global bootstrap and opens the project discovers `.spaex.md` without any project-level configuration.
 
 **Acceptance Scenarios**:
 
-1. **Given** a project pinning two molecules each shipping one behavior fragment, **When** the operator runs `spaex install`, **Then** a composed constitution artifact exists at the documented location and lists both directives with a source label naming the originating molecule.
-2. **Given** a fresh project pinning molecules whose fragments have no conflicts, **When** `spaex install` completes, **Then** the emission targets (agent-neutral primary artifact plus at least one harness-specific artifact) contain the composed constitution in a clearly delimited section.
-3. **Given** an operator switching agent runtime from Claude Code to Codex CLI, **When** they open the project without further configuration, **Then** the new runtime picks up the same behavior harness.
+1. **Given** a project pinning two molecules each shipping one behavior fragment, **When** the operator runs `spaex install`, **Then** `.spaex.md` exists at the repo root and lists both directives with a source label naming the originating molecule.
+2. **Given** a fresh project with `.spaex.md` produced and a runtime that has run the global bootstrap, **When** the operator opens the runtime in the project, **Then** the runtime reads `.spaex.md` and treats its content as project instructions without any per-project configuration.
+3. **Given** an operator switching agent runtime from Claude Code to Codex CLI in the same project, **When** they open the project without further configuration, **Then** the new runtime picks up the same behavior harness by reading the same `.spaex.md`.
 
 ---
 
 ### User Story 2 - Molecule author declares behavior fragments (Priority: P1)
 
-A molecule author who wants their molecule to contribute behavioral rules (either as a dedicated behavior atom or attached to a typed atom like a speckit workflow) authors a fragment file with a small metadata header (identifier, source, tags, optional modality) followed by prose that expresses the directive. The author does not need to touch the composer, does not need to know how other atoms will interact, and does not need to worry about the emission targets. Their published molecule then contributes the fragment automatically wherever it is installed.
+A molecule author who wants their molecule to contribute behavioral rules (either as a dedicated behavior atom or attached to a typed atom like a speckit workflow) authors a fragment file with a small metadata header (identifier, source, tags, optional modality) followed by prose that expresses the directive. The author does not need to touch the composer, does not need to know how other atoms will interact, and does not need to know which agent runtimes their consumers use. Their published molecule then contributes the fragment automatically wherever it is installed.
 
 **Why this priority**: authors are the supply side. Without a clear authoring path, no fragments exist and Story 1 has nothing to compose.
 
@@ -47,17 +58,24 @@ A molecule author who wants their molecule to contribute behavioral rules (eithe
 
 ### User Story 3 - Hard conflict aborts install with named provenances (Priority: P2)
 
-Two molecules the operator has pinned turn out to ship contradictory directives on the same identifier (for example, `no-mocked-db` MUST vs `mocked-db-ok` declared under the same identifier with negating modality). The operator runs `spaex install`. The install refuses to write anything to the repo, prints an error message that names both fragments, both source atoms, and both molecules, and explains what the operator must do (remove one molecule, or add a project-level clarification that resolves the conflict).
+Because identifiers are molecule-scoped (Clarification Q1), a conflict between contradictory directives surfaces in one of two ways, and both must abort the install with clear provenance.
 
-**Why this priority**: silent conflict resolution would let two molecule authors contradict each other while consumers unwittingly follow one, breaking the trust contract that atoms are authoritative. This is a safety guarantee.
+**Case A (intra-molecule, mechanical):** A molecule author accidentally ships two fragments under the same molecule-scoped identifier with negating modality (a fragment `strict-testing/no-mocks` declared MUST and another declared MUST NOT within the same molecule). The mechanical pre-check catches this at install time, exits non-zero fast, and names both fragment paths and their source atoms.
 
-**Independent Test**: given a fixture project pinning two molecules whose fragments carry the same identifier with contradictory modality, `spaex install` exits non-zero, does not modify any tracked file, and prints both molecule sources.
+**Case B (cross-molecule, semantic):** Two pinned molecules ship fragments under different molecule-scoped identifiers (`strict-testing/no-mocked-db` MUST vs `fast-local-dev/mocked-db-ok` MUST) that the Composer identifies as semantically contradictory. The Composer surfaces this during the composed-constitution build. When the operator declines to reconcile via a clarification, the install aborts with a diagnostic that names both source molecules and their fragment paths.
+
+In both cases the install refuses to write anything to the repo and explains what the operator must do (remove one molecule, add a project-local fragment that reconciles, or provide a clarification answer).
+
+**Why this priority**: silent conflict resolution would let two authors contradict each other while consumers unwittingly follow one, breaking the trust contract that atoms are authoritative. The safety guarantee now spans both the fast mechanical path (Case A) and the semantic path (Case B).
+
+**Independent Test**: two fixtures cover the two cases. Fixture A pins one molecule with two contradictory fragments under one molecule-scoped id; install exits non-zero on the mechanical pre-check without invoking the Composer. Fixture B pins two molecules with semantically contradictory fragments under different molecule-scoped ids; the Composer detects the contradiction and, absent a reconciling answer, install exits non-zero.
 
 **Acceptance Scenarios**:
 
-1. **Given** two active fragments sharing an identifier with contradictory modality, **When** `spaex install` runs, **Then** the process exits non-zero and prints a diagnostic that names both molecules and both fragment paths.
-2. **Given** the same conflict, **When** the install aborts, **Then** no tracked file in the consumer repo has been modified.
-3. **Given** the operator removes one of the two conflicting molecules, **When** they re-run `spaex install`, **Then** the install proceeds and the composed constitution includes the surviving directive.
+1. **Given** a single molecule shipping two fragments with the same molecule-scoped identifier and contradictory modality, **When** `spaex install` runs, **Then** the mechanical pre-check aborts before the Composer is invoked and the diagnostic names both fragment paths and their source atoms.
+2. **Given** two molecules shipping fragments under different molecule-scoped identifiers that semantically contradict each other, **When** `spaex install` invokes the Composer, **Then** the Composer flags the semantic contradiction and asks the operator for reconciliation before writing the composed constitution.
+3. **Given** either conflict case, **When** the install aborts, **Then** no tracked file in the consumer repo has been modified.
+4. **Given** the operator resolves the conflict (remove a molecule for Case A, or provide a reconciling answer for Case B), **When** they re-run `spaex install`, **Then** the install proceeds and the composed constitution reflects the surviving or reconciled directive.
 
 ---
 
@@ -95,27 +113,29 @@ A project maintainer decides that on top of the harness the molecules provide, t
 
 ### User Story 6 - Cross-machine reproducibility via committed artifact (Priority: P3)
 
-Two developers pull the same commit of a project onto their machines. The project's `.spaex.json` and its `.spaex/constitution.d/` and `.spaex/constitution.md` are all under version control. Both developers run `spaex install`. Neither developer sees any new re-generation of the composed constitution because the committed artifact is up to date with the fragment set. Both developers' agent runtimes read the same emitted content. If a third developer changes a molecule pin, the composed constitution rebuilds on their machine, they commit the updated artifact, and the other two developers see the change through git pull, not through re-computation.
+Two developers pull the same commit of a project onto their machines. The project's `.spaex.json`, its `.spaex/constitution.d/` fragment set, and its root `.spaex.md` are all under version control. Both developers run `spaex install`. Neither developer's Composer re-runs because `.spaex.md` is up to date with the fragment set. Both developers' agent runtimes read the same `.spaex.md`. If a third developer changes a molecule pin (adding new fragments), the Composer runs on their machine, `.spaex.md` is regenerated, and they commit the updated file so the other two see the change through git pull rather than through re-computation.
 
 **Why this priority**: reproducibility is what turns a "harness" from a helpful suggestion into an actual constraint. Without committed artifacts, two developers on the same commit could produce different behavior sets.
 
-**Independent Test**: given two clones of the same commit of a project with a committed composed constitution, `spaex install` on both produces byte-identical emission-target content and does not rerun the Composer.
+**Independent Test**: given two clones of the same commit of a project with a committed `.spaex.md`, `spaex install` on both produces a byte-identical `.spaex.md` (or leaves the committed one untouched) and does not rerun the Composer.
 
 **Acceptance Scenarios**:
 
-1. **Given** a committed composed constitution and unchanged fragments, **When** a fresh clone runs `spaex install`, **Then** the Composer is not invoked and the emission targets are populated from the committed artifact.
-2. **Given** a developer changes a molecule pin (adding new fragments), **When** they run `spaex install`, **Then** the Composer runs, the new composed constitution differs from the committed one, and the diff is stageable for commit.
-3. **Given** the composed constitution and fragment set drift out of sync (fragments changed on disk without a Composer run), **When** `spaex install` runs, **Then** the drift is detected and the Composer is invoked.
+1. **Given** a committed `.spaex.md` and unchanged fragments, **When** a fresh clone runs `spaex install`, **Then** the Composer is not invoked and `.spaex.md` is preserved unchanged.
+2. **Given** a developer changes a molecule pin (adding new fragments), **When** they run `spaex install`, **Then** the Composer runs, `.spaex.md` is regenerated with a diff against the committed version, and the diff is stageable for commit.
+3. **Given** `.spaex.md` and the fragment set drift out of sync (fragments changed on disk without a Composer run), **When** `spaex install` runs, **Then** the drift is detected and the Composer is invoked to regenerate `.spaex.md`.
 
 ---
 
 ### Edge Cases
 
-- **Empty fragment set**: a project pinning molecules that ship zero behavior fragments produces a minimal composed constitution artifact (or no artifact at all), never an error.
+- **Empty fragment set**: a project pinning molecules that ship zero behavior fragments produces either an empty `.spaex.md` or no `.spaex.md` at all (see FR-017d); the agent must not error when it looks for `.spaex.md` and does not find it.
 - **All-permissive constitution**: a project whose only fragments use permissive modality (MAY) produces a composed constitution that lists them under MAY with no MUST or SHOULD sections.
 - **Composer unavailable**: if no agent runtime is present on the machine to run the Composer, `spaex install` aborts with a clear diagnostic that names the reason and points to the documented remedies (install a supported runtime, or use a fallback mode if the operator opts in).
 - **Duplicate identical fragments**: two atoms ship fragments with the same identifier AND semantically identical bodies. The system silently deduplicates rather than aborting on conflict; the composed constitution attributes the surviving clause to both source atoms.
-- **Manually authored content in emission target**: the consumer has hand-written content in `CLAUDE.md` or `AGENTS.md` before spaex ever touched the repo. Emission never overwrites operator-authored content; spaex-managed content lives inside a clearly delimited section, and content outside that section is preserved verbatim.
+- **Manually authored content in the user-global instruction file**: the user's global `~/.claude/CLAUDE.md` (or Codex/Gemini equivalent) already contains hand-written content when the global bootstrap installs. The bootstrap MUST live inside a clearly delimited spaex-managed section; content outside that section is preserved verbatim across upgrades and removals.
+- **Manually authored project-level `CLAUDE.md` / `AGENTS.md`**: the consumer has hand-written content in project-level `CLAUDE.md` or `AGENTS.md`. spaex NEVER touches these files (per FR-017c). Operator-authored project instructions and the spaex composed constitution coexist; the agent reads both.
+- **Bootstrap not yet installed**: the consumer runs `spaex install` in a project on a machine where the global bootstrap was never run. `.spaex.md` is produced, but agents opened in this project will not read it automatically. The system MUST surface this state at install time with a clear one-line hint pointing to the `spaex install --global` (or equivalent) subcommand.
 - **Stale clarification**: the operator answered a clarification round, then a molecule bump changes the phrasing of one involved fragment. The clarification is invalidated, the operator is re-asked, and the previous answer is not silently reused.
 - **Composer prompt version bump**: the canonical Composer prompt shipped by spaex changes across a spaex upgrade. All prior clarifications are invalidated; the next build re-asks. This is documented behavior.
 - **Very large fragment count**: a project pins many molecules with many fragments. The Composer completes within a documented per-fragment budget; if the budget is exceeded, the operator sees a clear timeout diagnostic rather than a hung process.
@@ -127,14 +147,15 @@ Two developers pull the same commit of a project onto their machines. The projec
 
 **Fragment authoring and materialization**
 
-- **FR-001**: The system MUST accept behavior fragments contributed by any atom, using a declarative format that carries at minimum an identifier, a source-atom reference, an optional modality declaration, optional tags, and a directive body written in Markdown.
+- **FR-001**: The system MUST accept behavior fragments contributed by any atom, using a declarative format that carries at minimum an identifier scoped to the fragment's owning molecule (per Clarification Q1: `<molecule-id>/<fragment-id>`), a source-atom reference, an optional modality declaration, optional tags, and a directive body written in Markdown.
 - **FR-002**: The system MUST support a first-class atom category dedicated to behavior fragments, allowing a molecule to contribute rules without also carrying code, hooks, or MCP configs.
 - **FR-003**: The system MUST support typed atoms (skills, MCPs, speckit workflows, and any other type where behavior is intrinsic) carrying inline behavior fragments alongside their primary payload, treated identically to standalone behavior fragments during composition.
 - **FR-004**: The system MUST materialize every active behavior fragment to a canonical location under the consumer's repo during install, so the fragment set is inspectable, diff-able, and version-controllable.
 
 **Mechanical pre-check**
 
-- **FR-005**: The system MUST detect identifier-collisions between fragments that carry incompatible modality declarations (contradictory MUST / MUST NOT on the same identifier) and abort install with a diagnostic that names both fragment paths, both source atoms, and both source molecules.
+- **FR-005**: The system MUST detect identifier-collisions within a single molecule where two fragments carry incompatible modality declarations (contradictory MUST / MUST NOT on the same molecule-scoped identifier) and abort install with a diagnostic that names both fragment paths and their source atoms.
+- **FR-005a**: Because identifiers are molecule-scoped, cross-molecule semantic contradictions (two fragments in different molecules whose directive bodies contradict each other despite non-colliding identifiers) are NOT caught by the mechanical pre-check. The system MUST surface these during the Composer step (see FR-010a) and abort install if the operator does not provide a reconciling answer.
 - **FR-006**: The system MUST NOT modify any tracked file in the consumer repo when the mechanical pre-check aborts an install.
 - **FR-007**: The system MUST detect obviously malformed fragments (missing required header fields, invalid identifiers) during materialization and abort with a diagnostic that identifies the offending fragment.
 
@@ -143,16 +164,27 @@ Two developers pull the same commit of a project onto their machines. The projec
 - **FR-008**: The system MUST produce a composed constitution artifact that synthesizes overlapping directives across fragments, organizes surviving statements by modality (MUST, SHOULD, MAY), and preserves per-clause provenance.
 - **FR-009**: The system MUST invoke the Composer only when the fragment set (content) or the Composer configuration has changed since the last successful build, so downstream consumers who pull unchanged content reuse the committed artifact without incurring a build.
 - **FR-010**: When the Composer detects a semantic ambiguity that cannot be resolved from the fragment content alone, the system MUST ask the operator one round of targeted clarification questions rather than guessing silently.
-- **FR-011**: The system MUST persist operator answers to clarification questions in a version-controlled location within the project so subsequent builds against the same fragment set do not re-ask the same question.
-- **FR-012**: The system MUST invalidate a persisted clarification when the involved fragments' content changes materially, and re-ask the operator on the next build.
-- **FR-013**: The composed constitution artifact MUST be a version-controllable file that consumers commit alongside their `.spaex.json`, so cross-machine reproducibility is preserved without re-running the Composer.
+- **FR-010a**: When the Composer detects a semantic contradiction between fragments in different molecules (per FR-005a), the system MUST present the contradiction to the operator as a reconciliation prompt. If the operator provides a reconciling answer (choose one modality, merge, or reject both), that answer is persisted per FR-011 and the composed constitution reflects the resolution. If the operator declines to reconcile, the install aborts per FR-005a.
+- **FR-011**: The system MUST persist operator answers to clarification questions in a version-controlled location within the project so subsequent builds against the same fragment set do not re-ask the same question. Each stored answer MUST be keyed by the SHA256 hash of the Markdown bodies of every fragment cited in the clarification (per Clarification Q4).
+- **FR-012**: The system MUST invalidate a persisted clarification whenever the SHA256 key computed from the current fragments differs from the stored key, and re-ask the operator exactly once on the next build. Whitespace-only differences MAY be normalized before hashing; semantic content differences MUST always invalidate.
+- **FR-012a**: When the Composer fails (timeout, runtime error, malformed output, quota exceeded), the system MUST abort `spaex install` with a diagnostic that identifies the specific failure category and MUST NOT modify any existing `.spaex.md` or create a new one. Silent degradation to raw fragment concatenation is not a supported behavior; a consumer wanting a degraded harness MUST invoke it through an explicit, documented flag introduced in a future spec (not part of this one).
+- **FR-013**: The composed constitution artifact (`.spaex.md` at the repo root) MUST be a version-controllable file that consumers commit alongside their `.spaex.json` and their `.spaex/constitution.d/` fragments, so cross-machine reproducibility is preserved without re-running the Composer.
 
 **Emission**
 
-- **FR-014**: The system MUST emit the composed constitution into an agent-neutral primary artifact at the consumer's repo root (`AGENTS.md`), inside a clearly delimited spaex-managed section.
-- **FR-015**: The system MUST also emit the composed constitution into at least one harness-specific artifact (`CLAUDE.md` at minimum), inside a clearly delimited spaex-managed section, so runtimes that prefer their native file discover the harness.
-- **FR-016**: The system MUST NOT overwrite content outside the spaex-managed section of any emission-target file, so consumer-authored instructions are preserved verbatim across installs.
-- **FR-017**: When an emission-target file does not yet exist, the system MUST create it containing only the spaex-managed section.
+**Global bootstrap** (one-time per user, opt-in per agent runtime)
+
+- **FR-014**: The system MUST provide a mechanism (a CLI subcommand, for example `spaex install --global` for the chosen runtimes) that writes a small, static bootstrap block into the user-global agent-instruction file(s) of each runtime the user opts into. The block instructs the agent to read `.spaex.md` from the current project root when present and treat its content as project instructions.
+- **FR-015**: The bootstrap block MUST live inside a clearly delimited spaex-managed section within the target global file, using paired HTML comment markers with a version attribute (per Clarification Q3: `<!-- spaex-bootstrap:start version="N" -->` ... `<!-- spaex-bootstrap:end -->`). The system MUST use these markers to detect its own block on upgrade and MUST NOT modify any content outside them.
+- **FR-016**: The bootstrap block MUST NOT embed project-specific content. It is static across all projects; per-project content lives exclusively in each project's `.spaex.md`.
+- **FR-017**: The system MUST support installing or updating the bootstrap block in the global instruction files of at least the three primary agent runtimes (Claude Code's `~/.claude/CLAUDE.md`, Codex CLI's global `AGENTS.md`, Gemini CLI's global `AGENTS.md`), and MUST be extensible to additional runtimes without breaking these three.
+
+**Per-project emission** (every `spaex install`)
+
+- **FR-017a**: The system MUST write the composed constitution to a single file `.spaex.md` at the consumer's repo root.
+- **FR-017b**: The entire `.spaex.md` file is spaex-owned. The system MAY overwrite it in full on every install; there is no delimited section within `.spaex.md`.
+- **FR-017c**: The system MUST NOT modify the consumer's project-level `CLAUDE.md`, `AGENTS.md`, or any other operator-authored instruction file at the project level. The agent picks up the constitution via the global-bootstrap indirection.
+- **FR-017d**: When a project has no active behavior fragments (empty fragment set), the system MAY produce an empty `.spaex.md` or omit the file; both behaviors MUST NOT cause an agent to error.
 
 **Project overrides**
 
@@ -167,18 +199,19 @@ Two developers pull the same commit of a project onto their machines. The projec
 
 **Multi-agent portability**
 
-- **FR-023**: The system MUST produce emission artifacts that at minimum the following agent runtimes discover without any additional consumer configuration: Claude Code (reading `CLAUDE.md`), Codex CLI (reading `AGENTS.md`), and Gemini CLI (reading `AGENTS.md`). Additional harnesses (dsh, and others) MAY be added later without breaking any of these three.
-- **FR-024**: The system MUST NOT require the consumer to author target-runtime-specific content by hand for these three runtimes to pick up the harness.
+- **FR-023**: After the global bootstrap is installed for a given runtime (per FR-014), the system MUST guarantee that the runtime picks up any project's `.spaex.md` without further per-project configuration by the consumer. At minimum this applies to Claude Code, Codex CLI, and Gemini CLI. Additional runtimes (dsh, and others) MAY be added by extending the bootstrap to their global instruction files without breaking these three.
+- **FR-024**: The per-project `.spaex.md` MUST be identical across runtimes; the multi-agent-portability contract is that the same composed constitution reaches every runtime that has run the global bootstrap.
 
 ### Key Entities
 
-- **Behavior fragment**: a single-file declarative unit contributed by an atom, containing a small header (identifier, source, optional modality, optional tags) and a Markdown body with directive prose. Fragments are the atomic unit of the harness.
+- **Behavior fragment**: a single-file declarative unit contributed by an atom, containing a small header (molecule-scoped identifier, source, optional modality, optional tags) and a Markdown body with directive prose. Identifiers are always resolved as `<molecule-id>/<fragment-id>`; cross-molecule id collisions are impossible by construction. Fragments are the atomic unit of the harness.
 - **Behavior atom**: a first-class atom whose only payload is one or more behavior fragments. A molecule uses a behavior atom when it wants to contribute rules without also shipping code, hooks, MCPs, or skills.
 - **Inline behavior block**: a behavior-fragment declaration embedded in the manifest of a typed atom (a speckit-workflow atom, for example). Composition treats inline blocks and standalone fragments identically.
 - **Composed constitution**: the single generated artifact produced by the Composer from all active fragments. Committed to the consumer repo. Consumed by the emitters.
 - **Constitution clarification**: a persisted operator answer to a Composer question about semantic ambiguity between fragments. Keyed by the involved fragments' content-hashes so it invalidates on material change.
 - **Project-local fragment**: a fragment contributed by the project itself (not by any pinned molecule), stored inline in `.spaex.json` or as a project-controlled file. Additive only.
-- **Emission target**: a consumer-repo file into which spaex writes a spaex-managed section containing the composed constitution. Includes at minimum the agent-neutral `AGENTS.md` and one harness-specific artifact (`CLAUDE.md`).
+- **Per-project constitution file (`.spaex.md`)**: the single spaex-owned file at the consumer's repo root that contains the composed constitution. The entire file is spaex-managed; there is no delimited section within it.
+- **Global bootstrap block**: the small, static spaex-managed section inside the user's global agent-instruction file (Claude Code's `~/.claude/CLAUDE.md`, Codex CLI's global `AGENTS.md`, Gemini CLI's global `AGENTS.md`) that tells the agent runtime to look for and read `.spaex.md` from the current project root. Installed once per user per runtime, upgradeable across spaex versions via the delimited section.
 - **Provenance record**: the linkage from a rendered clause in the composed constitution back to its originating fragment, atom, and molecule. Rendered visibly next to the clause and queryable via a provenance-trace command.
 
 ## Success Criteria *(mandatory)*
@@ -186,19 +219,21 @@ Two developers pull the same commit of a project onto their machines. The projec
 ### Measurable Outcomes
 
 - **SC-001**: A consumer running install on a project pinning three molecules that each contribute at least one behavior fragment produces a composed constitution artifact within 30 seconds of the install starting, on a machine that already has the required agent runtime available.
-- **SC-002**: 100% of hard conflicts (identifier-collision with contradictory modality) cause the install to exit non-zero and print a diagnostic that names both source molecules and both source fragment paths.
+- **SC-002**: 100% of intra-molecule hard conflicts (identifier-collision with contradictory modality within a single molecule) cause `spaex install` to exit non-zero on the mechanical pre-check without invoking the Composer and print a diagnostic that names both fragment paths and their source atoms. 100% of cross-molecule semantic contradictions surfaced by the Composer that the operator does not reconcile cause `spaex install` to exit non-zero and print a diagnostic naming both source molecules.
 - **SC-003**: A composed constitution produced from an unchanged committed fragment set is byte-identical across any two consumer machines pulling the same commit.
 - **SC-004**: A molecule author following the documented authoring path adds a behavior fragment to their atom in under 5 minutes without reading spaex source code.
 - **SC-005**: A project maintainer adds a local additive fragment through `.spaex.json` (inline or file reference) without editing any molecule source, and it appears in the composed constitution on the next install.
 - **SC-006**: Every rendered clause in the composed constitution links back to exactly one originating atom via the documented provenance-trace command.
-- **SC-007**: A consumer switching between the three primary agent runtimes (Claude Code, Codex CLI, Gemini CLI) on the same project observes the same behavior harness without editing any file.
-- **SC-008**: A clarification answered once by the operator is not re-asked on any subsequent build against the same fragment set; when a fragment involved in the clarification changes materially, the operator IS re-asked exactly once.
-- **SC-009**: Emission never overwrites operator-authored content outside the spaex-managed section of any emission target, verified by preserving 100% of pre-existing content across a full round-trip of `spaex install`.
+- **SC-007**: A consumer who has run the global bootstrap for each of the three primary agent runtimes (Claude Code, Codex CLI, Gemini CLI) and then switches between them on the same project observes the same behavior harness without editing any file, because every runtime reads the same `.spaex.md`.
+- **SC-008**: A clarification answered once by the operator is not re-asked on any subsequent build against the same fragment set (verified by identical SHA256 keys per FR-011). When any Markdown body of any involved fragment changes, the operator IS re-asked exactly once on the next build.
+- **SC-011**: When the Composer fails for any reason (timeout, runtime error, malformed output, quota exceeded), `spaex install` exits non-zero with a diagnostic naming the failure category, and no existing `.spaex.md` is modified. Verified by fault-injection tests covering each failure category.
+- **SC-009**: The global bootstrap never overwrites operator-authored content outside its clearly delimited section in the user's global instruction file, verified by preserving 100% of pre-existing content across a full round-trip of install, upgrade, and removal. Per-project `CLAUDE.md` / `AGENTS.md` files are never touched by spaex under any operation.
 - **SC-010**: A project attempting to modify an atom-provided fragment aborts the install with a diagnostic that both names the target fragment and points to the additive-only remedy.
 
 ## Assumptions
 
 - **Agent runtime availability**: the consumer has at least one supported agent runtime (Claude Code, Codex CLI, or Gemini CLI) installed on the machine where `spaex install` runs, so the Composer can invoke it for the LLM-synthesis step. When none is available, install aborts with a clear diagnostic (see edge case).
+- **Global bootstrap is per-user, per-runtime, opt-in**: the consumer runs a one-time `spaex install --global` (or equivalent, exact CLI shape settled in the follow-up implementation spec) to install the bootstrap block into each agent runtime's global instruction file. Without the bootstrap, the runtime does not automatically read `.spaex.md`. The system surfaces this state at install time (see the "Bootstrap not yet installed" edge case).
 - **Version control is git**: the consumer's repo is a git repository. The composed constitution artifact and its fragment set are committed via git.
 - **RFC-2119 convention**: fragment authors use MUST / SHOULD / MAY (and negations) in prose as a convention understood by both the Composer and human readers. The pre-check does not parse prose to enforce modality; header-declared modality is the machine-checked signal.
 - **English is a lingua franca, not a requirement**: fragments MAY be authored in any natural language. The Composer treats prose semantically but does not translate.
