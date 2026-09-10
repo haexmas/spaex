@@ -102,7 +102,8 @@ Field constraints are identical to standalone fragments.
 | `invalid-modality` | `modality` outside enum | `<path>: modality '<value>' not in MUST\|MUST_NOT\|SHOULD\|SHOULD_NOT\|MAY\|MAY_NOT` |
 | `empty-body` | Body has no non-whitespace content | `<path>: body must not be empty` |
 | `duplicate-id` | Two fragments same molecule same id, different modality | `<path> and <path>: duplicate id '<id>' with modalities '<m1>' vs '<m2>'` |
-| `duplicate-id-same-modality` | Two fragments same molecule same id, matching modality | Silent dedupe; second occurrence contributes only to provenance |
+| `duplicate-id-same-modality` | Two fragments same molecule same id, matching modality and identical normalized body | Silent dedupe; second occurrence contributes only to provenance |
+| `duplicate-id-body-mismatch` | Two fragments same molecule same id and modality, but different normalized bodies | Reject the conflict; do not discard either body or producer |
 | `reserved-comment` | Body contains `<!-- spaex-...` comment | `<path>: body contains reserved 'spaex-' HTML comment` |
 
 ## Backward compatibility

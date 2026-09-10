@@ -49,9 +49,12 @@ Single-project Python layout: `src/spaex/`, `tests/behavior/` at repository root
 - [ ] T009 [P] Implement the body_sha256 normalization + hash function in src/spaex/behavior/fragment.py (strip trailing whitespace per line, CRLF→LF, collapse trailing newlines) per research.md §7 (FR-011)
 - [ ] T010 [P] Unit tests for Fragment schema in tests/behavior/unit/test_fragment_schema.py covering every validation error class from contracts/fragment-format.md §Validation errors (FR-001, FR-007)
 - [ ] T011 [P] Unit tests for body_sha256 normalization in tests/behavior/unit/test_body_hash_normalization.py including a CRLF-round-trip case (memory feedback_verify_tool_behavior_empirically) (FR-011)
-- [ ] T012 Implement materialize.py in src/spaex/behavior/materialize.py: read fragments from the Spec 017 molecule-store (molecule_store.get_or_extract) and write them to .spaex/constitution.d/<molecule-id>/<fragment-id>.md; also handle typed-atom inline behavior blocks by writing them out identically (FR-002, FR-003, FR-004)
+- [ ] T011a [P] Extend src/spaex/schema/data/molecule-manifest.v4.schema.json with the typed-atom `constitution_fragments` declaration, preserving the existing v4 manifest fields and validating inline fragment fields per contracts/fragment-format.md
+- [ ] T011b [P] Extend src/spaex/model/molecule_manifest.py and its parsed model to preserve validated inline `constitution_fragments` keyed by enclosing typed atom
+- [ ] T011c [P] Add tests/contract/test_molecule_manifest_v4.py coverage for valid inline declarations, parser preservation, and malformed inline fragments
+- [ ] T012 Implement materialize.py in src/spaex/behavior/materialize.py: read standalone fragments from the Spec 017 molecule-store (molecule_store.get_or_extract), consume parsed inline behavior blocks from `MoleculeManifest`, and write all outputs to a transaction-owned staging tree rather than directly to `.spaex/constitution.d/` (FR-002, FR-003, FR-004)
 - [ ] T013 [P] Unit tests for materialize in tests/behavior/unit/test_materialize.py covering: standalone fragment atom, typed-atom inline block, project-local fragment routing to _project scope (FR-002, FR-003, FR-004, FR-018 stub)
-- [ ] T014 Implement mechanical pre-check in src/spaex/behavior/precheck.py: detect intra-molecule id-collision with contradictory modality, detect malformed fragments, detect duplicate-id-same-modality (dedupe not conflict); emit typed diagnostics (FR-005, FR-007)
+- [ ] T014 Implement mechanical pre-check in src/spaex/behavior/precheck.py: detect intra-molecule id-collision with contradictory modality, detect malformed fragments, require identical normalized bodies before duplicate-id-same-modality dedupe, reject body mismatches, and enforce the project-local bare-id comparison rule; emit typed diagnostics (FR-005, FR-007, FR-020)
 - [ ] T015 [P] Unit tests for precheck in tests/behavior/unit/test_precheck.py exercising every fragment-format validation error and the intra-molecule collision case (FR-005, FR-007)
 - [ ] T016 [P] Implement the Constitution Clarification pydantic model + JSON load/save (atomic tmp+rename) in src/spaex/behavior/composer/clarifications.py per contracts/clarifications-schema.md (FR-011, FR-012)
 - [ ] T017 [P] Unit tests for clarification key derivation in tests/behavior/unit/test_clarification_key.py: sort order, normalization, LF+trim invariance, mismatch detection (FR-011, FR-012, SC-008 unit portion)
@@ -77,7 +80,7 @@ Single-project Python layout: `src/spaex/`, `tests/behavior/` at repository root
 - [ ] T026 [P] [US1] Fault-injection test tests/behavior/fault_injection/test_composer_no_runtime.py (SC-011, exit 34)
 - [ ] T027 [US1] Implement emission in src/spaex/behavior/emit.py: build `.spaex.md` content from Composer output (Shape A), write atomically (tmp+rename), include the `<!-- spaex-composed:source_hash=... version="1" -->` header (FR-013, FR-017a, FR-017b, contracts/spaex-md-format.md)
 - [ ] T028 [P] [US1] Unit test for emission format in tests/behavior/unit/test_emit_format.py: section order, provenance regex, source_hash header, empty-set behavior (FR-008, FR-017d, contracts/spaex-md-format.md)
-- [ ] T029 [US1] Wire the behavior subsystem into src/spaex/install.py: materialize → precheck → composer → emit sequence; pre-check abort leaves tracked files untouched (FR-004, FR-006, FR-008, FR-017c)
+- [ ] T029 [US1] Wire the behavior subsystem into src/spaex/install.py as one transaction: materialize into a staging tree, run precheck against the staged tree, run Composer and clarification staging there, then publish `.spaex/constitution.d/`, `.spaex.md`, and `.spaex/clarifications.json` only after every aborting step succeeds; duplicate producers and all failure paths leave tracked files untouched (FR-004, FR-006, FR-008, FR-017c)
 - [ ] T030 [P] [US1] Integration test tests/behavior/integration/test_install_end_to_end.py: fixture project with two pinned molecules each contributing one behavior fragment, `spaex install` produces `.spaex.md` with both directives + provenance (SC-001)
 - [ ] T031 [P] [US1] Integration test tests/behavior/integration/test_reproducibility.py: run `spaex install` twice on the same fixture, assert byte-identical `.spaex.md` (SC-003)
 - [ ] T032 [US1] Implement the Global Bootstrap Block installer in src/spaex/behavior/bootstrap.py: locate target files per research.md §3, install/upgrade/remove within paired HTML comment markers with version attribute (FR-014, FR-015, FR-016, FR-017, contracts/bootstrap-block.md)
@@ -140,7 +143,7 @@ Most authoring machinery lands in Phase 2 (fragment schema + materialize). This 
 
 - [ ] T044 [US5] Extend `.spaex.json` schema parsing in src/spaex/config.py (existing module) to read `constitution.local_fragments[]` inline entries and file-reference entries (FR-018)
 - [ ] T045 [US5] Extend src/spaex/behavior/materialize.py to write project-local fragments to `.spaex/constitution.d/_project/<fragment-id>.md` running through identical mechanical pre-check + Composer paths (FR-018, FR-019)
-- [ ] T046 [US5] Implement additive-only enforcement in src/spaex/behavior/precheck.py: reject a project-local fragment whose molecule-scoped id matches an atom-provided one with exit code 22 and a diagnostic pointing to the correct remedy (FR-020)
+- [ ] T046 [US5] Implement additive-only enforcement in src/spaex/behavior/precheck.py: treat `_project/<fragment-id>` as a distinct emitted identity but reject it when its bare `fragment_id` matches any atom-provided `<molecule-id>/<fragment-id>`, naming every match and the additive-only remedy with exit code 22 (FR-020)
 - [ ] T047 [P] [US5] Integration test tests/behavior/integration/test_project_local_fragments.py: local-only fragment appears in `.spaex.md` with `_project` source; override attempt aborts with exit 22 (SC-005, SC-010)
 
 **Checkpoint**: US5 project-local flow verified.
@@ -179,7 +182,7 @@ Reproducibility groundwork lands in Phase 3 (T031). This phase adds the fragment
 **Purpose**: user-facing commands beyond `spaex install`.
 
 - [ ] T055 [P] Implement `spaex constitution build` subcommand in src/spaex/cli/behavior_commands.py with --force and --check flags (contracts/cli-surface.md §"spaex constitution build")
-- [ ] T056 [P] Implement `spaex constitution trace <query>` subcommand in src/spaex/cli/behavior_commands.py: parse `.spaex.md`, match by fragment id or text substring, print provenance (FR-022, contracts/cli-surface.md §"spaex constitution trace")
+- [ ] T056 [P] Implement `spaex constitution trace <query>` subcommand in src/spaex/cli/behavior_commands.py: parse `.spaex.md`, match by fragment id or text substring, and print every provenance record for merged clauses in text/json formats (FR-022, contracts/cli-surface.md §"spaex constitution trace")
 - [ ] T057 [P] Integration test tests/behavior/integration/test_provenance_trace.py covering both query modes and text/json output formats (SC-006)
 - [ ] T058 [P] Integration test tests/behavior/integration/test_constitution_build_check.py covering `--check` exit codes (SC-003 verification)
 

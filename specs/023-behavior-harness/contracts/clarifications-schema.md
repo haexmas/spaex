@@ -65,9 +65,14 @@ The `body_sha256` for each fragment is computed via:
 
 Atomic write pattern:
 1. Read existing file into memory (or start from empty object).
-2. Apply changes (add new entries, remove invalidated entries).
-3. Write to `.spaex/clarifications.json.tmp`.
-4. Rename over `.spaex/clarifications.json`.
+2. Stage new answers and invalidation changes in memory while the Composer runs.
+3. Publish the staged set only after Shape A has passed parsing and both local hash checks.
+4. Apply changes (add new entries, remove invalidated entries) to the published snapshot.
+5. Write to `.spaex/clarifications.json.tmp`.
+6. Rename over `.spaex/clarifications.json`.
+
+If composition aborts, discard the staged set and leave the existing file
+byte-for-byte unchanged.
 
 ## Invalidation semantics
 
@@ -79,7 +84,9 @@ On Composer invocation:
 
 ## Manual editing
 
-Operators MAY edit `answer` fields by hand to update their guidance. Doing so does NOT invalidate the key (which depends only on fragment bodies), so the answer takes effect on the next Composer run without triggering a re-ask.
+Operators MAY edit `answer` fields by hand to update their guidance. Doing so
+does NOT invalidate the fragment key, but it changes `build_input_hash`, so the
+answer takes effect on the next Composer run without triggering a re-ask.
 
 Operators MUST NOT edit `key-hex`, `cited_fragments`, or `body_sha256` fields; those are consistency invariants. Corrupted values cause invalidation on the next Composer run.
 

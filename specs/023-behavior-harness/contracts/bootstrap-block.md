@@ -24,7 +24,7 @@ If a file named `.spaex.md` exists in the current working directory (or any ance
 |---------|--------------------|-----------------------|
 | Claude Code (`claude`) | `~/.claude/CLAUDE.md` | `%USERPROFILE%\.claude\CLAUDE.md` |
 | Codex CLI (`codex`) | `~/.config/codex/AGENTS.md` | `%APPDATA%\codex\AGENTS.md` |
-| Gemini CLI (`gemini`) | `~/.config/gemini/AGENTS.md` | `%APPDATA%\gemini\AGENTS.md` |
+| Gemini CLI (`gemini`) | `~/.gemini/GEMINI.md` | `%USERPROFILE%\.gemini\GEMINI.md` |
 
 For each runtime, the installer creates parent directories if missing, then writes the block.
 
@@ -34,12 +34,13 @@ Given a set of target runtimes:
 
 1. For each target file:
    - If file does not exist: create it with just the block content.
-   - If file exists but contains no `spaex-bootstrap:start` marker: append the block at the end of the file, preceded by one blank line.
-   - If file exists with a `spaex-bootstrap:start` marker: read the version attribute.
-     - If version matches current: no-op.
-     - If version differs: replace the entire block (from `start` marker to `end` marker inclusive) with the current version's block content.
+   - If file exists but contains neither a start nor an end marker: append the block at the end of the file, preceded by one blank line.
+   - If file exists with markers: require exactly one start marker, exactly one end marker, and the end marker after the start marker. Read the version attribute.
+     - If the marker structure is malformed (an unmatched marker, multiple marker pairs, or an end marker before the start marker), abort with a diagnostic and do not write that target.
+     - If the version matches current: no-op.
+     - If the version differs: replace the entire block (from `start` marker to `end` marker inclusive) with the current version's block content.
 2. Content outside the marked block is preserved verbatim.
-3. On any I/O error (permission, path-traversal-attempted-into-symlink, etc.), the installer aborts with a clear diagnostic naming the offending target and does NOT modify any other target that was already written.
+3. The installer preflights all target paths and prepares their replacements before publishing any write. On any I/O error (permission, path-traversal-attempted-into-symlink, etc.), it aborts with a clear diagnostic naming the offending target and does NOT publish a partial multi-target update.
 
 ## Removal behavior (deferred spec, contract defined)
 
@@ -65,6 +66,21 @@ Useful in CI to guarantee developer machines are provisioned.
 ## Marker uniqueness
 
 The marker prefix `spaex-bootstrap:` is reserved by spaex. Fragment content is forbidden from including `<!-- spaex-...` HTML comments (per contracts/fragment-format.md) so a fragment cannot accidentally imitate a marker in emitted content.
+
+## Malformed-marker coverage
+
+The installer MUST preflight marker structure before writing any target. The
+following cases are errors with no write to the affected file (and no partial
+multi-target update):
+
+- a start marker without an end marker;
+- an end marker without a start marker;
+- more than one start/end pair in the same file; or
+- an end marker that precedes its start marker.
+
+The well-formed single-pair case remains covered by the normal no-op and
+version-replacement behavior above. Implementations MUST test each malformed
+case and verify that user-authored content is byte-for-byte unchanged.
 
 ## Non-invasive contract
 
