@@ -33,7 +33,7 @@ Create a fresh git repo that will host one molecule with an `install_hook`:
 ```bash
 mkdir -p /tmp/spaex-016-quickstart/publisher
 cd /tmp/spaex-016-quickstart/publisher
-git init -q
+git init -q -b main
 git config user.email "author@example.com"
 git config user.name "Author"
 git config commit.gpgsign false
@@ -171,7 +171,7 @@ spaex --repo-root . add "$CANONICAL" com.example.demo.hello-hook \
 
 Expected output includes:
 
-```
+```text
 hello-hook: wrote .spaex-hook/hello-hook.marker
 hello-hook: appended hello-hook-out/ to .gitignore
 installed generation g_<timestamp>_<pid>

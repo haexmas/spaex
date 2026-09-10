@@ -16,7 +16,7 @@ spaex composes a coding harness for a single repo out of reusable pieces (skills
 
 ## Molecule install-hooks
 
-A molecule may declare an optional `install_hook` in its `manifest.json`. `spaex install` invokes it as a normal subprocess (arbitrary code, consumer-user permissions, full environment inheritance) after atom materialization and before publishing the install.lock generation. Per-molecule `on_failure: "abort" | "warn"` selects between transaction rollback and continue-with-`hook_status`-recorded. Consumers can opt out for a single invocation via `spaex install --no-install-hooks` (or `spaex add --no-install-hooks`). See [docs/install-hooks.md](docs/install-hooks.md) for the full contract: declaration schema, execution semantics, the four failure kinds, idempotency, non-reversibility, and the trust model.
+A molecule may declare an optional `install_hook` in its `manifest.json`. `spaex install` invokes it as a normal subprocess (arbitrary code, consumer-user permissions, full environment inheritance) after any required atom materialization and before publishing the install.lock generation; hook-only molecules run without atom materialization. Per-molecule `on_failure: "abort" | "warn"` selects between transaction rollback and continue-with-`hook_status`-recorded. Consumers can opt out for a single invocation via `spaex install --no-install-hooks` (or `spaex add --no-install-hooks`). See [docs/install-hooks.md](docs/install-hooks.md) for the full contract: declaration schema, execution semantics, the four failure kinds, idempotency, non-reversibility, and the trust model.
 
 ## Atom-category conventions
 
@@ -26,7 +26,7 @@ The v4 molecule-manifest schema treats `atoms{}` as an open `Dict[str, List[str]
 
 ## Install
 
-**Once published to PyPI (upcoming with the `v4.0.0` tag):**
+**Once published to PyPI (upcoming with the `v4.1.0` tag):**
 
 ```bash
 pipx install spaex

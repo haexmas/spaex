@@ -3,7 +3,7 @@
 **Introduced in**: spaex 4.1.0 (Spec 016)
 **Authoritative sources**: [specs/016-molecule-install-hooks/spec.md](../specs/016-molecule-install-hooks/spec.md), [design doc](plans/2026-09-08-spec-016-molecule-install-hooks-design.md)
 
-A molecule may declare an optional `install_hook` in its `manifest.json`. `spaex install` invokes each declared hook as a normal subprocess after atom materialization and before publishing the install.lock generation. Hooks are the escape hatch for side effects that are not delivered files: appending `.gitignore` lines, registering git hooks, provisioning tools in the consumer repo, etc.
+A molecule may declare an optional `install_hook` in its `manifest.json`. `spaex install` invokes each declared hook as a normal subprocess after any required atom materialization and before publishing the install.lock generation; hook-only molecules run without atom materialization. Hooks are the escape hatch for side effects that are not delivered files: appending `.gitignore` lines, registering git hooks, provisioning tools in the consumer repo, etc.
 
 ## Declaring a hook
 
@@ -40,7 +40,7 @@ Hook-only molecules (declaring `install_hook` with no `atoms.constitution`) are 
 
 - **Working directory**: the consumer repo root.
 - **Environment**: spaex passes its complete environment to the subprocess, no filtering.
-- **stdio**: inherited from the spaex process. In a TTY, hooks can prompt the user via `input()`; in a non-TTY context (CI, piped stdin) `input()` raises `EOFError`, so molecule authors must supply a non-interactive fallback (e.g. `os.environ` toggle, `--yes` flag, `default_yes` behavior).
+- **stdio**: inherited from the spaex process. In a TTY, hooks can prompt the user via `input()`; when stdin is unavailable or reaches EOF, `input()` raises `EOFError`, so molecule authors must supply a non-interactive fallback (e.g. `os.environ` toggle, `--yes` flag, `default_yes` behavior).
 - **Ordering**: hooks run in the resolver's canonical order, which is ascending `(effective_priority, molecule_id.encode("utf-8"))`. The consumer's `.spaex.json` `compounds[].config[<molecule-id>].priority` overrides the publisher's default `priority`.
 
 ## Failure policy
