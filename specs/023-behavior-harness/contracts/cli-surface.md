@@ -78,6 +78,10 @@ Existing per-project install. Extended to:
 - 30-34: composer failures per research.md §8.
 - 22: project attempt to modify an atom-provided fragment (spec FR-020).
 
+**Non-destructive on abort** (per FR-006): on any of the above non-zero exit codes, `spaex install` MUST NOT modify any tracked file in the consumer repo. Existing `.spaex.md`, `.spaex/constitution.d/`, `.spaex/clarifications.json` remain as they were before the aborted run. Composer log at `$SPAEX_COMPOSER_LOG` (default `.spaex/composer.log`) MAY be written for failure categories 32/34 as diagnostic; that path is documented and gitignored.
+
+**Never writes to** (per FR-017c): `spaex install` NEVER writes to project-level `CLAUDE.md`, `AGENTS.md`, or any other operator-authored instruction file at the project level, under any exit code. Emission is confined to `.spaex.md` at the repo root and to files under `.spaex/`.
+
 ### `spaex add <molecule-ref>` and `spaex remove <molecule-id>`
 
 Existing commands. Extended per Clarification Q2:
@@ -86,6 +90,8 @@ Existing commands. Extended per Clarification Q2:
 - On no contradiction: `.spaex.md` regenerates cleanly.
 
 **No new exit codes**. Warnings do not change exit code semantics.
+
+**No `.spaex.md` regeneration at add/remove time** (per FR-024a). The plausibility check produces WARN output and writes/updates a `.spaex/.stale` sidecar file summarizing the finding. `.spaex.md` regeneration happens at the next `spaex install`, which reads `.spaex/.stale` and requires reconciliation before writing.
 
 ## Environment variables
 

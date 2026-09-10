@@ -74,3 +74,13 @@ Guaranteed behaviors:
 - The block never contains per-user or per-project content (FR-016).
 - The block is idempotent: running the installer twice produces the same file.
 - The installer never writes to files that do not match the expected runtime target path (no wildcard scanning).
+
+## Files this contract NEVER writes to
+
+Explicitly to prevent implementer confusion (per FR-017c):
+
+- Any project-level `CLAUDE.md`, `AGENTS.md`, or equivalent instruction file at any consumer's repo root or inside any consumer's `.claude/` directory.
+- Any file NOT listed under "Target paths per runtime" above.
+- Any file outside the user's home directory (POSIX) or `%USERPROFILE%` (Windows).
+
+The bootstrap installer's write scope is limited to the per-user, per-runtime global instruction files enumerated in the target-paths table. Nothing else.
