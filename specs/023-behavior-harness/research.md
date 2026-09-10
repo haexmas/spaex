@@ -34,12 +34,15 @@ Non-blocking research questions surfaced during planning. Each entry follows the
 |---------|--------------------------|-------|
 | Claude Code | `~/.claude/CLAUDE.md` | Standard location per Claude Code docs |
 | Codex CLI | `~/.config/codex/AGENTS.md` | Standard AGENTS.md convention |
-| Gemini CLI | `~/.config/gemini/AGENTS.md` | Adopted the AGENTS.md convention in 2026 |
+| Gemini CLI | `~/.gemini/GEMINI.md` | Gemini CLI default; `context.fileName` may be configured to another filename |
 | dsh | `~/.config/dsh/home-patch.yml` | Deferred to a future spec (out of scope for 023) |
 
 The installer resolves `~` per OS (POSIX vs. Windows `%USERPROFILE%`).
 
-**Rationale**: paths follow each runtime's documented convention. AGENTS.md convergence across Codex and Gemini simplifies the block content (same instruction: "if `.spaex.md` exists in cwd, read it").
+**Rationale**: paths follow each runtime's documented default. Gemini CLI loads
+`~/.gemini/GEMINI.md` globally; an operator who configures `context.fileName`
+to `AGENTS.md` may select that configured target explicitly. The block content
+remains the same across runtimes.
 
 **Alternatives considered**:
 - Auto-detect installed runtimes and write to all found. Rejected because it violates Principle V's opt-in spirit at the user-config level (spaex should not modify files the user did not authorize).
@@ -91,9 +94,13 @@ _Change fragments in `.spaex/constitution.d/` and re-run install._
 - ...
 ```
 
-Sections omitted when empty. Provenance rendered inline in italics (readable for humans, parseable via a stable regex for the trace command).
+Sections omitted when empty. Provenance rendered inline in italics, with every
+merged source sorted by its full `<molecule-id>/<fragment-id>` key and joined by
+`, ` (readable for humans, parseable via a stable regex for the trace command).
+Clauses are ordered by the first full provenance key, then by the complete
+sorted provenance list, then by normalized clause text.
 
-**Rationale**: matches the spec's Emission FRs (FR-008 modality grouping, FR-021 per-clause provenance) and gives a fixed byte-for-byte target for the byte-identity reproducibility test (SC-003).
+**Rationale**: matches the spec's Emission FRs (FR-008 modality grouping, FR-021 per-clause provenance) and gives a canonical target for the byte-identity reproducibility test (SC-003), including merged clauses.
 
 **Alternatives considered**:
 - Structured JSON emitted alongside `.spaex.md` for machine parsing. Deferred as a follow-up; the inline regex-parseable provenance is enough for MVP.
@@ -101,7 +108,7 @@ Sections omitted when empty. Provenance rendered inline in italics (readable for
 
 ## 6. Fragment identifier scoping enforcement
 
-**Decision**: identifiers are resolved as `<molecule-id>/<fragment-id>` inside spaex's in-memory representation, but the fragment's YAML header stores only `<fragment-id>`. The molecule scope is inferred from the fragment's on-disk location under `.spaex/constitution.d/<molecule-id>/`. This keeps molecule authors from having to write their own molecule name into every fragment (author-error-proof).
+**Decision**: identifiers are resolved as `<molecule-id>/<fragment-id>` inside spaex's in-memory representation, but the fragment's YAML header stores only `<fragment-id>`. The molecule scope is inferred from the fragment's on-disk location under `.spaex/constitution.d/<molecule-id>`. Project-local fragments use `_project/<fragment-id>` as their emitted identity, but their additive-only conflict key is the bare `fragment_id`, compared against every atom fragment with that id.
 
 **Rationale**: matches Clarification Q1 semantics without adding author burden. Cross-molecule collisions are impossible by construction.
 
@@ -111,7 +118,7 @@ Sections omitted when empty. Provenance rendered inline in italics (readable for
 
 ## 7. Clarification-key normalization
 
-**Decision**: SHA256 input is the concatenation of `<molecule-id>/<fragment-id>|<sha256-of-body>` lines for every fragment cited in the clarification, sorted lexicographically by fragment id. Whitespace in bodies is normalized (trailing whitespace stripped, CRLF → LF, trailing newlines collapsed to one) before hashing.
+**Decision**: SHA256 input is the concatenation of `<molecule-id>/<fragment-id>|<sha256-of-body>` lines for every fragment cited in the clarification, sorted lexicographically by the full scoped key. Whitespace in bodies is normalized (trailing whitespace stripped, CRLF → LF, trailing newlines collapsed to one) before hashing.
 
 **Rationale**: sort order + normalization prevents spurious re-asks from cosmetic changes. Explicit format is easy to test.
 

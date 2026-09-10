@@ -27,8 +27,8 @@ Installs or upgrades the global bootstrap block into the specified runtimes' use
 Explicitly invokes the Composer against the current fragment set and writes `.spaex.md`. Rarely needed under normal workflow (auto-invoked by `spaex install`), but useful for CI verification and for consumers who want to regenerate without running a full install.
 
 **Arguments**:
-- `--force`: rerun even when the source_hash matches the current `.spaex.md`.
-- `--check`: exit 0 if `.spaex.md` matches what the Composer would produce, exit non-zero otherwise (implies `--force` internally to compute the reference).
+- `--force`: rerun even when both the source and Composer-input fingerprints match the current `.spaex.md`.
+- `--check`: exit 0 if `.spaex.md` matches the current source and Composer-input fingerprints, exit non-zero otherwise. With matching fingerprints it MUST NOT invoke the Composer; use `--force --check` when an explicit fresh Composer comparison is required.
 
 **Exit codes**:
 - 0: `.spaex.md` produced or already current.
@@ -55,10 +55,17 @@ Sample output:
 ```text
 Directive: "MUST run the project's test suite before creating any commit."
 Modality:  MUST
-Source:    strict-testing/tests-before-commit
-Atom:      hooks.test-runner
-Molecule:  github.com/haexmas/atoms@abc123 (pinned in .spaex.json)
+Sources:
+  - strict-testing/tests-before-commit
+    Atom:    hooks.test-runner
+    Molecule: github.com/haexmas/atoms@abc123 (pinned in .spaex.json)
+  - qa-baseline/tests-before-commit
+    Atom:    qa.tests-before-commit
+    Molecule: github.com/haexmas/qa-atoms@def456 (pinned in .spaex.json)
 ```
+
+For a merged clause, text and JSON output list every provenance record; no
+source is dropped when the clause is deduplicated.
 
 ## Modified subcommands
 
@@ -67,7 +74,7 @@ Molecule:  github.com/haexmas/atoms@abc123 (pinned in .spaex.json)
 Existing per-project install. Extended to:
 1. Materialize behavior fragments (new Phase 0.5 in the install pipeline, between molecule extraction and install-hook execution).
 2. Run mechanical pre-check on fragments. Abort with new exit code 20 on intra-molecule conflict.
-3. Invoke Composer if source_hash mismatches `.spaex.md`.
+3. Compute the local `source_hash` for the sorted fragment set and a separate `build_input_hash` for the Composer prompt version plus all valid persisted clarification answers. Invoke Composer if either fingerprint mismatches `.spaex.md`; otherwise preserve the committed artifact byte-for-byte.
 4. Emit new hint at end of install if the global bootstrap is not detected for any installed runtime.
 
 **Backward compatibility**: consumers with no molecules shipping behavior fragments see the new phases skip silently (empty fragment set per FR-017d).

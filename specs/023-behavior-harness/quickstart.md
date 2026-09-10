@@ -10,7 +10,7 @@ Walkthrough of what a consumer and a molecule author do once spec 023 lands.
 spaex install --global claude,codex
 ```
 
-Result: `~/.claude/CLAUDE.md` and `~/.config/codex/AGENTS.md` each get a small delimited spaex block instructing the runtime to read `.spaex.md` from the current project's root. Nothing else is touched.
+Result: `~/.claude/CLAUDE.md` and `~/.config/codex/AGENTS.md` each get a small delimited spaex block instructing the runtime to read `.spaex.md` from the current project's root. For Gemini CLI, the default target is `~/.gemini/GEMINI.md`; if `context.fileName` is configured to `AGENTS.md`, select that configured target explicitly. Nothing else is touched.
 
 Verify with `--check`:
 
@@ -26,11 +26,16 @@ Edit `.spaex.json`:
 
 ```json
 {
+  "spaex_version": "4",
+  "identity": "com.example.consumer",
   "compounds": [
     {
-      "molecule": "github.com/haexmas/atoms",
-      "revision": "c1db86a…",
-      "atoms": ["speckit-strict", "graphify-first-authoring"]
+      "source": "https://github.com/haexmas/atoms",
+      "revision": "0123456789abcdef0123456789abcdef01234567",
+      "molecules": [
+        "com.github.haexmas.atoms.speckit-strict",
+        "com.github.haexmas.atoms.graphify-first-authoring"
+      ]
     }
   ]
 }
@@ -88,7 +93,7 @@ Edit `.spaex.json` to add a local fragment:
 `spaex install`:
 - Local fragment materializes under `.spaex/constitution.d/_project/http-through-shared-client.md`.
 - Composer merges it into `.spaex.md` alongside atom-provided rules.
-- If your local fragment tries to modify or downgrade a molecule-provided rule (same molecule-scoped id), install aborts with exit code 22 explaining the additive-only remedy.
+- If your local fragment's bare `fragment_id` matches an atom-provided fragment in any molecule, install aborts with exit code 22, names every matching `<molecule-id>/<fragment-id>`, and explains the additive-only remedy. `_project/<fragment-id>` remains a distinct emitted identity; the comparison intentionally uses the bare id.
 
 ## For a molecule author
 
@@ -108,10 +113,12 @@ your-molecule/
 
 ```json
 {
-  "schema_version": 4,
-  "molecule_id": "your-molecule",
+  "spaex_version": "4",
+  "id": "com.example.atoms.speckit-strict",
+  "version": "1.0.0",
+  "priority": 100,
   "atoms": {
-    "behavior": ["tests-before-commit"]
+    "behavior": ["atoms/behavior/tests-before-commit.md"]
   }
 }
 ```
