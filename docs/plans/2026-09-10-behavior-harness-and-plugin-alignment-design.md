@@ -7,7 +7,8 @@
 **Target spaex version**: 5.x line. The behavior-harness decisions here refine the ontology already sketched in the 2026-09-08 roadmap; they do not add a new MAJOR beyond that roadmap.
 
 **Related**:
-- [Composition UI & Skills Externalization Roadmap (2026-09-08)](2026-09-08-composition-ui-and-skills-externalization-roadmap.md): fixes the overall phasing (A: skills externalize; B: ontology cleanup + presets; C: `spaex status`; D: GUI; E: Creator flow). This design tightens Phase B by defining what "ontology cleanup" now means for the constitution.
+- [Spec 023 Behavior Harness](../../specs/023-behavior-harness/spec.md) and its plan, research, data-model, contracts, quickstart, tasks (11 phases, 69 tasks): the normative spec that this design record fed into.
+- [Composition UI & Skills Externalization Roadmap (2026-09-08)](2026-09-08-composition-ui-and-skills-externalization-roadmap.md): fixes the overall phasing (A: skills externalize; B: ontology cleanup + presets; C: `spaex status`; D: GUI; E: Creator flow). This design and spec 023 shift the phasing so behavior-harness lands as an additive 4.2.0 BEFORE the roadmap's Phase A (5.0.0).
 - [Spec 016 Molecule Install Hooks (2026-09-08)](2026-09-08-spec-016-molecule-install-hooks-design.md): the install-hook contract carries per-atom side effects at install time. The Composer flow below reuses it.
 - [Spec 017 Molecule Store (2026-09-08)](2026-09-08-spec-017-molecule-store-design.md): the materialization pipeline that produces atom content on the consumer's disk. Fragment materialization plugs into that pipeline.
 - [Scope Realignment (2026-09-03)](2026-09-03-scope-realignment-design.md): the constraint that spaex stays a meta-composition layer, not a runtime.
@@ -18,7 +19,7 @@
 
 ## 0. Normative status
 
-Design record. Every requirement below moves into a numbered spec (proposed slot 023, pending `docs/plans/YYYY-MM-DD-slot-023-*.md` reservation) written through `/speckit-specify`. Wording like "MUST" in this document is design intent, not a binding requirement until the spec lands.
+Design record. As of 2026-09-10, every requirement here has moved into the numbered spec at `specs/023-behavior-harness/` (spec.md, plan.md, research.md, data-model.md, contracts/, quickstart.md, tasks.md), all authored through the speckit workflow and committed on branch `023-behavior-harness`. Wording like "MUST" in this document remains design intent; the binding contracts live in the spec's Functional Requirements. When this document and the spec diverge, the spec wins.
 
 ## 1. Problem
 
