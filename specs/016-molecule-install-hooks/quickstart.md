@@ -1,15 +1,30 @@
 # Post-implementation acceptance walkthrough: publish and adopt a molecule with `install_hook`
 
-**Feature**: 016 | **Date**: 2026-09-08 | **Status**: post-implementation acceptance walkthrough; requires the completed Spec 016 implementation and spaex 4.1.0 release
+**Feature**: 016 | **Date**: 2026-09-08 | **Status**: verified end-to-end against spaex 4.1.0 (Phase 9, 2026-09-10)
 
-This walkthrough is intentionally not runnable against the current spaex 4.0.x/main implementation. After Spec 016 is implemented and released, it exercises the P1 story: a molecule author declares `install_hook` in the manifest, a consumer adopts the molecule via `spaex add`, and the hook runs producing a verifiable side effect. It uses only the spaex 4.1.0 CLI and git; no external dependencies.
+This walkthrough exercises the P1 story: a molecule author declares `install_hook` in the manifest, a consumer adopts the molecule via `spaex add`, and the hook runs producing a verifiable side effect. It uses only the spaex 4.1.0 CLI and git; no external dependencies. Section 5 also covers the P2 (`on_failure`) and P3 (`--no-install-hooks`) stories.
 
 ## Prerequisites
 
-- spaex 4.1.0 installed (`pip install spaex==4.1.0`); verify with `spaex --version`.
+- spaex 4.1.0 installed (`pip install spaex==4.1.0`).
 - git ≥ 2.30 (for `git worktree`).
 - python3 on `PATH` (for the hook script).
 - A shell (bash or zsh).
+
+## Setup: emulate an HTTPS publisher on localhost
+
+`spaex add` refuses `file://` source URLs by design (Principle IV requires an authenticated remote address for pinning). To run this walkthrough offline without a real HTTPS server, use a fake canonical URL AND pre-seed the state cache with a local bare clone. spaex's `ensure_object` short-circuits when the requested SHA is already present in the cache, so no network access is attempted.
+
+```bash
+export SPAEX_STATE=/tmp/spaex-016-quickstart/state
+export CANONICAL=https://example.invalid/demo/publisher
+# spaex.migrate.transform.clone_dir shape: <state>/repos/<sha256-first-16>
+DIGEST=$(python3 -c "import hashlib,sys; print(hashlib.sha256(sys.argv[1].encode()).hexdigest()[:16])" "$CANONICAL")
+export CACHE_DIR="$SPAEX_STATE/repos/$DIGEST"
+mkdir -p "$SPAEX_STATE/repos"
+```
+
+The pre-seed step happens after section 1 (once the publisher repo exists).
 
 ## 1. Author the publisher molecule
 
@@ -113,6 +128,12 @@ PUBLISHER_SHA=$(git rev-parse HEAD)
 echo "Publisher SHA: $PUBLISHER_SHA"
 ```
 
+Pre-seed the state cache so `$CANONICAL` resolves locally:
+
+```bash
+git clone --bare -q /tmp/spaex-016-quickstart/publisher "$CACHE_DIR"
+```
+
 ## 2. Adopt from a consumer
 
 Set up a fresh consumer repo:
@@ -144,19 +165,17 @@ JSON
 Adopt the molecule (spaex `add` runs `install` internally):
 
 ```bash
-spaex --repo-root . add \
-  file:///tmp/spaex-016-quickstart/publisher \
-  com.example.demo.hello-hook \
+spaex --repo-root . add "$CANONICAL" com.example.demo.hello-hook \
   --revision "$PUBLISHER_SHA"
 ```
 
 Expected output includes:
 
 ```
-installed generation g_<timestamp>_<pid>
 hello-hook: wrote .spaex-hook/hello-hook.marker
 hello-hook: appended hello-hook-out/ to .gitignore
-added 1 molecule(s) at file:///tmp/spaex-016-quickstart/publisher@<12-char-sha>:
+installed generation g_<timestamp>_<pid>
+added 1 molecule(s) at https://example.invalid/demo/publisher@<12-char-sha>:
   com.example.demo.hello-hook
 ```
 
@@ -234,15 +253,16 @@ PY
 git add hello-hook/install.py
 git commit -qm "hello-hook: force failure for demo"
 PUBLISHER_SHA_FAIL=$(git rev-parse HEAD)
+
+# Fetch the new commit into the pre-seeded state cache.
+git -C "$CACHE_DIR" fetch -q /tmp/spaex-016-quickstart/publisher main:main
 ```
 
 In the consumer, repin to the failing SHA. Since the molecule declares `on_failure: "warn"`:
 
 ```bash
 cd /tmp/spaex-016-quickstart/consumer
-spaex --repo-root . add \
-  file:///tmp/spaex-016-quickstart/publisher \
-  com.example.demo.hello-hook \
+spaex --repo-root . add "$CANONICAL" com.example.demo.hello-hook \
   --revision "$PUBLISHER_SHA_FAIL"
 # Expected: install proceeds, WARN line appears after the process exits,
 # install.lock records hook_status: "failed", CLI exits 0
@@ -263,11 +283,10 @@ PY
 git add hello-hook/manifest.json
 git commit -qm "hello-hook: demonstrate abort policy"
 PUBLISHER_SHA_ABORT=$(git rev-parse HEAD)
+git -C "$CACHE_DIR" fetch -q /tmp/spaex-016-quickstart/publisher main:main
 
 cd /tmp/spaex-016-quickstart/consumer
-spaex --repo-root . add \
-  file:///tmp/spaex-016-quickstart/publisher \
-  com.example.demo.hello-hook \
+spaex --repo-root . add "$CANONICAL" com.example.demo.hello-hook \
   --revision "$PUBLISHER_SHA_ABORT"
 # Expected: install fails with install-failed, managed .spaex state rolls back,
 # and the delegated .spaex.json compound update is reverted.
