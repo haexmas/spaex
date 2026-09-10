@@ -180,6 +180,18 @@ spaex constitution build --force
 
 Bypasses the source-hash check; useful for iterating on the Composer prompt.
 
+### Manual verification: cross-runtime discoverability (SC-007)
+
+The automated `test_bootstrap_discoverability.py` covers the CLI-level file-read behavior via mocks. Once per spaex release, a maintainer manually verifies that real runtimes actually respect `.spaex.md`:
+
+1. Run `spaex install --global claude,codex,gemini` on a scratch account.
+2. Create a fixture project with a single MUST fragment declaring an unambiguous constraint (e.g., "MUST prefix every reply with the token `HARNESS-OK`").
+3. Open each runtime in the project and issue any prompt.
+4. Verify each response begins with `HARNESS-OK`. This confirms the runtime actually read `.spaex.md` after the bootstrap indirection.
+5. Record the observation in the release notes.
+
+This is a small human-in-the-loop step because full-agent-behavior verification is out of scope for automated tests.
+
 ## Common failure modes and remedies
 
 | Symptom | Exit code | Remedy |

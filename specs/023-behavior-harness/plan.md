@@ -105,7 +105,12 @@ tests/
 │   │   ├── test_case_a_intra_molecule.py    # User Story 3 Case A
 │   │   ├── test_case_b_cross_molecule.py    # User Story 3 Case B
 │   │   ├── test_project_local_fragments.py  # User Story 5
-│   │   └── test_reproducibility.py          # User Story 6 byte-identity
+│   │   ├── test_reproducibility.py          # User Story 6 byte-identity (SC-003)
+│   │   ├── test_provenance_trace.py         # SC-006 (`spaex constitution trace`)
+│   │   ├── test_bootstrap_discoverability.py # SC-007 (mocked CLI-level runtime read of .spaex.md)
+│   │   ├── test_clarification_persistence.py # SC-008 (answer once, no re-ask unchanged, re-ask on body change)
+│   │   ├── test_add_time_plausibility.py    # FR-024a (add/remove warns, writes .stale, doesn't regen .spaex.md)
+│   │   └── test_install_is_non_destructive.py # FR-006 (any abort leaves tracked files unchanged)
 │   ├── fault_injection/
 │   │   ├── test_composer_timeout.py
 │   │   ├── test_composer_malformed.py
