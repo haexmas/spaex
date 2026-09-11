@@ -108,6 +108,7 @@ def _publish_constitution(
     repo_root: Path,
     *,
     state_root: Path | None = None,
+    preserved_files: Sequence[transaction.StagedFile] = (),
 ) -> None:
     """Publish the effective constitution and install.lock atomically.
 
@@ -131,6 +132,9 @@ def _publish_constitution(
 
     Raises:
         PostWriteValidationError: If the published files disagree.
+
+    ``preserved_files`` contains source files inside the live `.spaex` tree
+    that must survive the full-directory rename-swap.
     """
     existing_lock = _read_existing_lock(repo_root)
     unknown_top_level = (
@@ -175,7 +179,7 @@ def _publish_constitution(
             )
         _delete_orphaned_paths(repo_root, existing_lock, lock)
 
-    staged_files: list[transaction.StagedFile] = []
+    staged_files: list[transaction.StagedFile] = list(preserved_files)
     if body is not None:
         staged_files.append(transaction.StagedFile(transaction.CONSTITUTION_NAME, body))
     staged_files.append(transaction.StagedFile(transaction.INSTALL_LOCK_NAME, lock_bytes))
@@ -197,6 +201,7 @@ def publish_constitution(
     state_root: Path | None = None,
     hook_status: HookStatus | None = None,
     hook_only_records: Sequence[MoleculeEntry] = (),
+    preserved_files: Sequence[transaction.StagedFile] = (),
 ) -> None:
     """Join all declared constitution files from one molecule and publish.
 
@@ -219,10 +224,17 @@ def publish_constitution(
     entries for hook-only molecules (paths=()) whose install_hook ran
     during this generation. They are merged into the sorted molecules
     array alongside the constitution contributor's record.
+
+    ``preserved_files`` carries configured project-local source files through
+    the full-directory rename-swap.
     """
     if not contributions:
         _publish_constitution(
-            tuple(hook_only_records), None, repo_root, state_root=state_root
+            tuple(hook_only_records),
+            None,
+            repo_root,
+            state_root=state_root,
+            preserved_files=preserved_files,
         )
         return
 
@@ -252,6 +264,7 @@ def publish_constitution(
         b"\n".join(contribution.body for contribution in contributions),
         repo_root,
         state_root=state_root,
+        preserved_files=preserved_files,
     )
 
 
@@ -261,13 +274,15 @@ def stage_constitution(
     repo_root: Path,
     *,
     state_root: Path | None = None,
+    preserved_files: Sequence[transaction.StagedFile] = (),
 ) -> Iterator[None]:
     """Temporarily activate a candidate constitution for install hooks.
 
     The candidate contains the constitution and an install lock without hook
     status. It is atomically made visible before the context body runs and is
     rolled back if a hook raises. Successful callers must still invoke
-    ``publish_constitution`` to write the final hook status.
+    ``publish_constitution`` to write the final hook status. Any
+    ``preserved_files`` are included in the temporary candidate as well.
     """
     if not contributions:
         raise ValueError("cannot stage an empty constitution")
@@ -310,6 +325,7 @@ def stage_constitution(
     with transaction.stage_generation(
         repo_root / transaction.SPAEX_DIR,
         [
+            *preserved_files,
             transaction.StagedFile(transaction.CONSTITUTION_NAME, body),
             transaction.StagedFile(transaction.INSTALL_LOCK_NAME, lock_bytes),
         ],

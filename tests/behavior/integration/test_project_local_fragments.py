@@ -195,6 +195,13 @@ def test_file_reference_local_fragment_materializes(
     frag = consumer / ".spaex" / "constitution.d" / "_project" / "no-secrets.md"
     assert frag.exists()
 
+    # The source file is inside the swapped `.spaex` tree and must survive so
+    # the same manifest remains installable on the next invocation.
+    source = fragments_dir / "no-secrets.md"
+    assert source.exists()
+    assert _run_install(consumer, state_root, monkeypatch) == 0
+    assert source.exists()
+
 
 def _publish_shared_id_molecule(tmp_path: Path) -> tuple[str, str, Path]:
     working = tmp_path / "publisher-working"

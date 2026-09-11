@@ -130,6 +130,11 @@
           "pattern": "^[a-z0-9][a-z0-9-]*$",
           "description": "Fragment-local id. Emitted identity is `_project/<id>` (FR-018)."
         },
+        "kind": {
+          "const": "constitution_fragment",
+          "default": "constitution_fragment",
+          "description": "Optional fragment kind. Defaults to the standalone fragment kind."
+        },
         "atom_source": {
           "type": "string",
           "minLength": 1,

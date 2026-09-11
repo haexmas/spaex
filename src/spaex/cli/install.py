@@ -9,10 +9,11 @@ allocating a new generation ID or touching disk.
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import sys
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import nullcontext
 from pathlib import Path
 
@@ -205,6 +206,9 @@ def run(
             project_local = project_local_from_config(
                 getattr(manifest, "local_fragments", ()), repo_root=repo_root
             )
+            preserved_project_local_files = _preserved_project_local_files(
+                repo_root, getattr(manifest, "local_fragments", ())
+            )
             contributions, resolved = resolve_install_inputs(manifest, state_root)
             contributing_ids = {contribution.source.id for contribution in contributions}
 
@@ -250,6 +254,7 @@ def run(
                         repo_root,
                         state_root=state_root,
                         hook_only_records=tuple(hook_only_records),
+                        preserved_files=preserved_project_local_files,
                     )
                     new_generation_id = _live_generation_id(repo_root)
                     if hook_only_records:
@@ -306,7 +311,12 @@ def run(
                 and _constitution_contributor_matches_disk(repo_root, contribution)
             )
             stage_context = (
-                stage_constitution(contributions, repo_root, state_root=state_root)
+                stage_constitution(
+                    contributions,
+                    repo_root,
+                    state_root=state_root,
+                    preserved_files=preserved_project_local_files,
+                )
                 if hook_enabled and not contributor_matches_disk
                 else nullcontext()
             )
@@ -360,6 +370,7 @@ def run(
                     state_root=state_root,
                     hook_status=hook_status.get(contribution.source.id),
                     hook_only_records=tuple(hook_only_records),
+                    preserved_files=preserved_project_local_files,
                 )
                 new_generation_id = _live_generation_id(repo_root)
                 sys.stdout.write(f"installed generation {new_generation_id}\n")
@@ -414,6 +425,29 @@ def _preserve_generation_for_behavior(
             return False
 
     return _GenerationRollback()
+
+
+def _preserved_project_local_files(
+    repo_root: Path,
+    entries: Sequence[Mapping[str, object]],
+) -> tuple[transaction.StagedFile, ...]:
+    """Snapshot configured local fragment files that live inside `.spaex`."""
+    root = repo_root.resolve()
+    preserved: dict[str, transaction.StagedFile] = {}
+    for entry in entries:
+        if "file" not in entry:
+            continue
+        configured = Path(os.path.normpath(str(root / str(entry["file"]))))
+        try:
+            relative = configured.relative_to(root)
+            spaex_relative = relative.relative_to(transaction.SPAEX_DIR)
+        except ValueError:
+            continue
+        relative_name = spaex_relative.as_posix()
+        preserved[relative_name] = transaction.StagedFile(
+            relative_name, configured.read_bytes()
+        )
+    return tuple(preserved.values())
 
 
 def _has_behavior_fragments(resolved: Sequence[ResolvedMolecule]) -> bool:

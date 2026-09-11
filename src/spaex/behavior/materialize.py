@@ -193,9 +193,15 @@ def project_local_from_config(
                 raise ValueError(
                     f"{entry_path}: file-reference local fragment requires repo_root"
                 )
+            repo_root_resolved = repo_root.resolve()
+            candidate = (repo_root / str(entry["file"])).resolve()
+            if not candidate.is_relative_to(repo_root_resolved):
+                raise ValueError(
+                    f"{entry_path}: file-reference escapes repository root"
+                )
             fragments.append(
                 BehaviorFragment.from_file(
-                    repo_root / str(entry["file"]), molecule_id=PROJECT_SCOPE
+                    candidate, molecule_id=PROJECT_SCOPE
                 )
             )
             continue
