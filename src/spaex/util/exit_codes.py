@@ -48,5 +48,19 @@ PLAINTEXT_SECRET = 10
 # 13 — terminal-unsafe contribution encountered on the stdio path.
 TERMINAL_UNSAFE_CONTRIBUTION = 13
 
+# 20 — Spec 023 mechanical pre-check refuse (intra-molecule id-collision Case A;
+# duplicate-id-body-mismatch under matching modality). Diagnostic names every
+# offending fragment path and its producer molecule.
+BEHAVIOR_PRECHECK_REFUSE = 20
+
+# 21 — Spec 023 Composer refuse (cross-molecule semantic contradiction Case B
+# that the operator declined to reconcile).
+BEHAVIOR_SEMANTIC_REFUSE = 21
+
+# 22 — Spec 023 project-local additive-only refuse (FR-020): a
+# `_project/<fragment-id>` was declared whose bare fragment_id matches an
+# atom-provided fragment id in any pinned molecule.
+BEHAVIOR_PROJECT_LOCAL_REFUSE = 22
+
 # 64 — usage error (mutually exclusive flags supplied together).
 USAGE = 64
