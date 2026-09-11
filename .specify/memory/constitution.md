@@ -1,4 +1,28 @@
 <!--
+Sync Impact Report (2026-09-11 amendment)
+Version change: 1.4.1 -> 1.4.2 (PATCH: delivery-mechanism change, no principle content change)
+Modified sections:
+- This molecule now delivers its content to consumers as Spec 023 behavior
+  fragments (`atoms.behavior` in manifest.json, one fragment file per
+  directive under `fragments/`) instead of a single `atoms.constitution`
+  file. This document remains the authoritative human-readable text; the
+  fragments are a machine-composable derivative of it, consumed by
+  `spaex install` and merged into a project's `.spaex.md`.
+- Development Workflow: reworded the phasing-discipline bullet to drop its
+  pointer to `docs/plans/2026-08-26-haex-hive-design.md` (that doc's
+  "phase 0-7" model predates specs 007-023 and the split of the
+  personal-agent-plane work into the separate `holzi` project; the
+  underlying MUST-NOT-implement-ahead-of-prerequisites rule is unchanged).
+Added principles: none. Removed sections: none. Principle text otherwise
+unchanged.
+Follow-up TODOs:
+- After this PR merges: bump `.spaex.json` `compounds[0].revision` (and
+  `source`, currently the pre-rename `haexmas/haex-hive` URL) to the new
+  commit SHA and re-run `spaex install` to regenerate `.spaex/constitution.d/`
+  and `.spaex.md`. Under Principle IV the pin MUST be updated in a
+  follow-up commit; leaving it stale means the consumer keeps serving the
+  pre-amendment content until the revision advances.
+
 Sync Impact Report (2026-09-07 amendment)
 Version change: 1.4.0 -> 1.4.1 (PATCH: prose rename to spaex, no principle change)
 Modified sections:
@@ -9,8 +33,6 @@ Removed sections: none
 Principle text: unchanged (verified byte-for-byte diff outside prose references).
 ADR: docs/adr/0011-rename-to-spaex.md records the decision.
 Templates requiring updates: none (templates use placeholders, not product-name references).
-Follow-up TODOs:
-- After this PR merges: bump `.spaex.json` `compounds[0].revision` to the new commit SHA and re-run `spaex install` to regenerate `.spaex/constitution.md`. Under Principle IV the pin MUST be updated in a follow-up commit; leaving it stale means `spaex constitution show` continues to serve the pre-amendment content until the revision advances.
 
 Prior amendment (2026-09-02): 1.3.0 -> 1.4.0, MINOR expansion of the development workflow contract; added the "Declared speckit workflow adherence" bullet forward-referencing Spec 011.
 -->
@@ -21,6 +43,13 @@ Hard, non-negotiable invariants of the spaex system. Every spec, plan, and
 implementation MUST respect them. A change to any of these principles requires
 an explicit constitution amendment (see Governance below), not a per-spec
 exception.
+
+This document is the authoritative, human-readable text. `manifest.json`
+declares the same directives as Spec 023 behavior fragments under
+`fragments/` (one file per directive); `spaex install` composes those
+fragments into a consumer's `.spaex.md`. Amending a principle here MUST be
+mirrored in its corresponding fragment file in the same commit (Governance,
+below).
 
 ## Core Principles
 
@@ -230,10 +259,11 @@ agent unfiltered — which is every cross-tool handoff in this system.
   per-project workflow selection so an adopted `speckit-workflow` atom can
   replace or extend the local `workflow.yml` without touching this
   constitution.
-- The phasing discipline from the design doc (`docs/plans/2026-08-26-haex-hive-design.md`)
-  is binding: features MUST be sequenced by phase (0 → 7). Features for later
-  phases MAY be specified in advance, but MUST NOT be implemented before their
-  phase's prerequisites are actually in daily use.
+- Feature work MUST be sequenced by phase. Later-phase features MAY be
+  specified in advance, but MUST NOT be implemented before their own phase's
+  prerequisites are actually in daily use. The current phase sequence is
+  tracked in the project's own planning docs, not pinned to a specific
+  document name here.
 - Design decisions that materially affect any of the 7 principles above MUST be
   captured as ADRs under `docs/adr/`, not left in commit messages or chat
   history.
@@ -286,4 +316,4 @@ agent unfiltered — which is every cross-tool handoff in this system.
   Phase 7) validates that no committed file violates Principles I, II, or IV
   mechanically.
 
-**Version**: 1.4.1 | **Ratified**: 2026-08-26 | **Last Amended**: 2026-09-07
+**Version**: 1.4.2 | **Ratified**: 2026-08-26 | **Last Amended**: 2026-09-11
