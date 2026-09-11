@@ -65,13 +65,14 @@ def test_install_preserves_symlink_and_mode(tmp_path: Path) -> None:
     referent = tmp_path / "shared-instructions.md"
     referent.write_text("operator content\n", encoding="utf-8")
     referent.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    original_mode = stat.S_IMODE(referent.stat().st_mode)
     target.symlink_to(referent)
 
     bootstrap.install([bootstrap.Runtime.CLAUDE], home=home, env={})
 
     assert target.is_symlink()
     assert target.resolve() == referent
-    assert stat.S_IMODE(referent.stat().st_mode) == stat.S_IRUSR | stat.S_IWUSR
+    assert stat.S_IMODE(referent.stat().st_mode) == original_mode
     assert "operator content" in referent.read_text(encoding="utf-8")
     assert bootstrap.END_MARKER in referent.read_text(encoding="utf-8")
 
