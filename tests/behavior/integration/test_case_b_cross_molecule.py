@@ -184,7 +184,7 @@ def _run_install(
 
 
 def _shape_b_stub_factory() -> tuple[
-    "callable[..., InvokeOutcome]", list[dict[str, object]]
+    callable[..., InvokeOutcome], list[dict[str, object]]
 ]:
     """Composer stub that always returns Shape B, recording each invocation."""
     calls: list[dict[str, object]] = []
