@@ -17,6 +17,7 @@
       "fragments/conventional-commit-messages.md",
       "fragments/constitution-supersedes-spec-preferences.md",
       "fragments/amendment-procedure-requires-single-commit.md",
+      "fragments/amendment-mirrors-fragment-in-same-commit.md",
       "fragments/version-bump-rules-follow-semver.md",
       "fragments/constitution-enforcement-tooling.md"
     ]

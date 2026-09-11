@@ -5,7 +5,10 @@ Modified sections:
 - Development Workflow: corrected "the 7 principles above" to "the 8
   principles above" (this document defines Principles I-VIII; the count
   was stale even before the 1.4.2 fragment split).
-See ADR 0015 for the full list of corrections (also touching four
+Added fragments: `amendment-mirrors-fragment-in-same-commit` (the
+same-commit fragment-mirroring rule in this document's own intro, lines
+57-61, had no fragment of its own since the 1.4.2 split).
+See ADR 0015 for the full list of corrections (also touching five
 fragment files and ADR 0014's own text) found during post-merge review of
 PR #105.
 
