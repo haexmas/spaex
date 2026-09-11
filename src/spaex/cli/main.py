@@ -111,6 +111,41 @@ def _build_parser() -> argparse.ArgumentParser:
             "letting its hook touch the repo (Spec 016 FR-026, FR-028)."
         ),
     )
+    # Spec 023: --global switches install into bootstrap-block mode; the
+    # optional positional accepts a comma-separated runtime list.
+    install.add_argument(
+        "--global",
+        dest="global_mode",
+        action="store_true",
+        help=(
+            "Install/upgrade the global bootstrap block into every configured "
+            "runtime's user-global instruction file (contracts/cli-surface.md)."
+        ),
+    )
+    install.add_argument(
+        "--dry-run",
+        dest="dry_run",
+        action="store_true",
+        help="With --global: print target updates but do not write.",
+    )
+    install.add_argument(
+        "--check",
+        dest="check_only",
+        action="store_true",
+        help=(
+            "With --global: exit 0 if every runtime target carries the current "
+            "block version, non-zero otherwise (CI provisioning check)."
+        ),
+    )
+    install.add_argument(
+        "global_runtimes",
+        nargs="?",
+        default=None,
+        help=(
+            "With --global: comma-separated runtime names (claude, codex, "
+            "gemini); default is all three."
+        ),
+    )
 
     from spaex.cli import add as add_cli
 
@@ -153,6 +188,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.constitution_command == "show":
                 return constitution_cli.run_show(args)
         if args.command == "install":
+            if getattr(args, "global_mode", False):
+                from spaex.cli import behavior_commands
+
+                return behavior_commands.run_install_global(args)
             from spaex.cli import install as install_cli
 
             return install_cli.run(args)
