@@ -128,9 +128,8 @@ what the source document treats as one cohesive rule.
   `https://github.com/haexmas/haex-hive` to `https://github.com/haexmas/spaex`
   and its `revision` to the merged commit SHA, then run `spaex install` to
   regenerate `.spaex/constitution.d/` and `.spaex.md`, replacing the
-  now-superseded `.spaex/constitution.md` output (data-model.md's
-  migration-awareness note; Spec 023 Phase 11 T063 already tracks removing
-  any orphan writer of that path).
+  now-superseded `.spaex/constitution.md` output (Spec 023 Phase 11 T063
+  already tracks removing any orphan writer of that path).
 - Extend this same source/revision fix to every other worktree of this
   repo carrying the same stale `.spaex.json` (they share the same tracked
   file; fixing it on `main` fixes all of them once each worktree is synced).
