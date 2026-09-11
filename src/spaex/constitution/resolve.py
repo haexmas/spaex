@@ -52,6 +52,17 @@ class ResolvedMolecule:
     materialize the tree on demand via `repo_dir`, `source_url`,
     `revision`, and `molecule_path`. `repo_dir` is a local execution
     input, never a cache identity or versioned cross-device reference.
+
+    Spec 023 additions:
+    - `molecule_manifest` (optional) preserves the parsed manifest so
+      downstream passes (behavior orchestrator) can check for
+      `atoms.behavior` / `constitution_fragments` without re-parsing.
+    - `cache_dir` (optional) is the on-disk directory returned by
+      `molecule_store.get_or_extract` for this molecule at its pinned
+      revision; the behavior orchestrator reads standalone fragment
+      files from it. Both fields default to None so existing test
+      constructors that mock `ResolvedMolecule` without these fields
+      keep working.
     """
 
     molecule_id: str
@@ -61,6 +72,8 @@ class ResolvedMolecule:
     molecule_path: str
     install_hook: InstallHook | None
     effective_priority: int
+    molecule_manifest: MoleculeManifest | None = None
+    cache_dir: Path | None = None
 
 
 def resolve_constitution_contributions(
@@ -132,6 +145,8 @@ def resolve_install_inputs(
                 molecule_path=record.publisher_path,
                 install_hook=record.molecule_manifest.install_hook,
                 effective_priority=record.effective_priority,
+                molecule_manifest=record.molecule_manifest,
+                cache_dir=record.cache_dir,
             )
         )
         constitution_paths = record.molecule_manifest.atoms.get("constitution", ())

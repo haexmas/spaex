@@ -14,6 +14,7 @@ from collections.abc import Sequence
 from contextlib import nullcontext
 from pathlib import Path
 
+from spaex.behavior import orchestrate as behavior_orchestrate
 from spaex.constitution.publish import (
     CONSTITUTION_PATH,
     publish_constitution,
@@ -227,6 +228,11 @@ def run(
                         remove_prev=True,
                     )
                     sys.stdout.write("no changes\n")
+                    _run_behavior_pipeline(
+                        repo_root=repo_root,
+                        state_root=state_root,
+                        resolved=resolved,
+                    )
                     return exit_codes.SUCCESS
                 publish_constitution(
                     [],
@@ -243,6 +249,11 @@ def run(
                     sys.stdout.write(
                         f"installed empty generation {new_generation_id}\n"
                     )
+                _run_behavior_pipeline(
+                    repo_root=repo_root,
+                    state_root=state_root,
+                    resolved=resolved,
+                )
                 return exit_codes.SUCCESS
 
             molecule_ids = sorted(
@@ -320,6 +331,11 @@ def run(
                     remove_prev=True,
                 )
                 sys.stdout.write("no changes\n")
+                _run_behavior_pipeline(
+                    repo_root=repo_root,
+                    state_root=state_root,
+                    resolved=resolved,
+                )
                 return exit_codes.SUCCESS
 
             publish_constitution(
@@ -331,6 +347,11 @@ def run(
             )
             new_generation_id = _live_generation_id(repo_root)
             sys.stdout.write(f"installed generation {new_generation_id}\n")
+            _run_behavior_pipeline(
+                repo_root=repo_root,
+                state_root=state_root,
+                resolved=resolved,
+            )
             return exit_codes.SUCCESS
     except HaexError:
         raise
@@ -409,6 +430,44 @@ def _run_hooks(
             exit_code=exit_codes.INPUT_REFUSE,
         )
     return statuses
+
+
+def _run_behavior_pipeline(
+    *,
+    repo_root: Path,
+    state_root: Path,
+    resolved: list[ResolvedMolecule],
+) -> None:
+    """Spec 023 behavior-harness pass.
+
+    Runs after the Spec 008 `.spaex/` rename-swap so behavior-authored
+    files (`.spaex/constitution.d/`, `.spaex.md`, `.spaex/clarifications.json`)
+    survive the swap. Fast-path exits when no molecule declares behavior
+    fragments (plan.md §Backward compatibility). Composer + emit
+    failures surface as typed HaexError with exit codes 20-22 / 30-34.
+    """
+    outcome = behavior_orchestrate.run(
+        repo_root=repo_root,
+        state_root=state_root,
+        resolved=resolved,
+    )
+    if outcome.published and not outcome.skipped_composer:
+        sys.stdout.write(
+            f"composed .spaex.md ({outcome.fragment_count} fragment(s))\n"
+        )
+    elif outcome.skipped_composer:
+        sys.stdout.write(
+            f"reused .spaex.md ({outcome.fragment_count} fragment(s), "
+            "source_hash/build_input_hash unchanged)\n"
+        )
+    elif outcome.removed_spaex_md:
+        sys.stdout.write("removed .spaex.md (no active fragments)\n")
+    if outcome.published or outcome.skipped_composer:
+        # T036: nudge the operator to run `spaex install --global` when no
+        # runtime has the bootstrap block yet, so `.spaex.md` gets picked up.
+        from spaex.cli import behavior_commands  # local import to avoid cycles
+
+        behavior_commands.maybe_emit_no_bootstrap_hint()
 
 
 def _hook_only_records(

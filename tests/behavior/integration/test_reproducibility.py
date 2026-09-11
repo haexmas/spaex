@@ -1,0 +1,254 @@
+"""Reproducibility: byte-identical `.spaex.md` across two installs (T031, SC-003).
+
+Two invocations of `spaex install` on the same fixture must produce the
+same `.spaex.md` bytes. The second run uses the fingerprint short-circuit
+in `orchestrate.run` and does not re-invoke the Composer at all; the file
+is reused unchanged.
+"""
+
+from __future__ import annotations
+
+import json
+import shutil
+import subprocess
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from spaex.behavior import orchestrate as behavior_orchestrate
+from spaex.behavior.composer.invoke import (
+    ComposedShape,
+    ComposerInput,
+    InvokeOptions,
+    InvokeOutcome,
+    RuntimeDescriptor,
+)
+from spaex.cli import add as add_cli
+from spaex.cli import install as install_cli
+from spaex.migrate.transform import clone_dir
+
+
+pytestmark = pytest.mark.skipif(
+    shutil.which("git") is None, reason="git binary required"
+)
+
+
+_MOL = "com.example.publisher.repro"
+_CANONICAL = "https://example.invalid/example/publisher"
+
+
+def _git(cwd: Path, *args: str) -> str:
+    proc = subprocess.run(
+        ["git", "-C", str(cwd), *args], capture_output=True, text=True, check=True
+    )
+    return proc.stdout.strip()
+
+
+def _publish_repro_molecule(tmp_path: Path) -> tuple[str, str, Path]:
+    working = tmp_path / "publisher-working"
+    working.mkdir()
+    _git(working, "init", "-q", "-b", "main")
+    _git(working, "config", "user.email", "author@example.com")
+    _git(working, "config", "user.name", "author")
+    _git(working, "config", "commit.gpgsign", "false")
+
+    (working / "manifest.json").write_text(
+        json.dumps(
+            {
+                "spaex_version": "4",
+                "publisher": "com.example.publisher",
+                "molecules": {_MOL: {"path": "repro", "version": "1.0.0"}},
+            },
+            indent=2,
+        )
+    )
+    mol_dir = working / "repro"
+    mol_dir.mkdir()
+    (mol_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "spaex_version": "4",
+                "id": _MOL,
+                "version": "1.0.0",
+                "priority": 20,
+                "atoms": {"behavior": ["fragments/a.md", "fragments/b.md"]},
+            },
+            indent=2,
+        )
+    )
+    (mol_dir / "fragments").mkdir()
+    (mol_dir / "fragments" / "a.md").write_text(
+        "---\nid: rule-a\nkind: constitution_fragment\n"
+        "atom_source: pkg.a\nmodality: MUST\n---\n"
+        "**MUST** always do A.\n"
+    )
+    (mol_dir / "fragments" / "b.md").write_text(
+        "---\nid: rule-b\nkind: constitution_fragment\n"
+        "atom_source: pkg.b\nmodality: SHOULD\n---\n"
+        "**SHOULD** usually do B.\n"
+    )
+
+    _git(working, "add", ".")
+    _git(working, "commit", "-q", "-m", "reproducibility fixture")
+    head = _git(working, "rev-parse", "HEAD")
+
+    state_root = tmp_path / "state"
+    target = clone_dir(state_root, _CANONICAL)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ["git", "clone", "--bare", "-q", str(working), str(target)], check=True
+    )
+    return _CANONICAL, head, state_root
+
+
+def _make_consumer(tmp_path: Path) -> Path:
+    consumer = tmp_path / "consumer"
+    consumer.mkdir()
+    (consumer / ".spaex.json").write_text(
+        json.dumps(
+            {
+                "spaex_version": "4",
+                "identity": "com.example.project-consumer",
+                "compounds": [],
+            }
+        )
+    )
+    return consumer
+
+
+def _run_add(
+    consumer: Path,
+    state_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    source_url: str,
+    revision: str,
+) -> int:
+    monkeypatch.setenv("SPAEX_STATE", str(state_root))
+    ns = SimpleNamespace(
+        repo_root=str(consumer),
+        source_url=source_url,
+        molecule_ids=_MOL,
+        revision=revision,
+        all=False,
+        lock_timeout=5.0,
+    )
+    return add_cli.run(ns)
+
+
+def _run_install(
+    consumer: Path, state_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> int:
+    monkeypatch.setenv("SPAEX_STATE", str(state_root))
+    ns = SimpleNamespace(repo_root=str(consumer), lock_timeout=5.0)
+    return install_cli.run(ns)
+
+
+class _CountingStub:
+    """Counts every real Composer invocation; enforces byte-stable outputs."""
+
+    def __init__(self) -> None:
+        self.calls: int = 0
+
+    def __call__(
+        self,
+        composer_input: ComposerInput,
+        *,
+        repo_root: Path,
+        options: InvokeOptions | None = None,
+    ) -> InvokeOutcome:
+        self.calls += 1
+        payload = composer_input.to_json()
+        data = json.loads(payload)
+        src = data["expected_source_hash"]
+        bih = data["expected_build_input_hash"]
+        header = (
+            f'<!-- spaex-composed:source_hash="{src}" '
+            f'build_input_hash="{bih}" version="1" -->\n'
+            "# spaex Behavior Harness\n"
+            "\n"
+            "_This file is generated by `spaex install`. Do not edit by hand._\n"
+            "_Change fragments in `.spaex/constitution.d/` and re-run install._\n"
+            "\n"
+        )
+        must: list[str] = []
+        should: list[str] = []
+        for fragment in data["fragments"]:
+            scoped = f"{fragment['molecule_id']}/{fragment['fragment_id']}"
+            text = fragment["body"].strip().replace("**", "")
+            if text.endswith("."):
+                text = text[:-1]
+            bullet = f"- {text}. _[from `{scoped}`]_"
+            if fragment["modality"] == "SHOULD":
+                should.append(bullet)
+            else:
+                must.append(bullet)
+        parts = [header]
+        if must:
+            parts.append("## MUST\n\n" + "\n".join(must) + "\n\n")
+        if should:
+            parts.append("## SHOULD\n\n" + "\n".join(should) + "\n")
+        body = "".join(parts).rstrip() + "\n"
+        return InvokeOutcome(
+            result=ComposedShape(body=body),
+            runtime=RuntimeDescriptor(kind="stub", identifier="test"),
+            raw_output=body,
+        )
+
+
+def test_two_installs_yield_byte_identical_spaex_md(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    canonical, head, state_root = _publish_repro_molecule(tmp_path)
+    consumer = _make_consumer(tmp_path)
+    stub = _CountingStub()
+    monkeypatch.setattr(behavior_orchestrate, "invoke_composer", stub)
+
+    assert (
+        _run_add(consumer, state_root, monkeypatch, source_url=canonical, revision=head)
+        == 0
+    )
+    first = (consumer / ".spaex.md").read_bytes()
+    assert stub.calls == 1
+
+    assert _run_install(consumer, state_root, monkeypatch) == 0
+    second = (consumer / ".spaex.md").read_bytes()
+
+    assert first == second, ".spaex.md must be byte-identical across two installs"
+    assert stub.calls == 1, (
+        "reproducibility skip must reuse the committed artifact without "
+        "re-invoking the Composer when fragment set + prompt are unchanged"
+    )
+
+
+def test_prompt_override_invalidates_reproducibility_skip(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Adding `.spaex/composer-prompt.md` bumps `build_input_hash` and re-composes.
+
+    Fragment-drift invalidation (editing `.spaex/constitution.d/<f>.md` on disk
+    directly) belongs to Phase 8 T050; the source path of a fragment is the
+    pinned publisher tree, not the consumer's materialized copy.
+    """
+    canonical, head, state_root = _publish_repro_molecule(tmp_path)
+    consumer = _make_consumer(tmp_path)
+    stub = _CountingStub()
+    monkeypatch.setattr(behavior_orchestrate, "invoke_composer", stub)
+
+    assert (
+        _run_add(consumer, state_root, monkeypatch, source_url=canonical, revision=head)
+        == 0
+    )
+    first = (consumer / ".spaex.md").read_bytes()
+    assert stub.calls == 1
+
+    (consumer / ".spaex" / "composer-prompt.md").write_text(
+        "custom prompt override for this project\n", encoding="utf-8"
+    )
+
+    assert _run_install(consumer, state_root, monkeypatch) == 0
+    second = (consumer / ".spaex.md").read_bytes()
+
+    assert first != second
+    assert stub.calls == 2

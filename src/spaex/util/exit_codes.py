@@ -62,5 +62,13 @@ BEHAVIOR_SEMANTIC_REFUSE = 21
 # atom-provided fragment id in any pinned molecule.
 BEHAVIOR_PROJECT_LOCAL_REFUSE = 22
 
+# 30-34 — Spec 023 Composer failure surface (research.md §8, fail-fast per
+# FR-012a; no silent degradation to raw concatenation).
+BEHAVIOR_COMPOSER_TIMEOUT = 30
+BEHAVIOR_COMPOSER_RUNTIME_ERROR = 31
+BEHAVIOR_COMPOSER_INVALID_OUTPUT = 32
+BEHAVIOR_COMPOSER_QUOTA = 33
+BEHAVIOR_COMPOSER_NO_RUNTIME = 34
+
 # 64 — usage error (mutually exclusive flags supplied together).
 USAGE = 64
