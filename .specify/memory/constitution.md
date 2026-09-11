@@ -1,4 +1,14 @@
 <!--
+Sync Impact Report (2026-09-11 amendment, PR #105 review fixups)
+Version change: 1.4.2 -> 1.4.3 (PATCH: fidelity corrections, no principle content change)
+Modified sections:
+- Development Workflow: corrected "the 7 principles above" to "the 8
+  principles above" (this document defines Principles I-VIII; the count
+  was stale even before the 1.4.2 fragment split).
+See ADR 0015 for the full list of corrections (also touching four
+fragment files and ADR 0014's own text) found during post-merge review of
+PR #105.
+
 Sync Impact Report (2026-09-11 amendment)
 Version change: 1.4.1 -> 1.4.2 (PATCH: delivery-mechanism change, no principle content change)
 Modified sections:
@@ -264,7 +274,7 @@ agent unfiltered — which is every cross-tool handoff in this system.
   prerequisites are actually in daily use. The current phase sequence is
   tracked in the project's own planning docs, not pinned to a specific
   document name here.
-- Design decisions that materially affect any of the 7 principles above MUST be
+- Design decisions that materially affect any of the 8 principles above MUST be
   captured as ADRs under `docs/adr/`, not left in commit messages or chat
   history.
 - All work on this repo lands on `main` through a pull request. `main` is
@@ -316,4 +326,4 @@ agent unfiltered — which is every cross-tool handoff in this system.
   Phase 7) validates that no committed file violates Principles I, II, or IV
   mechanically.
 
-**Version**: 1.4.2 | **Ratified**: 2026-08-26 | **Last Amended**: 2026-09-11
+**Version**: 1.4.3 | **Ratified**: 2026-08-26 | **Last Amended**: 2026-09-11

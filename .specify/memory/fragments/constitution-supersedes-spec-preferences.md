@@ -5,4 +5,4 @@ atom_source: spaex.constitution
 modality: MUST
 tags: [governance]
 ---
-This constitution supersedes local per-spec preferences. Where a spec, plan, or task appears to conflict with a Core Principle, the principle MUST win by default; the conflict is resolved by changing the spec or plan, or by escalating to a constitution amendment, never by silently accepting an exception.
+This constitution supersedes local per-spec preferences. Where a spec, plan, or task appears to conflict with a Core Principle, the principle MUST win by default.
