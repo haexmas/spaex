@@ -4,26 +4,59 @@ Non-blocking research questions surfaced during planning. Each entry follows the
 
 ## 1. Composer invocation: shell-out to agent CLI vs. direct LLM API
 
-**Decision**: MVP supports BOTH paths, selected via runtime detection at Composer invocation time. First-choice is direct-API (litellm), fallback is CLI shell-out to whichever agent runtime is present.
+**Decision (revised for 4.2.0 implementation, 2026-09-11)**: CLI shell-out
+ONLY. spaex invokes `claude`, `codex`, or `gemini` as a subprocess in a
+one-shot non-interactive mode. Direct-API mode via `litellm` is out of scope
+for 4.2.0.
 
 **Rationale**:
-- Direct API via litellm is already in the spaex stack (memory `spaex_context_budget`), gives us predictable JSON responses, streaming control, retry semantics, and a stable programmatic surface for parsing the Composer's structured output (composed constitution + clarification questions when needed).
-- CLI shell-out via `claude`, `codex`, or `gemini` binaries is the fallback for consumers who have only their agent CLI installed and no LLM API key. This path is slower and less structured (parsing prose output), but keeps the "any agent works" promise from spec FR-017/023.
-- litellm's model-registry lets the Composer prompt request the runtime's canonical model without hardcoding.
+- The project's own workflow always invokes `spaex install` from an already
+  open agent CLI session. Shelling out to that CLI is the natural
+  composition path.
+- Making `litellm` a runtime dependency (or even an optional extra) pulls
+  in a large adapter graph (`openai`, `anthropic`, `google-generativeai`,
+  `tokenizers`, `tiktoken`, `boto3`, ...) that every `pip install spaex`
+  would carry for a feature no user of this project needs.
+- CLI shell-out is deterministic enough for SC-003 when the payload is
+  parsed and canonicalized by spaex (contracts/composer-interface.md
+  §Determinism aids).
+- Reintroducing a direct-API path later means adding roughly thirty lines
+  in `composer.invoke` plus an optional `spaex[llm]` extra. The
+  `stub_caller` hook on `InvokeOptions` already gives tests a seam.
+
+**Original decision (superseded)**: MVP supports BOTH paths, selected via
+runtime detection at Composer invocation time. First-choice was direct-API
+(litellm), fallback CLI shell-out. Superseded because the direct-API path
+had no consumer inside this project.
 
 **Alternatives considered**:
-- Direct API only. Rejected because consumers who use Claude Code without an Anthropic API key would need to configure one just to run `spaex install`.
-- CLI shell-out only. Rejected because CLI parsing is brittle (each runtime's session output format is different and unversioned).
-- MCP-based invocation. Rejected as premature: no runtime currently exposes a "compose this constitution" MCP tool, and defining one is a separate feature.
+- Both paths behind an optional extra. Rejected as YAGNI: no in-project
+  consumer of the API path, and every install still ships the code plumbing.
+- Direct API only. Rejected because it forces consumers to configure API
+  keys when they already have an interactive agent CLI running.
+- MCP-based invocation. Rejected as premature: no runtime currently
+  exposes a "compose this constitution" MCP tool, and defining one is a
+  separate feature.
 
 ## 2. Runtime detection order for the Composer
 
-**Decision**: Try direct API first (Anthropic, OpenAI, Google) via litellm using standard environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, or spaex's `SPAEX_LLM_MODEL` override). If no keys are configured, fall back to detecting an installed agent CLI in this priority order: `claude` (Claude Code), `codex` (Codex CLI), `gemini` (Gemini CLI). Order is stable across runs to keep reproducibility (spec SC-003).
+**Decision (revised for 4.2.0 implementation, 2026-09-11)**: Iterate the
+installed agent CLIs in the fixed priority order `claude`, `codex`,
+`gemini` and shell out to the first one found on PATH. Order is stable
+across runs to keep reproducibility (spec SC-003). No API-key-based
+runtime detection.
 
-**Rationale**: keeping the priority deterministic means the composed constitution is stable across runs on the same machine. If the operator wants a different runtime to compose, they set `SPAEX_LLM_MODEL` or unset unwanted keys.
+**Rationale**: keeping the priority deterministic means the composed
+constitution is stable across runs on the same machine. Operators pick a
+different runtime by adjusting PATH.
+
+**Original decision (superseded)**: try direct API first via litellm using
+`ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` / `SPAEX_LLM_MODEL`,
+then fall back to CLI shell-out.
 
 **Alternatives considered**:
-- Ask the operator interactively which runtime to use. Rejected because `spaex install` runs unattended in CI or scripting contexts.
+- Ask the operator interactively which runtime to use. Rejected because
+  `spaex install` runs unattended in CI or scripting contexts.
 - Random selection. Rejected: breaks reproducibility contract.
 
 ## 3. Global bootstrap target paths per runtime

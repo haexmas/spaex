@@ -1,17 +1,20 @@
-"""Composer invocation (Spec 023 T019).
+"""Composer invocation (Spec 023 T019, CLI-only in 4.2.0).
 
-Two invocation paths per research.md §1, §2:
+The Composer shells out to a locally installed agent CLI (`claude`, `codex`,
+`gemini`) in a fixed priority order. Runtime selection is stable so the
+composed constitution stays byte-reproducible (SC-003).
 
-1. Direct API via `litellm` when an LLM API key or explicit `SPAEX_LLM_MODEL`
-   is set. Preferred; deterministic (temperature=0) and structured.
-2. CLI shell-out to `claude`, `codex`, or `gemini` binaries in that priority
-   order. Fallback when no API key is available.
+Direct-API mode via `litellm` is deliberately out of scope for 4.2.0: the
+project's own workflow always invokes `spaex install` from an already-open
+agent CLI session, so shelling out to that CLI is the natural composition
+path and avoids pulling a large LLM adapter (litellm + openai + anthropic +
+google + tokenizers) into every `pip install spaex`. Reintroducing a
+direct-API path later means adding roughly thirty lines here plus an
+optional extra dep; the `stub_caller` hook in `InvokeOptions` already gives
+tests a seam for exercising alternative code paths.
 
-The runtime selection order is stable across runs so the composed
-constitution stays reproducible (SC-003).
-
-Every failure surfaces via `spaex.behavior.composer.failure.raise_for`, which
-maps to exit codes 30-34. Silent degradation is forbidden (FR-012a).
+Every failure surfaces via `spaex.behavior.composer.failure.raise_for`,
+which maps to exit codes 30-34. Silent degradation is forbidden (FR-012a).
 """
 
 from __future__ import annotations
@@ -42,7 +45,6 @@ COMPOSER_LOG_ENV = "SPAEX_COMPOSER_LOG"
 DEFAULT_COMPOSER_LOG = ".spaex/composer.log"
 TIMEOUT_ENV = "SPAEX_COMPOSER_TIMEOUT"
 DEFAULT_TIMEOUT_SECONDS = 30
-MODEL_OVERRIDE_ENV = "SPAEX_LLM_MODEL"
 
 SENTINEL_BEGIN = "<<<SPAEX-COMPOSER-BEGIN>>>"
 SENTINEL_END = "<<<SPAEX-COMPOSER-END>>>"
@@ -50,12 +52,6 @@ _SENTINEL_RE = re.compile(
     r"<<<SPAEX-COMPOSER-BEGIN>>>\s*(?P<json>.*?)\s*<<<SPAEX-COMPOSER-END>>>",
     re.DOTALL,
 )
-
-_DEFAULT_MODELS = {
-    "ANTHROPIC_API_KEY": "anthropic/claude-sonnet-4-5",
-    "OPENAI_API_KEY": "openai/gpt-4o-mini",
-    "GEMINI_API_KEY": "gemini/gemini-1.5-pro",
-}
 
 _CLI_RUNTIMES: tuple[str, ...] = ("claude", "codex", "gemini")
 
@@ -132,15 +128,20 @@ class InvokeOutcome:
 
 @dataclass(frozen=True)
 class InvokeOptions:
-    """Overrides for testing; production callers use defaults."""
+    """Overrides for testing; production callers use defaults.
 
-    api_keys_env: dict[str, str] = field(default_factory=dict)
-    forced_model: str | None = None
+    `stub_caller`, when set, receives `(runtime_name, system_prompt, payload,
+    timeout)` and returns the raw Composer output as a string, or raises an
+    exception the classifier maps to a failure category. Fault-injection
+    tests use this to avoid shelling out to a real CLI. `forced_cli_runtimes`
+    lets a test constrain the CLI priority list (pass `()` to force the
+    no-runtime failure).
+    """
+
     forced_cli_runtimes: tuple[str, ...] | None = None
     timeout_seconds: float | None = None
     composer_log_path: Path | None = None
-    api_caller: Callable[[str, str, str, float], str] | None = None
-    cli_caller: Callable[[str, str, str, float], str] | None = None
+    stub_caller: Callable[[str, str, str, float], str] | None = None
 
 
 def invoke_composer(
@@ -151,38 +152,42 @@ def invoke_composer(
 ) -> InvokeOutcome:
     """Run the Composer and return its parsed output.
 
-    The selection order (research.md §2):
+    Runtime selection order (research.md §2, 4.2.0 CLI-only variant):
 
-    1. Direct API via litellm when a key or `SPAEX_LLM_MODEL` is set.
-    2. CLI shell-out to `claude`, `codex`, `gemini` in that priority order.
-    3. `no-runtime` failure (exit 34) when neither path is available.
+    1. If `options.stub_caller` is set, hand the call to it. Testing only.
+    2. Iterate `_CLI_RUNTIMES` in a stable order; use the first one on PATH.
+    3. `no-runtime` failure (exit 34) when no CLI is found.
     """
     options = options or InvokeOptions()
 
-    env = _resolve_env(options)
     prompt = load_effective_prompt(repo_root)
     payload = composer_input.to_json()
     timeout = _resolve_timeout(options)
     log_path = _resolve_log_path(options, repo_root)
-
-    api_model = _pick_api_model(env, options)
-    if api_model is not None:
-        raw = _call_api(api_model, prompt, payload, timeout, options)
-        result = _parse(raw, log_path=log_path)
-        return InvokeOutcome(
-            result=result,
-            runtime=RuntimeDescriptor(kind="api", identifier=api_model),
-            raw_output=raw,
-        )
 
     cli_runtimes = (
         options.forced_cli_runtimes
         if options.forced_cli_runtimes is not None
         else _CLI_RUNTIMES
     )
+
+    if options.stub_caller is not None:
+        # Tests skip PATH-detection: the stub answers for whichever runtime
+        # was picked first (or a synthetic "stub" identifier when none was
+        # requested), so scenarios like "no-runtime" stay reachable by
+        # passing `forced_cli_runtimes=()` and leaving stub_caller unset.
+        name = cli_runtimes[0] if cli_runtimes else "stub"
+        raw = _call_stub(options.stub_caller, name, prompt, payload, timeout)
+        result = _parse(raw, log_path=log_path)
+        return InvokeOutcome(
+            result=result,
+            runtime=RuntimeDescriptor(kind="stub", identifier=name),
+            raw_output=raw,
+        )
+
     for name in cli_runtimes:
-        if _cli_available(name, options):
-            raw = _call_cli(name, prompt, payload, timeout, options)
+        if shutil.which(name) is not None:
+            raw = _call_cli(name, prompt, payload, timeout)
             result = _parse(raw, log_path=log_path)
             return InvokeOutcome(
                 result=result,
@@ -195,12 +200,6 @@ def invoke_composer(
         "no LLM runtime available for the Composer",
     )
     raise AssertionError("raise_for did not raise")  # unreachable; makes mypy happy
-
-
-def _resolve_env(options: InvokeOptions) -> dict[str, str]:
-    if options.api_keys_env:
-        return dict(options.api_keys_env)
-    return dict(os.environ)
 
 
 def _resolve_timeout(options: InvokeOptions) -> float:
@@ -227,72 +226,19 @@ def _resolve_log_path(options: InvokeOptions, repo_root: Path) -> Path:
     return repo_root / DEFAULT_COMPOSER_LOG
 
 
-def _pick_api_model(env: dict[str, str], options: InvokeOptions) -> str | None:
-    if options.forced_model is not None:
-        return options.forced_model
-    override = env.get(MODEL_OVERRIDE_ENV)
-    if override:
-        return override
-    for key, model in _DEFAULT_MODELS.items():
-        if env.get(key):
-            return model
-    return None
-
-
-def _cli_available(name: str, options: InvokeOptions) -> bool:
-    if options.cli_caller is not None:
-        return True
-    return shutil.which(name) is not None
-
-
-def _call_api(
-    model: str,
+def _call_stub(
+    stub: Callable[[str, str, str, float], str],
+    name: str,
     system_prompt: str,
     payload: str,
     timeout: float,
-    options: InvokeOptions,
 ) -> str:
-    """Direct-API invocation via litellm.
-
-    Litellm is imported lazily so consumers whose install path never trips the
-    Composer do not pay the import cost.
-    """
-    if options.api_caller is not None:
-        try:
-            return options.api_caller(model, system_prompt, payload, timeout)
-        except Exception as exc:  # noqa: BLE001
-            category = _classify_api_exception(exc)
-            raise_for(category, f"{type(exc).__name__}: {exc}")
-            raise AssertionError("unreachable") from exc
+    """Route a stubbed invocation through the same failure classifier as CLI."""
     try:
-        import litellm  # noqa: PLC0415
-    except ImportError as exc:  # pragma: no cover
-        raise_for(
-            ComposerFailureCategory.NO_RUNTIME,
-            f"litellm import failed: {exc}",
-        )
-        raise AssertionError("unreachable")
-    try:
-        response = litellm.completion(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": payload},
-            ],
-            temperature=0.0,
-            timeout=timeout,
-        )
+        return stub(name, system_prompt, payload, timeout)
     except Exception as exc:  # noqa: BLE001
-        category = _classify_api_exception(exc)
+        category = _classify_stub_exception(exc)
         raise_for(category, f"{type(exc).__name__}: {exc}")
-        raise AssertionError("unreachable") from exc
-    try:
-        return response["choices"][0]["message"]["content"]  # type: ignore[index,no-any-return]
-    except (KeyError, IndexError, TypeError) as exc:
-        raise_for(
-            ComposerFailureCategory.RUNTIME_ERROR,
-            f"litellm response missing expected fields: {exc}",
-        )
         raise AssertionError("unreachable") from exc
 
 
@@ -301,11 +247,8 @@ def _call_cli(
     system_prompt: str,
     payload: str,
     timeout: float,
-    options: InvokeOptions,
 ) -> str:
-    """CLI shell-out to a locally installed agent runtime."""
-    if options.cli_caller is not None:
-        return options.cli_caller(name, system_prompt, payload, timeout)
+    """Shell out to a locally installed agent CLI runtime."""
     argv = _cli_argv(name)
     stdin_input = _cli_stdin(system_prompt, payload)
     try:
@@ -342,8 +285,7 @@ def _cli_argv(name: str) -> list[str]:
     """Runtime-specific argv for a one-shot non-interactive session.
 
     Kept minimal; each runtime's non-interactive contract is documented in
-    research.md §1. Consumers may set SPAEX_LLM_MODEL and use the API path
-    for full determinism.
+    research.md §1 (updated to reflect the CLI-only decision).
     """
     if name == "claude":
         return ["claude", "--print"]
@@ -411,7 +353,7 @@ def _parse(raw: str, *, log_path: Path) -> ComposerResult:
                 "Shape B response has no questions",
             )
             raise AssertionError("unreachable")
-        parsed = tuple(_parse_question(q, log_path=log_path, raw=raw) for q in questions_raw)
+        parsed = tuple(_parse_question(q, log_path=log_path, raw_output=raw) for q in questions_raw)
         return QuestionsShape(questions=parsed)
 
     _write_composer_log(log_path, raw)
@@ -482,19 +424,18 @@ def _write_composer_log(path: Path, raw: str) -> None:
         pass
 
 
-def _classify_api_exception(exc: Exception) -> ComposerFailureCategory:
-    """Map a litellm exception class name into a Composer failure category.
+def _classify_stub_exception(exc: Exception) -> ComposerFailureCategory:
+    """Map a stubbed exception class name into a Composer failure category.
 
-    Kept string-based to avoid a hard import on litellm's exception hierarchy
-    (which changes across versions). Falls back to `runtime-error`.
+    Fault-injection tests craft exception classes whose names include
+    "timeout", "ratelimit", "quota", etc. so this classifier remains a thin
+    string match. Real CLI-path failures never reach this function.
     """
     name = type(exc).__name__.lower()
     if "timeout" in name:
         return ComposerFailureCategory.TIMEOUT
     if "ratelimit" in name or "quota" in name or "insufficient" in name:
         return ComposerFailureCategory.QUOTA
-    if "auth" in name or "permission" in name:
-        return ComposerFailureCategory.RUNTIME_ERROR
     return ComposerFailureCategory.RUNTIME_ERROR
 
 
@@ -529,7 +470,6 @@ __all__ = [
     "COMPOSER_LOG_ENV",
     "DEFAULT_COMPOSER_LOG",
     "DEFAULT_TIMEOUT_SECONDS",
-    "MODEL_OVERRIDE_ENV",
     "SENTINEL_BEGIN",
     "SENTINEL_END",
     "TIMEOUT_ENV",

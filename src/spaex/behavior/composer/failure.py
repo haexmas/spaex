@@ -78,9 +78,8 @@ class ComposerNoRuntimeError(HaexError):
     diagnostic_key: str = "behavior-composer-no-runtime"
     exit_code: int = exit_codes.BEHAVIOR_COMPOSER_NO_RUNTIME
     hint: str = (
-        "No LLM runtime available. Set ANTHROPIC_API_KEY / OPENAI_API_KEY / "
-        "GEMINI_API_KEY (or SPAEX_LLM_MODEL) to enable direct-API mode, or "
-        "install `claude`, `codex`, or `gemini` on PATH for CLI shell-out."
+        "No LLM runtime available. Install `claude`, `codex`, or `gemini` "
+        "on PATH so `spaex install` can shell out to compose `.spaex.md`."
     )
 
 

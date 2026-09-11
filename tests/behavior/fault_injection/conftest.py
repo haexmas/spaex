@@ -7,12 +7,12 @@ through a canned scenario ("timeout", "quota", ...) and observe the raised
 
 Scenarios covered:
 
-- `timeout` — API path raises a MockTimeout named to trigger the classifier.
-- `runtime-error` — API path raises a generic exception.
-- `quota` — API path raises a MockRateLimit named to trigger the classifier.
-- `invalid-output` — API path returns unparseable text.
-- `no-runtime` — no API keys, no CLI runtimes detected.
-- `shape-a` — API path returns a valid Shape A response (parses cleanly).
+- `timeout` — stub raises MockTimeout named to trigger the classifier.
+- `runtime-error` — stub raises a generic exception.
+- `quota` — stub raises MockRateLimit named to trigger the classifier.
+- `invalid-output` — stub returns unparseable text.
+- `no-runtime` — no CLI runtimes detected.
+- `shape-a` — stub returns a valid Shape A response (parses cleanly).
 """
 
 from __future__ import annotations
@@ -32,11 +32,11 @@ from spaex.behavior.composer.invoke import (
 
 
 class MockTimeout(Exception):
-    """Named so `_classify_api_exception` maps it to `timeout`."""
+    """Named so `_classify_stub_exception` maps it to `timeout`."""
 
 
 class MockRateLimit(Exception):
-    """Named so `_classify_api_exception` maps it to `quota`."""
+    """Named so `_classify_stub_exception` maps it to `quota`."""
 
 
 def _shape_a_body(
@@ -61,19 +61,19 @@ def _shape_a_body(
 
 
 @dataclass
-class _RecordingApiCaller:
-    """Stubs the litellm path; records calls, returns/raises per scenario."""
+class _RecordingStubCaller:
+    """Records calls and returns/raises per scenario."""
 
     scenario: str
     shape_a_body_override: str | None = None
     invocations: list[dict[str, Any]] = field(default_factory=list)
 
     def __call__(
-        self, model: str, system_prompt: str, payload: str, timeout: float
+        self, runtime: str, system_prompt: str, payload: str, timeout: float
     ) -> str:
         self.invocations.append(
             {
-                "model": model,
+                "runtime": runtime,
                 "system_prompt": system_prompt,
                 "payload": payload,
                 "timeout": timeout,
@@ -103,7 +103,7 @@ class MockComposer:
 
     scenario: str
     options: InvokeOptions
-    caller: _RecordingApiCaller | None = None
+    caller: _RecordingStubCaller | None = None
 
     @property
     def calls(self) -> list[dict[str, Any]]:
@@ -130,18 +130,15 @@ def mock_composer() -> Callable[..., MockComposer]:
             return MockComposer(
                 scenario=scenario,
                 options=InvokeOptions(
-                    api_keys_env={},
                     forced_cli_runtimes=(),
                     timeout_seconds=timeout_seconds,
                 ),
             )
-        caller = _RecordingApiCaller(
+        caller = _RecordingStubCaller(
             scenario=scenario, shape_a_body_override=shape_a_body
         )
         options = InvokeOptions(
-            api_keys_env={"ANTHROPIC_API_KEY": "mock-key"},
-            forced_model="anthropic/mock",
-            api_caller=caller,
+            stub_caller=caller,
             timeout_seconds=timeout_seconds,
         )
         return MockComposer(scenario=scenario, options=options, caller=caller)

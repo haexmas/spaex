@@ -23,14 +23,14 @@ def test_no_runtime_raises_typed_error_with_exit_34(
     assert exit_codes.BEHAVIOR_COMPOSER_NO_RUNTIME == 34
 
 
-def test_no_runtime_hint_mentions_all_three_env_vars(
+def test_no_runtime_hint_names_every_supported_cli(
     mock_composer, repo_root: Path
 ) -> None:
+    """4.2.0 ships CLI-only; direct-API mode is out of scope (see invoke.py)."""
     composer = mock_composer("no-runtime")
     with pytest.raises(ComposerNoRuntimeError) as exc:
         composer.invoke(repo_root)
     hint = exc.value.hint
-    for token in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"):
-        assert token in hint
     for runtime in ("claude", "codex", "gemini"):
         assert runtime in hint
+    assert "PATH" in hint
