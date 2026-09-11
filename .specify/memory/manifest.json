@@ -1,11 +1,28 @@
 {
   "atoms": {
-    "constitution": [
-      "constitution.md"
+    "behavior": [
+      "fragments/no-secrets-in-git.md",
+      "fragments/no-local-absolute-paths.md",
+      "fragments/device-independent-project-identity.md",
+      "fragments/cross-repo-refs-pin-immutable-revisions.md",
+      "fragments/external-sources-opt-in-per-project.md",
+      "fragments/self-modifying-instructions-review-gated.md",
+      "fragments/relay-unavailability-never-blocks-local-work.md",
+      "fragments/no-concealment-in-agent-output.md",
+      "fragments/speckit-workflow-adherence.md",
+      "fragments/phasing-discipline.md",
+      "fragments/adrs-for-principle-affecting-decisions.md",
+      "fragments/pr-required-for-main.md",
+      "fragments/merge-strategy-no-squash.md",
+      "fragments/conventional-commit-messages.md",
+      "fragments/constitution-supersedes-spec-preferences.md",
+      "fragments/amendment-procedure-requires-single-commit.md",
+      "fragments/version-bump-rules-follow-semver.md",
+      "fragments/constitution-enforcement-tooling.md"
     ]
   },
   "id": "com.github.haexmas.spaex.constitution",
   "priority": 10,
   "spaex_version": "4",
-  "version": "1.4.1"
+  "version": "1.4.2"
 }
