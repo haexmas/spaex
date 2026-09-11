@@ -28,7 +28,6 @@ from spaex.cli import add as add_cli
 from spaex.cli import install as install_cli
 from spaex.migrate.transform import clone_dir
 
-
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None, reason="git binary required"
 )

@@ -32,7 +32,6 @@ from spaex.behavior.composer.failure import (
 from spaex.behavior.composer.invoke import ComposedShape
 from spaex.behavior.fragment import BehaviorFragment
 
-
 SPAEX_MD_FILENAME = ".spaex.md"
 
 _HEADER_RE = re.compile(
@@ -201,7 +200,7 @@ def _source_record(fragment: BehaviorFragment) -> dict[str, object]:
 
 
 def _parse_header(body: str) -> Mapping[str, str] | None:
-    match = _HEADER_RE.search(body)
+    match = _HEADER_RE.match(body)
     if match is None:
         return None
     return {

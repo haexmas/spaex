@@ -9,7 +9,9 @@ allocating a new generation ID or touching disk.
 from __future__ import annotations
 
 import argparse
+import shutil
 import sys
+import tempfile
 from collections.abc import Sequence
 from contextlib import nullcontext
 from pathlib import Path
@@ -234,26 +236,27 @@ def run(
                         resolved=resolved,
                     )
                     return exit_codes.SUCCESS
-                publish_constitution(
-                    [],
-                    repo_root,
-                    state_root=state_root,
-                    hook_only_records=tuple(hook_only_records),
-                )
-                new_generation_id = _live_generation_id(repo_root)
-                if hook_only_records:
-                    sys.stdout.write(
-                        f"installed generation {new_generation_id}\n"
+                with _preserve_generation_for_behavior(repo_root, resolved):
+                    publish_constitution(
+                        [],
+                        repo_root,
+                        state_root=state_root,
+                        hook_only_records=tuple(hook_only_records),
                     )
-                else:
-                    sys.stdout.write(
-                        f"installed empty generation {new_generation_id}\n"
+                    new_generation_id = _live_generation_id(repo_root)
+                    if hook_only_records:
+                        sys.stdout.write(
+                            f"installed generation {new_generation_id}\n"
+                        )
+                    else:
+                        sys.stdout.write(
+                            f"installed empty generation {new_generation_id}\n"
+                        )
+                    _run_behavior_pipeline(
+                        repo_root=repo_root,
+                        state_root=state_root,
+                        resolved=resolved,
                     )
-                _run_behavior_pipeline(
-                    repo_root=repo_root,
-                    state_root=state_root,
-                    resolved=resolved,
-                )
                 return exit_codes.SUCCESS
 
             molecule_ids = sorted(
@@ -338,20 +341,21 @@ def run(
                 )
                 return exit_codes.SUCCESS
 
-            publish_constitution(
-                contributions,
-                repo_root,
-                state_root=state_root,
-                hook_status=hook_status.get(contribution.source.id),
-                hook_only_records=tuple(hook_only_records),
-            )
-            new_generation_id = _live_generation_id(repo_root)
-            sys.stdout.write(f"installed generation {new_generation_id}\n")
-            _run_behavior_pipeline(
-                repo_root=repo_root,
-                state_root=state_root,
-                resolved=resolved,
-            )
+            with _preserve_generation_for_behavior(repo_root, resolved):
+                publish_constitution(
+                    contributions,
+                    repo_root,
+                    state_root=state_root,
+                    hook_status=hook_status.get(contribution.source.id),
+                    hook_only_records=tuple(hook_only_records),
+                )
+                new_generation_id = _live_generation_id(repo_root)
+                sys.stdout.write(f"installed generation {new_generation_id}\n")
+                _run_behavior_pipeline(
+                    repo_root=repo_root,
+                    state_root=state_root,
+                    resolved=resolved,
+                )
             return exit_codes.SUCCESS
     except HaexError:
         raise
@@ -361,6 +365,52 @@ def run(
             diagnostic_key="install-failed",
             exit_code=exit_codes.INPUT_REFUSE,
         ) from exc
+
+
+def _preserve_generation_for_behavior(
+    repo_root: Path, resolved: Sequence[ResolvedMolecule]
+):
+    """Keep a copy of the live generation until behavior orchestration passes."""
+    live = repo_root / transaction.SPAEX_DIR
+    if not _has_behavior_fragments(resolved):
+        return nullcontext()
+
+    backup_root = Path(
+        tempfile.mkdtemp(prefix=".spaex-install-rollback-", dir=repo_root.parent)
+    )
+    backup_live = backup_root / transaction.SPAEX_DIR
+    had_live = live.exists()
+    if had_live:
+        shutil.copytree(live, backup_live, symlinks=True)
+
+    class _GenerationRollback:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            try:
+                if exc_type is not None:
+                    if live.exists():
+                        shutil.rmtree(live)
+                    if had_live:
+                        backup_live.rename(live)
+            finally:
+                shutil.rmtree(backup_root, ignore_errors=True)
+            return False
+
+    return _GenerationRollback()
+
+
+def _has_behavior_fragments(resolved: Sequence[ResolvedMolecule]) -> bool:
+    """Return whether the resolved set can trigger behavior orchestration."""
+    return any(
+        record.molecule_manifest is not None
+        and (
+            bool(record.molecule_manifest.atoms.get("behavior"))
+            or bool(record.molecule_manifest.constitution_fragments)
+        )
+        for record in resolved
+    )
 
 
 def _run_hooks(

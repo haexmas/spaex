@@ -70,7 +70,7 @@ Single-project Python layout: `src/spaex/`, `tests/behavior/` at repository root
 **Independent test**: fixture project with two pinned molecules each contributing one fragment; `spaex install` writes `.spaex.md` with both directives grouped by modality with visible provenance; a mocked runtime session reading its global instruction file discovers `.spaex.md` and loads its content.
 
 - [X] T018 [US1] Author the canonical Composer system prompt as a string constant in src/spaex/behavior/composer/prompt.py per contracts/composer-interface.md §"Canonical system prompt" (FR-008, FR-010, FR-010a)
-- [X] T019 [US1] Implement Composer invocation in src/spaex/behavior/composer/invoke.py with runtime detection order (direct-API via litellm first, then claude/codex/gemini CLI shell-out); parse Shape A and Shape B responses; enforce SPAEX_COMPOSER_TIMEOUT (research.md §1, §2; contracts/composer-interface.md)
+- [X] T019 [US1] Implement CLI-only Composer invocation in src/spaex/behavior/composer/invoke.py with stable runtime detection order (claude, codex, gemini); parse Shape A and Shape B responses; enforce SPAEX_COMPOSER_TIMEOUT and retain the `stub_caller` test seam (research.md §1, §2; contracts/composer-interface.md)
 - [X] T020 [P] [US1] Implement Composer failure categorization + exit codes in src/spaex/behavior/composer/failure.py per research.md §8 (FR-012a; five categories: timeout, runtime-error, invalid-output, quota, no-runtime)
 - [X] T021 [P] [US1] Fault-injection test scaffolding in tests/behavior/fault_injection/conftest.py with a MockComposer fixture that emits configurable failure categories (SC-011)
 - [X] T022 [P] [US1] Fault-injection test tests/behavior/fault_injection/test_composer_timeout.py (SC-011, exit 30)

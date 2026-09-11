@@ -106,7 +106,7 @@ def precheck(fragments: Sequence[BehaviorFragment]) -> PrecheckOutcome:
     deduped: list[BehaviorFragment] = []
     dedup_provenance: dict[str, tuple[BehaviorFragment, ...]] = {}
 
-    for (molecule_id, fragment_id), members in groups.items():
+    for members in groups.values():
         _check_intra_molecule_modality_collision(members)
         canonical, extras = _dedupe_by_normalized_body(members)
         deduped.append(canonical)
@@ -170,7 +170,7 @@ def _dedupe_by_normalized_body(
     Order-independent: sorts members by `atom_source` first so the
     "canonical" pick is stable across install runs (SC-003).
     """
-    ordered = sorted(members, key=lambda m: (m.atom_source, id(m)))
+    ordered = sorted(members, key=lambda m: (m.atom_source, m.tags, m.body))
     canonical = ordered[0]
     canonical_hash = canonical.body_hash
     extras: list[BehaviorFragment] = []

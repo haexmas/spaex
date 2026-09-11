@@ -18,7 +18,6 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -37,7 +36,6 @@ from spaex.behavior.composer.invoke import (
 from spaex.cli import add as add_cli
 from spaex.cli import install as install_cli
 from spaex.migrate.transform import clone_dir
-
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None, reason="git binary required"
@@ -191,15 +189,6 @@ def _shape_a_from_payload(payload: str) -> str:
     data = json.loads(payload)
     src = data["expected_source_hash"]
     bih = data["expected_build_input_hash"]
-    lines = [
-        "<<<SPAEX-COMPOSER-BEGIN>>>",
-        '{"type": "composed", "questions": []}',
-        "<<<SPAEX-COMPOSER-END>>>",
-        "",
-        (
-            f'<!-- spaex-composed:source__placeholder -->\n'
-        ),
-    ]
     header = (
         f'<!-- spaex-composed:source_hash="{src}" '
         f'build_input_hash="{bih}" version="1" -->\n'

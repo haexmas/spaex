@@ -53,23 +53,12 @@ def maybe_emit_no_bootstrap_hint() -> None:
     settings) is silently ignored so a bad user config never breaks the
     per-project install.
     """
-    try:
-        if bootstrap.check():
-            return
-        found_any = False
-        for runtime in bootstrap.ALL_RUNTIMES:
-            try:
-                targets = bootstrap.resolve_targets(runtime)
-            except HaexError:
-                continue
-            for target in targets:
-                if target.exists():
-                    found_any = True
-                    break
-            if found_any:
-                break
-    except HaexError:
-        return
+    for runtime in bootstrap.ALL_RUNTIMES:
+        try:
+            if bootstrap.check([runtime]):
+                return
+        except HaexError:
+            continue
     sys.stderr.write(
         "hint: no runtime global bootstrap detected on this machine; "
         "run `spaex install --global` so agent runtimes discover .spaex.md "

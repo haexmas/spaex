@@ -23,7 +23,9 @@ staging tree without invoking the Composer.
 
 from __future__ import annotations
 
+import os
 import shutil
+import tempfile
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -34,10 +36,6 @@ from spaex.behavior.composer.clarifications import (
     invalidate,
     load,
     save,
-)
-from spaex.behavior.composer.failure import (
-    ComposerFailureCategory,
-    raise_for,
 )
 from spaex.behavior.composer.invoke import (
     ComposedShape,
@@ -52,7 +50,7 @@ from spaex.behavior.composer.prompt import (
     load_effective_prompt,
 )
 from spaex.behavior.emit import (
-    SPAEX_MD_FILENAME,
+    EmitOutcome,
     compute_build_input_hash,
     compute_source_hash,
     emit_composed,
@@ -61,13 +59,12 @@ from spaex.behavior.emit import (
 )
 from spaex.behavior.fragment import BehaviorFragment
 from spaex.behavior.materialize import MoleculeInput, materialize
-from spaex.behavior.precheck import PrecheckOutcome, precheck
+from spaex.behavior.precheck import PrecheckOutcome
 from spaex.constitution.resolve import ResolvedMolecule
 from spaex.git import molecule_store
 from spaex.model.molecule_manifest import MoleculeManifest
 from spaex.util import exit_codes
 from spaex.util.errors import HaexError
-
 
 SPAEX_DIR = ".spaex"
 CONSTITUTION_D_DIRNAME = "constitution.d"
@@ -128,13 +125,20 @@ def run(
     fragments = tuple(m.fragment for m in materialized)
 
     if not fragments:
-        _reset_scratch(staging)
-        removed = remove_if_exists(repo_root)
-        _clear_target(target)
+        removed = _publish_empty_artifacts(
+            repo_root=repo_root,
+            staging=staging,
+            target=target,
+            prev=prev,
+        )
         return BehaviorOutcome(fragment_count=0, removed_spaex_md=removed)
 
-    outcome = precheck(fragments)
-    canonical_fragments = outcome.fragments
+    canonical_fragments = fragments
+    dedup_provenance = {
+        m.fragment.scoped_id: m.dedup_provenance
+        for m in materialized
+        if m.dedup_provenance
+    }
 
     source_hash = compute_source_hash(canonical_fragments)
     prompt_text = load_effective_prompt(repo_root)
@@ -157,16 +161,19 @@ def run(
         and existing == (source_hash, build_input_hash)
         and not removed_keys
     ):
-        _publish_constitution_d(staging=staging, target=target, prev=prev)
-        _reset_scratch(staging)
-        _reset_scratch(prev)
+        _commit_behavior_artifacts(
+            repo_root=repo_root,
+            staging=staging,
+            target=target,
+            prev=prev,
+        )
         return BehaviorOutcome(
             fragment_count=len(canonical_fragments),
             published=True,
             skipped_composer=True,
             source_hash=source_hash,
             build_input_hash=build_input_hash,
-            dedup_provenance=dict(outcome.dedup_provenance),
+            dedup_provenance=dedup_provenance,
         )
 
     composer_input = ComposerInput(
@@ -199,30 +206,114 @@ def run(
 
     assert isinstance(invoke_result.result, ComposedShape)
 
-    _publish_constitution_d(staging=staging, target=target, prev=prev)
-    try:
-        emit_outcome = emit_composed(
-            invoke_result.result,
-            repo_root=repo_root,
-            expected_source_hash=source_hash,
-            expected_build_input_hash=build_input_hash,
-        )
-    except Exception:
-        _rollback_constitution_d(target=target, prev=prev)
-        raise
-
-    if removed_keys or _is_clarifications_content_changed(clarifications_path, store):
-        save(clarifications_path, store)
-
-    _reset_scratch(prev)
+    emit_outcome = _commit_behavior_artifacts(
+        repo_root=repo_root,
+        staging=staging,
+        target=target,
+        prev=prev,
+        composed=invoke_result.result,
+        expected_source_hash=source_hash,
+        expected_build_input_hash=build_input_hash,
+        clarifications_path=clarifications_path,
+        clarifications=store,
+        save_clarifications=bool(
+            removed_keys or _is_clarifications_content_changed(clarifications_path, store)
+        ),
+    )
 
     return BehaviorOutcome(
         fragment_count=len(canonical_fragments),
         published=True,
         source_hash=emit_outcome.source_hash,
         build_input_hash=emit_outcome.build_input_hash,
-        dedup_provenance=dict(outcome.dedup_provenance),
+        dedup_provenance=dedup_provenance,
     )
+
+
+def _publish_empty_artifacts(
+    *, repo_root: Path, staging: Path, target: Path, prev: Path
+) -> bool:
+    """Commit an empty behavior generation with rollback protection."""
+    removed = (repo_root / ".spaex.md").exists()
+    _commit_behavior_artifacts(
+        repo_root=repo_root,
+        staging=staging,
+        target=target,
+        prev=prev,
+        remove_spaex_md=True,
+    )
+    return removed
+
+
+def _commit_behavior_artifacts(
+    *,
+    repo_root: Path,
+    staging: Path,
+    target: Path,
+    prev: Path,
+    composed: ComposedShape | None = None,
+    expected_source_hash: str | None = None,
+    expected_build_input_hash: str | None = None,
+    clarifications_path: Path | None = None,
+    clarifications: ClarificationsStore | None = None,
+    save_clarifications: bool = False,
+    remove_spaex_md: bool = False,
+) -> EmitOutcome | None:
+    """Publish behavior outputs as one rollback boundary."""
+    spaex_md = repo_root / ".spaex.md"
+    backup_dir = Path(tempfile.mkdtemp(prefix=".behavior-backup-", dir=repo_root))
+    backups: dict[Path, Path | None] = {}
+    for path in (spaex_md, clarifications_path):
+        if path is None or path in backups:
+            continue
+        backup = backup_dir / path.name
+        if path.exists():
+            shutil.copy2(path, backup)
+            backups[path] = backup
+        else:
+            backups[path] = None
+
+    constitution_published = False
+    emit_outcome: EmitOutcome | None = None
+    try:
+        _publish_constitution_d(staging=staging, target=target, prev=prev)
+        constitution_published = True
+        if remove_spaex_md:
+            remove_if_exists(repo_root)
+            _clear_target(target)
+        elif composed is not None:
+            if expected_source_hash is None or expected_build_input_hash is None:
+                raise ValueError("composed publication requires expected hashes")
+            emit_outcome = emit_composed(
+                composed,
+                repo_root=repo_root,
+                expected_source_hash=expected_source_hash,
+                expected_build_input_hash=expected_build_input_hash,
+            )
+
+        if save_clarifications:
+            if clarifications_path is None or clarifications is None:
+                raise ValueError("clarifications publication requires a store")
+            save(clarifications_path, clarifications)
+    except BaseException:
+        if constitution_published:
+            _rollback_constitution_d(target=target, prev=prev)
+        for path, backup in backups.items():
+            _restore_file(path, backup)
+        raise
+    else:
+        _reset_scratch(prev)
+        return emit_outcome
+    finally:
+        shutil.rmtree(backup_dir, ignore_errors=True)
+
+
+def _restore_file(path: Path, backup: Path | None) -> None:
+    """Restore one root-level artifact from its pre-publication snapshot."""
+    if os.path.lexists(path):
+        path.unlink()
+    if backup is not None:
+        shutil.copy2(backup, path)
 
 
 def _build_molecule_inputs(

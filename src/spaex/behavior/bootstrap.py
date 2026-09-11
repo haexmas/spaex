@@ -26,13 +26,14 @@ import enum
 import json
 import os
 import re
+import stat
+import tempfile
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from spaex.util import exit_codes
 from spaex.util.errors import HaexError
-
 
 BLOCK_VERSION = "1"
 _START_MARKER_TEMPLATE = '<!-- spaex-bootstrap:start version="{version}" -->'
@@ -104,7 +105,7 @@ def install(
 
     # Preflight: parse existing marker state for every target; any refuse
     # aborts the whole batch (contracts/bootstrap-block.md §Preflights).
-    preflights: list[tuple[Runtime, Path, "_PlannedWrite"]] = []
+    preflights: list[tuple[Runtime, Path, _PlannedWrite]] = []
     for runtime, target in resolved:
         preflights.append((runtime, target, _plan_write(target)))
 
@@ -117,7 +118,7 @@ def install(
             continue
         if not dry_run:
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(plan.content, encoding="utf-8")
+            _atomic_write_target(target, plan.content)
         outcomes.append(
             TargetOutcome(runtime=runtime, target=target, action=plan.action)
         )
@@ -295,6 +296,38 @@ def _append_block(existing: str) -> str:
     if not existing.endswith("\n"):
         existing = existing + "\n"
     return existing + "\n" + _block_text() + "\n"
+
+
+def _atomic_write_target(target: Path, content: str) -> None:
+    """Write a bootstrap target without truncating it on partial failure.
+
+    When the target is a symlink, resolve and replace its referent so the
+    operator's symlink remains intact. Existing file permissions are copied to
+    the temporary file before the atomic replacement.
+    """
+    destination = target.resolve(strict=False) if target.is_symlink() else target
+    mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else None
+    temporary_fd, temporary_name = tempfile.mkstemp(
+        dir=destination.parent,
+        prefix=f".{destination.name}.",
+        suffix=".tmp",
+        text=True,
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(temporary_fd, "w", encoding="utf-8") as handle:
+            temporary_fd = -1
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        if mode is not None:
+            os.chmod(temporary, mode)
+        os.replace(temporary, destination)
+    except BaseException:
+        if temporary_fd != -1:
+            os.close(temporary_fd)
+        temporary.unlink(missing_ok=True)
+        raise
 
 
 __all__ = [

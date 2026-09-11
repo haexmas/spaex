@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from spaex.behavior.composer.failure import ComposerQuotaError
+from spaex.behavior.composer import invoke as invoke_module
+from spaex.behavior.composer.failure import ComposerQuotaError, ComposerRuntimeError
+from spaex.behavior.composer.invoke import ComposerInput, InvokeOptions
 from spaex.util import exit_codes
 
 
@@ -31,3 +34,43 @@ def test_quota_hint_mentions_billing_and_switch(
         composer.invoke(repo_root)
     hint = exc.value.hint.lower()
     assert "billing" in hint or "quota" in hint
+
+
+def test_cli_quota_signal_raises_quota_error(
+    repo_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(invoke_module.shutil, "which", lambda _name: "/bin/runtime")
+    monkeypatch.setattr(
+        invoke_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=1, stdout="", stderr="429 Resource Exhausted: quota exceeded"
+        ),
+    )
+
+    with pytest.raises(ComposerQuotaError):
+        invoke_module.invoke_composer(
+            ComposerInput(fragments=()),
+            repo_root=repo_root,
+            options=InvokeOptions(forced_cli_runtimes=("claude",)),
+        )
+
+
+def test_cli_non_quota_failure_remains_runtime_error(
+    repo_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(invoke_module.shutil, "which", lambda _name: "/bin/runtime")
+    monkeypatch.setattr(
+        invoke_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=1, stdout="", stderr="invalid command line"
+        ),
+    )
+
+    with pytest.raises(ComposerRuntimeError):
+        invoke_module.invoke_composer(
+            ComposerInput(fragments=()),
+            repo_root=repo_root,
+            options=InvokeOptions(forced_cli_runtimes=("claude",)),
+        )

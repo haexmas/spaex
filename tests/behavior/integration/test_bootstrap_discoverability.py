@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from spaex.behavior import bootstrap
 
 
@@ -89,6 +91,7 @@ def test_cli_install_global_check_reports_missing_and_present(
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setattr("pathlib.Path.home", lambda: home)
+    monkeypatch.delenv("CODEX_HOME", raising=False)
 
     rc = main(["install", "--global", "--check"])
     assert rc == 1
@@ -115,3 +118,20 @@ def test_cli_install_global_rejects_unknown_runtime(tmp_path: Path, monkeypatch)
     from spaex.util import exit_codes
 
     assert rc == exit_codes.USAGE
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["install", "--dry-run"],
+        ["install", "--check"],
+        ["install", "claude"],
+        ["install", "--global", "--dry-run", "--check"],
+    ],
+)
+def test_cli_rejects_invalid_global_option_combinations(argv: list[str]) -> None:
+    """Global-only flags must fail before the normal install handler runs."""
+    from spaex.cli.main import main
+    from spaex.util import exit_codes
+
+    assert main(argv) == exit_codes.USAGE

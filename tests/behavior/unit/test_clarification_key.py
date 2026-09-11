@@ -226,6 +226,29 @@ def test_load_rejects_entry_with_empty_answer(tmp_path: Path) -> None:
         load(target)
 
 
+def test_load_rejects_non_object_cited_fragment(tmp_path: Path) -> None:
+    target = tmp_path / "clarifications.json"
+    target.write_text(
+        json.dumps(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "clarifications": {
+                    "some-key": {
+                        "question": "Q",
+                        "cited_fragments": [123],
+                        "answer": "A",
+                        "asked_at": "x",
+                        "answered_at": "y",
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ClarificationsStoreError, match=r"cited_fragments\[0\]"):
+        load(target)
+
+
 def test_utc_timestamp_returns_z_suffixed_iso_8601() -> None:
     stamp = utc_timestamp()
     assert stamp.endswith("Z")

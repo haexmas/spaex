@@ -17,7 +17,6 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-
 COMPOSER_PROMPT_VERSION = "1"
 
 PROMPT_OVERRIDE_PATH = ".spaex/composer-prompt.md"
@@ -159,10 +158,11 @@ def load_effective_prompt(repo_root: Path) -> str:
     (research.md §5 "Canonical build fingerprints").
     """
     override = repo_root / PROMPT_OVERRIDE_PATH
-    if override.exists():
-        text = override.read_text(encoding="utf-8")
-    else:
-        text = CANONICAL_PROMPT
+    text = (
+        override.read_text(encoding="utf-8")
+        if override.exists()
+        else CANONICAL_PROMPT
+    )
     return _normalize_prompt(text)
 
 
@@ -186,9 +186,7 @@ def render_spaex_md_header(*, source_hash: str, build_input_hash: str) -> str:
 
 def _normalize_prompt(text: str) -> str:
     normalized = text.replace("\r\n", "\n").replace("\r", "\n")
-    if not normalized.endswith("\n"):
-        normalized = normalized + "\n"
-    return normalized
+    return normalized.rstrip("\n") + "\n"
 
 
 __all__ = [

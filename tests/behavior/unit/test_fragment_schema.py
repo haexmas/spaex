@@ -28,7 +28,7 @@ MOL = "com.example.mol"
 
 
 def _bytes(header: str, body: str = "**MUST** do a thing.\n") -> bytes:
-    return f"---\n{header}\n---\n{body}".encode("utf-8")
+    return f"---\n{header}\n---\n{body}".encode()
 
 
 def test_minimal_valid_fragment_parses() -> None:
