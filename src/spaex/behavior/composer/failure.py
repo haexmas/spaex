@@ -15,6 +15,21 @@ from dataclasses import dataclass
 from spaex.util import exit_codes
 from spaex.util.errors import HaexError
 
+QUOTA_FAILURE_SIGNALS: tuple[str, ...] = (
+    "429",
+    "billing",
+    "budget limit",
+    "insufficient_quota",
+    "rate limit",
+    "rate_limit",
+    "ratelimit",
+    "quota",
+    "resource exhausted",
+    "resource_exhausted",
+    "usage limit",
+    "usage_limit",
+)
+
 
 class ComposerFailureCategory(str, enum.Enum):
     """Every failure surface a Composer invocation can produce."""
@@ -69,7 +84,7 @@ class ComposerQuotaError(HaexError):
     exit_code: int = exit_codes.BEHAVIOR_COMPOSER_QUOTA
     hint: str = (
         "The Composer runtime returned a quota/billing failure. Check API "
-        "billing or switch runtime via SPAEX_LLM_MODEL / installed CLI."
+        "billing or switch to another installed CLI runtime."
     )
 
 
@@ -111,6 +126,7 @@ def raise_for(
 __all__ = [
     "CATEGORY_ERROR",
     "CATEGORY_EXIT_CODE",
+    "QUOTA_FAILURE_SIGNALS",
     "ComposerFailureCategory",
     "ComposerInvalidOutputError",
     "ComposerNoRuntimeError",

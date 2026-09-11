@@ -24,13 +24,14 @@ import os
 import re
 import shutil
 import subprocess
-from collections.abc import Sequence
-from dataclasses import dataclass, field
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from spaex.behavior.composer.clarifications import Clarification
 from spaex.behavior.composer.failure import (
+    QUOTA_FAILURE_SIGNALS,
     ComposerFailureCategory,
     raise_for,
 )
@@ -39,7 +40,6 @@ from spaex.behavior.composer.prompt import (
     load_effective_prompt,
 )
 from spaex.behavior.fragment import BehaviorFragment
-
 
 COMPOSER_LOG_ENV = "SPAEX_COMPOSER_LOG"
 DEFAULT_COMPOSER_LOG = ".spaex/composer.log"
@@ -96,7 +96,7 @@ class ComposedShape:
 class QuestionsShape:
     """Shape B parse result: clarification questions to present to operator."""
 
-    questions: tuple["ClarificationQuestion", ...]
+    questions: tuple[ClarificationQuestion, ...]
 
 
 @dataclass(frozen=True)
@@ -274,6 +274,11 @@ def _call_cli(
         raise AssertionError("unreachable") from exc
     if completed.returncode != 0:
         stderr = (completed.stderr or "").strip()
+        if _is_quota_failure(stderr):
+            raise_for(
+                ComposerFailureCategory.QUOTA,
+                f"{name} exited {completed.returncode}: {stderr}",
+            )
         raise_for(
             ComposerFailureCategory.RUNTIME_ERROR,
             f"{name} exited {completed.returncode}: {stderr}",
@@ -324,7 +329,7 @@ def _parse(raw: str, *, log_path: Path) -> ComposerResult:
             ComposerFailureCategory.INVALID_OUTPUT,
             f"Composer sentinel JSON invalid: {exc}",
         )
-        raise AssertionError("unreachable")
+        raise AssertionError("unreachable") from exc
     if not isinstance(envelope, dict):
         _write_composer_log(log_path, raw)
         raise_for(
@@ -437,6 +442,12 @@ def _classify_stub_exception(exc: Exception) -> ComposerFailureCategory:
     if "ratelimit" in name or "quota" in name or "insufficient" in name:
         return ComposerFailureCategory.QUOTA
     return ComposerFailureCategory.RUNTIME_ERROR
+
+
+def _is_quota_failure(stderr: str) -> bool:
+    """Return whether CLI stderr contains a supported quota signal."""
+    normalized = stderr.casefold()
+    return any(signal in normalized for signal in QUOTA_FAILURE_SIGNALS)
 
 
 def _sort_fragments(

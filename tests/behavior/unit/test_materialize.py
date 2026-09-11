@@ -17,14 +17,8 @@ from pathlib import Path
 import pytest
 
 from spaex.behavior.fragment import PROJECT_SCOPE, BehaviorFragment, Modality
-from spaex.behavior.materialize import (
-    MaterializedFragment,
-    MoleculeInput,
-    materialize,
-    project_local_from_config,
-)
+from spaex.behavior.materialize import MoleculeInput, materialize, project_local_from_config
 from spaex.model.molecule_manifest import MoleculeManifest
-
 
 MOL_A = "com.example.mol-a"
 MOL_B = "com.example.mol-b"
@@ -206,6 +200,62 @@ def test_materialize_writes_to_staging_not_constitution_d(tmp_path: Path) -> Non
     assert list((consumer_root / ".spaex").iterdir()) == []
     # Everything landed under the caller-owned staging root.
     assert (staging / MOL_A / "rule.md").exists()
+
+
+def test_materialize_deduplicates_before_writing(tmp_path: Path) -> None:
+    molecule_dir = tmp_path / "mol"
+    _write_standalone_fragment(
+        molecule_dir, rel="a.md", id_="rule", body="**MUST** same.\n", atom_source="a"
+    )
+    _write_standalone_fragment(
+        molecule_dir, rel="b.md", id_="rule", body="**MUST** same.\n", atom_source="b"
+    )
+    manifest = MoleculeManifest.from_json(
+        _manifest_bytes(molecule_id=MOL_A, behavior_paths=["b.md", "a.md"])
+    )
+
+    result = materialize(
+        [MoleculeInput(MOL_A, manifest, molecule_dir)],
+        staging_root=tmp_path / "staging",
+    )
+
+    assert len(result) == 1
+    assert result[0].fragment.atom_source == "a"
+    assert [item.atom_source for item in result[0].dedup_provenance] == ["b"]
+    assert list((tmp_path / "staging" / MOL_A).glob("*.md")) == [
+        tmp_path / "staging" / MOL_A / "rule.md"
+    ]
+
+
+def test_materialize_quotes_yaml_scalar_strings(tmp_path: Path) -> None:
+    manifest = MoleculeManifest.from_json(
+        _manifest_bytes(
+            molecule_id=MOL_A,
+            constitution_fragments={
+                "true": [
+                    {
+                        "id": "123",
+                        "atom_source": "null",
+                        "modality": "MUST",
+                        "tags": ["true", "123"],
+                        "body": "**MUST** preserve strings.",
+                    }
+                ]
+            },
+        )
+    )
+
+    result = materialize(
+        [MoleculeInput(MOL_A, manifest, tmp_path)],
+        staging_root=tmp_path / "staging",
+    )
+    reparsed = BehaviorFragment.from_file(
+        result[0].staging_path, molecule_id=MOL_A
+    )
+
+    assert reparsed.id == "123"
+    assert reparsed.atom_source == "null"
+    assert reparsed.tags == ("true", "123")
 
 
 def test_project_local_fragment_with_wrong_scope_raises(tmp_path: Path) -> None:

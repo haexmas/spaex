@@ -35,7 +35,7 @@ def _fragment(molecule: str, fid: str, body: str = "**MUST** run tests.\n") -> B
     raw = (
         f"---\nid: {fid}\nkind: constitution_fragment\n"
         f"atom_source: pkg.a\nmodality: MUST\n---\n{body}"
-    ).encode("utf-8")
+    ).encode()
     return BehaviorFragment.from_bytes(raw, molecule_id=molecule, path=f"{molecule}/{fid}.md")
 
 
@@ -100,6 +100,28 @@ def test_emit_rejects_build_input_hash_mismatch(tmp_path: Path) -> None:
 
 def test_emit_rejects_missing_header(tmp_path: Path) -> None:
     body = "# spaex Behavior Harness\n\n## MUST\n- Do a thing. _[from `x/y`]_\n"
+    with pytest.raises(ComposerInvalidOutputError):
+        emit_composed(
+            ComposedShape(body=body),
+            repo_root=tmp_path,
+            expected_source_hash="a" * 64,
+            expected_build_input_hash="b" * 64,
+        )
+
+
+def test_emit_rejects_header_after_preamble(tmp_path: Path) -> None:
+    body = "prose before the header\n" + _valid_body("a" * 64, "b" * 64)
+    with pytest.raises(ComposerInvalidOutputError):
+        emit_composed(
+            ComposedShape(body=body),
+            repo_root=tmp_path,
+            expected_source_hash="a" * 64,
+            expected_build_input_hash="b" * 64,
+        )
+
+
+def test_emit_header_must_be_on_first_line(tmp_path: Path) -> None:
+    body = "\n" + _valid_body("a" * 64, "b" * 64)
     with pytest.raises(ComposerInvalidOutputError):
         emit_composed(
             ComposedShape(body=body),

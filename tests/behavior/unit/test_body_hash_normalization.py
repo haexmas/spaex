@@ -14,7 +14,14 @@ from __future__ import annotations
 
 import hashlib
 
-from spaex.behavior.fragment import body_sha256
+import pytest
+
+from spaex.behavior.fragment import BehaviorFragment, MalformedHeaderError, body_sha256
+
+
+def test_invalid_utf8_is_a_typed_fragment_error() -> None:
+    with pytest.raises(MalformedHeaderError, match="valid UTF-8"):
+        BehaviorFragment.from_bytes(b"\xff", molecule_id="mol")
 
 
 def _hash(text: str) -> str:

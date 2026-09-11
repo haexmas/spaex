@@ -26,7 +26,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-
 CLARIFICATIONS_FILENAME = "clarifications.json"
 SCHEMA_VERSION = 1
 
@@ -245,9 +244,13 @@ def invalidate(
 
 def _canonicalize_cited(entries: Iterable[Any]) -> list[Mapping[str, Any]]:
     """Sort cited_fragments by scoped id for reproducibility (contract §Storage)."""
-    normalized = [
-        entry for entry in entries if isinstance(entry, Mapping)
-    ]
+    normalized: list[Mapping[str, Any]] = []
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, Mapping):
+            raise ClarificationsStoreError(
+                f"cited_fragments[{index}] must be an object"
+            )
+        normalized.append(entry)
     normalized.sort(
         key=lambda e: (str(e.get("molecule_id", "")), str(e.get("fragment_id", "")))
     )

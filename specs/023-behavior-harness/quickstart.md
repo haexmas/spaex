@@ -50,8 +50,8 @@ spaex install
 Result:
 1. spaex materializes the molecules' fragments into `.spaex/constitution.d/<molecule-id>/<fragment-id>.md`.
 2. Mechanical pre-check runs; hard intra-molecule conflicts abort with exit code 20.
-3. Composer runs (via your Anthropic API key or the `claude` CLI, per `SPAEX_LLM_MODEL`); produces `.spaex.md` at the repo root.
-4. If the Composer asks a clarification question, you answer once; the answer persists in `.spaex/clarifications.json` and is reused on future installs.
+3. Composer runs via the first available `claude`, `codex`, or `gemini` executable (in that order); it produces `.spaex.md` at the repo root.
+4. If the Composer reports a clarification requirement, provide the answer in `.spaex/clarifications.json` or use the clarification loop introduced in the later phase; it is reused on future installs.
 
 Stage and commit:
 

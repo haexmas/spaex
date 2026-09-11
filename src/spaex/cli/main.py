@@ -178,6 +178,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         return exc.exit_code
 
     try:
+        if args.command == "install":
+            global_mode = bool(getattr(args, "global_mode", False))
+            dry_run = bool(getattr(args, "dry_run", False))
+            check_only = bool(getattr(args, "check_only", False))
+            runtimes = getattr(args, "global_runtimes", None)
+            if (dry_run or check_only or runtimes is not None) and not global_mode:
+                raise HaexError(
+                    message="--dry-run, --check, and runtime names require --global",
+                    diagnostic_key="install-global-option-without-global",
+                    exit_code=exit_codes.USAGE,
+                    hint="Use `spaex install --global [--dry-run|--check] [runtimes]`.",
+                )
+            if dry_run and check_only:
+                raise HaexError(
+                    message="--dry-run and --check cannot be used together",
+                    diagnostic_key="install-global-options-conflict",
+                    exit_code=exit_codes.USAGE,
+                    hint="Choose either --dry-run or --check.",
+                )
         if args.command == "migrate":
             from spaex.cli import migrate as migrate_cli
 

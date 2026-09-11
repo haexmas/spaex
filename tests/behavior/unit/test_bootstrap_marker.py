@@ -20,6 +20,7 @@ Covers:
 from __future__ import annotations
 
 import json
+import stat
 from pathlib import Path
 
 import pytest
@@ -55,6 +56,43 @@ def test_install_appends_when_target_has_content_but_no_markers(tmp_path: Path) 
     text = target.read_text(encoding="utf-8")
     assert text.startswith("existing operator content\n")
     assert '<!-- spaex-bootstrap:start version="1" -->' in text
+
+
+def test_install_preserves_symlink_and_mode(tmp_path: Path) -> None:
+    home = _fake_home(tmp_path)
+    target = home / ".claude" / "CLAUDE.md"
+    target.parent.mkdir(parents=True)
+    referent = tmp_path / "shared-instructions.md"
+    referent.write_text("operator content\n", encoding="utf-8")
+    referent.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    target.symlink_to(referent)
+
+    bootstrap.install([bootstrap.Runtime.CLAUDE], home=home, env={})
+
+    assert target.is_symlink()
+    assert target.resolve() == referent
+    assert stat.S_IMODE(referent.stat().st_mode) == stat.S_IRUSR | stat.S_IWUSR
+    assert "operator content" in referent.read_text(encoding="utf-8")
+    assert bootstrap.END_MARKER in referent.read_text(encoding="utf-8")
+
+
+def test_install_keeps_original_when_atomic_write_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = _fake_home(tmp_path)
+    target = home / ".claude" / "CLAUDE.md"
+    target.parent.mkdir(parents=True)
+    original = "operator content\n"
+    target.write_text(original, encoding="utf-8")
+
+    def fail_replace(*_args, **_kwargs):
+        raise OSError("simulated replace failure")
+
+    monkeypatch.setattr(bootstrap.os, "replace", fail_replace)
+    with pytest.raises(OSError, match="simulated replace failure"):
+        bootstrap.install([bootstrap.Runtime.CLAUDE], home=home, env={})
+
+    assert target.read_text(encoding="utf-8") == original
 
 
 def test_install_is_idempotent(tmp_path: Path) -> None:

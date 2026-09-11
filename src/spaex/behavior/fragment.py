@@ -23,7 +23,6 @@ from typing import Any
 
 import yaml
 
-
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _HEADER_FENCE = "---"
 _RESERVED_COMMENT_RE = re.compile(r"<!--\s*spaex-")
@@ -131,7 +130,12 @@ class BehaviorFragment:
         raw: bytes, *, molecule_id: str, path: str | None = None
     ) -> BehaviorFragment:
         """Parse raw fragment bytes into a validated `BehaviorFragment`."""
-        text = raw.decode("utf-8")
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise MalformedHeaderError(
+                "fragment must be valid UTF-8", path=path
+            ) from exc
         header, body = _split_header_and_body(text, path=path)
         return _build(header, body, molecule_id=molecule_id, path=path)
 

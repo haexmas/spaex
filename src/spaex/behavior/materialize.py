@@ -25,9 +25,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from spaex.behavior.fragment import PROJECT_SCOPE, BehaviorFragment, Modality
-from spaex.model.molecule_manifest import MoleculeManifest
+import yaml
 
+from spaex.behavior.fragment import PROJECT_SCOPE, BehaviorFragment, Modality
+from spaex.behavior.precheck import precheck
+from spaex.model.molecule_manifest import MoleculeManifest
 
 BEHAVIOR_ATOM_CATEGORY = "behavior"
 
@@ -53,6 +55,7 @@ class MaterializedFragment:
 
     fragment: BehaviorFragment
     staging_path: Path
+    dedup_provenance: tuple[BehaviorFragment, ...] = ()
 
 
 def materialize(
@@ -68,19 +71,10 @@ def materialize(
     the `_project` scope. Callers use the return value both for the
     mechanical pre-check (T014) and for Composer input.
     """
-    staging_root.mkdir(parents=True, exist_ok=True)
-
-    materialized: list[MaterializedFragment] = []
-
+    fragments: list[BehaviorFragment] = []
     ordered_inputs = sorted(inputs, key=lambda mi: mi.molecule_id)
     for mi in ordered_inputs:
-        fragments = list(_fragments_from_molecule(mi))
-        fragments.sort(key=lambda f: f.id)
-        for fragment in fragments:
-            path = _write_fragment(fragment, staging_root=staging_root)
-            materialized.append(
-                MaterializedFragment(fragment=fragment, staging_path=path)
-            )
+        fragments.extend(_fragments_from_molecule(mi))
 
     for fragment in sorted(project_local, key=lambda f: f.id):
         if fragment.molecule_id != PROJECT_SCOPE:
@@ -88,9 +82,20 @@ def materialize(
                 f"project-local fragment {fragment.id!r} has molecule_id "
                 f"{fragment.molecule_id!r}; must be {PROJECT_SCOPE!r}"
             )
+        fragments.append(fragment)
+
+    outcome = precheck(fragments)
+    staging_root.mkdir(parents=True, exist_ok=True)
+    dedup_provenance = outcome.dedup_provenance
+    materialized: list[MaterializedFragment] = []
+    for fragment in outcome.fragments:
         path = _write_fragment(fragment, staging_root=staging_root)
         materialized.append(
-            MaterializedFragment(fragment=fragment, staging_path=path)
+            MaterializedFragment(
+                fragment=fragment,
+                staging_path=path,
+                dedup_provenance=dedup_provenance.get(fragment.scoped_id, ()),
+            )
         )
 
     return materialized
@@ -133,11 +138,11 @@ def _render_fragment_file(fragment: BehaviorFragment) -> str:
     the output stable and byte-identical across runs (SC-003 reproducibility).
     """
     lines: list[str] = ["---"]
-    lines.append(f"id: {fragment.id}")
-    lines.append(f"kind: {fragment.kind}")
+    lines.append(f"id: {_yaml_str(fragment.id)}")
+    lines.append(f"kind: {_yaml_str(fragment.kind)}")
     lines.append(f"atom_source: {_yaml_str(fragment.atom_source)}")
     if fragment.modality is not None:
-        lines.append(f"modality: {fragment.modality.value}")
+        lines.append(f"modality: {_yaml_str(fragment.modality.value)}")
     if fragment.tags:
         rendered_tags = ", ".join(_yaml_str(tag) for tag in fragment.tags)
         lines.append(f"tags: [{rendered_tags}]")
@@ -156,6 +161,11 @@ def _yaml_str(value: str) -> str:
     if not value:
         return "''"
     needs_quote = any(ch in value for ch in ": #[]{}\"'\n\t,")
+    if not needs_quote:
+        try:
+            needs_quote = yaml.safe_load(value) != value
+        except yaml.YAMLError:
+            needs_quote = True
     if needs_quote:
         escaped = value.replace("\\", "\\\\").replace('"', '\\"')
         return f'"{escaped}"'
