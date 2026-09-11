@@ -67,6 +67,15 @@
         }
       },
       "description": "Optional side-effect script that spaex install invokes after any required atom materialization (hook-only molecules run without atom materialization), per molecule in effective-priority order. Runs with cwd = consumer repo root, inherits stdio AND the invoking spaex process's complete environment. Interactive prompts work in TTY environments (the hook may read from stdin, e.g. Python's input()); when stdin is unavailable or reaches EOF, input() raises EOFError, so molecule authors must supply a non-interactive fallback path. Side effects are not reversible by spaex remove; spaex remove emits a WARN when removing a molecule that declared install_hook. Consumers can globally opt out for a single invocation via `spaex install --no-install-hooks` or `spaex add --no-install-hooks`."
+    },
+    "constitution_fragments": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "items": { "$ref": "#/$defs/inlineConstitutionFragment" }
+      },
+      "description": "Spec 023 inline behavior fragments. Keys are enclosing-typed-atom ids (used as `atom_source` in provenance when the inline entry omits it). Each value is a non-empty list of inline fragment entries; validated against `#/$defs/inlineConstitutionFragment`. Optional; molecules that carry no behavior fragments omit this field entirely."
     }
   },
   "$defs": {
@@ -80,6 +89,37 @@
       "type": "string",
       "pattern": "^(?!(?:\\.{1,2})(?:/|$))[^\\u0000-\\u001F\\u007F/\\\\]+(?:/(?!(?:\\.{1,2})(?:/|$))[^\\u0000-\\u001F\\u007F/\\\\]+)*$",
       "minLength": 1
+    },
+    "inlineConstitutionFragment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "body"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "description": "Fragment-local id, unique within the enclosing molecule. Matches the standalone fragment id regex."
+        },
+        "atom_source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Provenance atom source. Optional; when omitted, the parent typed-atom key is used at materialization time."
+        },
+        "modality": {
+          "enum": ["MUST", "MUST_NOT", "SHOULD", "SHOULD_NOT", "MAY", "MAY_NOT"],
+          "description": "Optional RFC-2119 modality. Body wins if it contradicts."
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Optional grouping hints for the Composer."
+        },
+        "body": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Markdown body. Same conventions as a standalone fragment body."
+        }
+      }
     }
   }
 }

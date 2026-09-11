@@ -45,13 +45,13 @@ Single-project Python layout: `src/spaex/`, `tests/behavior/` at repository root
 
 **⚠️ CRITICAL**: no user-story work begins until this phase is complete.
 
-- [ ] T008 [P] Implement the Behavior Fragment pydantic model in src/spaex/behavior/fragment.py per contracts/fragment-format.md and data-model.md §Behavior Fragment (fields id, kind, atom_source, modality enum, tags, body); validators for the id regex and for the reserved `<!-- spaex-` guard (FR-001, FR-007)
-- [ ] T009 [P] Implement the body_sha256 normalization + hash function in src/spaex/behavior/fragment.py (strip trailing whitespace per line, CRLF→LF, collapse trailing newlines) per research.md §7 (FR-011)
-- [ ] T010 [P] Unit tests for Fragment schema in tests/behavior/unit/test_fragment_schema.py covering every validation error class from contracts/fragment-format.md §Validation errors (FR-001, FR-007)
-- [ ] T011 [P] Unit tests for body_sha256 normalization in tests/behavior/unit/test_body_hash_normalization.py including a CRLF-round-trip case (memory feedback_verify_tool_behavior_empirically) (FR-011)
-- [ ] T011a [P] Extend src/spaex/schema/data/molecule-manifest.v4.schema.json with the typed-atom `constitution_fragments` declaration, preserving the existing v4 manifest fields and validating inline fragment fields per contracts/fragment-format.md
-- [ ] T011b [P] Extend src/spaex/model/molecule_manifest.py and its parsed model to preserve validated inline `constitution_fragments` keyed by enclosing typed atom
-- [ ] T011c [P] Add tests/contract/test_molecule_manifest_v4.py coverage for valid inline declarations, parser preservation, and malformed inline fragments
+- [X] T008 [P] Implement the Behavior Fragment pydantic model in src/spaex/behavior/fragment.py per contracts/fragment-format.md and data-model.md §Behavior Fragment (fields id, kind, atom_source, modality enum, tags, body); validators for the id regex and for the reserved `<!-- spaex-` guard (FR-001, FR-007)
+- [X] T009 [P] Implement the body_sha256 normalization + hash function in src/spaex/behavior/fragment.py (strip trailing whitespace per line, CRLF→LF, collapse trailing newlines) per research.md §7 (FR-011)
+- [X] T010 [P] Unit tests for Fragment schema in tests/behavior/unit/test_fragment_schema.py covering every validation error class from contracts/fragment-format.md §Validation errors (FR-001, FR-007)
+- [X] T011 [P] Unit tests for body_sha256 normalization in tests/behavior/unit/test_body_hash_normalization.py including a CRLF-round-trip case (memory feedback_verify_tool_behavior_empirically) (FR-011)
+- [X] T011a [P] Extend src/spaex/schema/data/molecule-manifest.v4.schema.json with the typed-atom `constitution_fragments` declaration, preserving the existing v4 manifest fields and validating inline fragment fields per contracts/fragment-format.md
+- [X] T011b [P] Extend src/spaex/model/molecule_manifest.py and its parsed model to preserve validated inline `constitution_fragments` keyed by enclosing typed atom
+- [X] T011c [P] Add tests/contract/test_molecule_manifest_v4.py coverage for valid inline declarations, parser preservation, and malformed inline fragments
 - [ ] T012 Implement materialize.py in src/spaex/behavior/materialize.py: read standalone fragments from the Spec 017 molecule-store (molecule_store.get_or_extract), consume parsed inline behavior blocks from `MoleculeManifest`, and write all outputs to a transaction-owned staging tree rather than directly to `.spaex/constitution.d/` (FR-002, FR-003, FR-004)
 - [ ] T013 [P] Unit tests for materialize in tests/behavior/unit/test_materialize.py covering: standalone fragment atom, typed-atom inline block, project-local fragment routing to _project scope (FR-002, FR-003, FR-004, FR-018 stub)
 - [ ] T014 Implement mechanical pre-check in src/spaex/behavior/precheck.py: detect intra-molecule id-collision with contradictory modality, detect malformed fragments, require identical normalized bodies before duplicate-id-same-modality dedupe, reject body mismatches, and enforce the project-local bare-id comparison rule; emit typed diagnostics (FR-005, FR-007, FR-020)
