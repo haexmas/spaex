@@ -13,7 +13,6 @@ authors = [{ name = "spaex contributors" }]
 dependencies = [
     "jsonschema>=4.18",
     "pyyaml>=6.0",
-    "litellm>=1.40",
 ]
 
 [project.scripts]
