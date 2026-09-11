@@ -40,18 +40,29 @@ against its source bullet in `constitution.md` and found:
 - `constitution.md`'s own Development Workflow section still said "the 7
   principles above", a pre-existing stale count; the document defines 8
   (I-VIII), as ADR 0014 itself counts correctly.
+- `.specify/memory/README.md` cited `self-modifying-instructions-review-gated`
+  and `amendment-procedure-requires-single-commit` as the fragments backing
+  "amending a principle MUST update its corresponding fragment file in the
+  same commit" — neither fragment actually states that rule. It exists only
+  in `constitution.md`'s intro prose (lines 57-61), itself new text added by
+  PR #105, and was never turned into a fragment of its own — the one
+  directive PR #105's own migration missed.
 
 ## Decision
 
 Fix each item above in place: re-sync both `manifest.json` files to
 `1.4.3`, restore the dropped normative detail in the four affected
 fragments, restore the CI bullet's Phase-7 conditional, trim the borrowed
-escalation clause, drop the broken ADR 0014 citation, and correct "7" to
-"8" in `constitution.md`. None of these change what any principle
+escalation clause, drop the broken ADR 0014 citation, correct "7" to "8"
+in `constitution.md`, and add the missing
+`amendment-mirrors-fragment-in-same-commit` fragment (registered in
+`manifest.json`, cited from `README.md`) for the one directive PR #105's
+migration left uncaptured. None of these change what any principle
 requires; they restore what PR #105's fragment split unintentionally
-dropped, added, or left stale. Per this constitution's own version-bump
-rules, this is a PATCH-level correction (wording/clarification/typo
-fixes, no principle content change).
+dropped, added, or left stale, and complete its own one-fragment-per-directive
+coverage. Per this constitution's own version-bump rules, this is a
+PATCH-level correction (wording/clarification/typo fixes, no principle
+content change).
 
 ## Consequences
 

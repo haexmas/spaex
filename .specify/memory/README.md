@@ -8,6 +8,5 @@ per directive in `fragments/`. `spaex install` materializes those fragments
 and composes them into a consumer's `.spaex.md`.
 
 Amending a principle in `constitution.md` MUST update its corresponding
-fragment file in the same commit (see constitution.md's own Governance
-section and the `self-modifying-instructions-review-gated` /
-`amendment-procedure-requires-single-commit` fragments).
+fragment file in the same commit (see `constitution.md` lines 57-61 and
+the `amendment-mirrors-fragment-in-same-commit` fragment).
