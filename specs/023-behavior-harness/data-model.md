@@ -105,9 +105,9 @@ Persisted operator answer to a Composer question about semantic overlap.
 
 A fragment contributed by the project itself, not by a pinned molecule.
 
-**Storage options** (per spec FR-018):
-- Inline in `.spaex.json` under `constitution.local_fragments[]`, each entry a full fragment (header fields + body).
-- File reference under a project directory such as `.spaex/local-fragments/<fragment-id>.md`, listed by path in `.spaex.json`.
+**Storage options** (per spec FR-018), both listed under `constitution.local_fragments[]` in `.spaex.json`, distinguished by which key the entry carries:
+- Inline: a full fragment (header fields + body), e.g. `{"id": "...", "modality": "MUST", "body": "..."}`. `kind` and `atom_source` default the same way a typed atom's inline `constitution_fragments[]` entry does (§Behavior Fragment); `atom_source` defaults to `_project` when omitted.
+- File reference: `{"file": "<repo-relative-path>"}`, e.g. `{"file": ".spaex/local-fragments/<fragment-id>.md"}`. The path is resolved against the repo root at install time and read as a standalone fragment file (contracts/fragment-format.md); its `id` comes from the file's own header, not from `.spaex.json`.
 
 **Treatment**: materialized at install time into a synthetic molecule scope `_project`, so ids become `_project/<fragment-id>`. Runs through identical mechanical pre-check and Composer paths as atom-provided fragments (FR-019).
 

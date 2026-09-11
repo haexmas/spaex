@@ -56,3 +56,47 @@ def test_duplicate_molecule_id_within_compound_is_rejected() -> None:
     ]
     with pytest.raises(schema_validator.SchemaValidationError):
         schema_validator.validate(data, _SCHEMA)
+
+
+def test_inline_local_fragment_is_accepted() -> None:
+    """Accept a Spec 023 FR-018 inline `constitution.local_fragments[]` entry."""
+    data = _valid()
+    data["constitution"] = {
+        "local_fragments": [
+            {
+                "id": "shared-client",
+                "modality": "MUST",
+                "body": "**MUST** route HTTP through the shared client.",
+            }
+        ]
+    }
+    schema_validator.validate(data, _SCHEMA)
+
+
+def test_file_reference_local_fragment_is_accepted() -> None:
+    """Accept a Spec 023 FR-018 file-reference `constitution.local_fragments[]` entry."""
+    data = _valid()
+    data["constitution"] = {
+        "local_fragments": [{"file": ".spaex/local-fragments/shared-client.md"}]
+    }
+    schema_validator.validate(data, _SCHEMA)
+
+
+def test_local_fragment_with_both_file_and_body_is_rejected() -> None:
+    """An entry mixing the inline and file-reference shapes matches neither."""
+    data = _valid()
+    data["constitution"] = {
+        "local_fragments": [
+            {"file": ".spaex/local-fragments/x.md", "body": "**MUST** x."}
+        ]
+    }
+    with pytest.raises(schema_validator.SchemaValidationError):
+        schema_validator.validate(data, _SCHEMA)
+
+
+def test_local_fragment_with_neither_file_nor_body_is_rejected() -> None:
+    """An entry missing both `file` and `body` matches neither shape."""
+    data = _valid()
+    data["constitution"] = {"local_fragments": [{"id": "shared-client"}]}
+    with pytest.raises(schema_validator.SchemaValidationError):
+        schema_validator.validate(data, _SCHEMA)

@@ -8,9 +8,8 @@ Consumes two fragment sources per molecule:
 2. Inline `constitution_fragments` blocks preserved on `MoleculeManifest` at
    parse time, keyed by enclosing typed-atom id.
 
-Project-local fragments (Spec 023 FR-018, wiring lands in Phase 7) route
-through the same materialization path under the synthetic molecule scope
-`_project`.
+Project-local fragments (Spec 023 FR-018) route through the same
+materialization path under the synthetic molecule scope `_project`.
 
 Everything is written to a caller-owned staging tree at
 `<staging_root>/<molecule-id>/<fragment-id>.md`, never directly to
@@ -175,24 +174,38 @@ def _yaml_str(value: str) -> str:
 def project_local_from_config(
     entries: Iterable[Mapping[str, Any]],
     *,
+    repo_root: Path | None = None,
     path: str = ".spaex.json:constitution.local_fragments",
 ) -> list[BehaviorFragment]:
-    """Parse project-local inline entries from `.spaex.json` (T044 wiring).
+    """Parse `.spaex.json`'s `constitution.local_fragments[]` entries (T044).
 
-    The full CLI wiring for `constitution.local_fragments[]` inline vs.
-    file-reference entries lands in Phase 7 T044/T045; this helper accepts
-    the inline-object form so materialize can be exercised end-to-end from
-    unit tests in T013.
+    Each entry is either inline (a full fragment: `id`/`body`/... per
+    contracts/fragment-format.md, distinguished by a `body` key) or a
+    file-reference (`{"file": "<repo-relative-path>"}`, distinguished by a
+    `file` key) resolved against `repo_root`. `repo_root` is required only
+    when a file-reference entry is present.
     """
     fragments: list[BehaviorFragment] = []
     for idx, entry in enumerate(entries):
+        entry_path = f"{path}[{idx}]"
+        if "file" in entry:
+            if repo_root is None:
+                raise ValueError(
+                    f"{entry_path}: file-reference local fragment requires repo_root"
+                )
+            fragments.append(
+                BehaviorFragment.from_file(
+                    repo_root / str(entry["file"]), molecule_id=PROJECT_SCOPE
+                )
+            )
+            continue
         atom_source = str(entry.get("atom_source", PROJECT_SCOPE))
         fragments.append(
             BehaviorFragment.from_inline(
                 entry,
                 molecule_id=PROJECT_SCOPE,
                 enclosing_atom_id=atom_source,
-                path=f"{path}[{idx}]",
+                path=entry_path,
             )
         )
     return fragments

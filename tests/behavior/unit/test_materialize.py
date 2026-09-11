@@ -144,6 +144,36 @@ def test_project_local_fragment_routes_to_project_scope(tmp_path: Path) -> None:
     assert m.staging_path == staging / PROJECT_SCOPE / "http-through-shared-client.md"
 
 
+def test_project_local_from_config_resolves_file_reference(tmp_path: Path) -> None:
+    """A `{"file": ...}` entry (T044) resolves against repo_root and parses
+    the referenced fragment file, same as a standalone atom fragment."""
+    (tmp_path / ".spaex" / "local-fragments").mkdir(parents=True)
+    (tmp_path / ".spaex" / "local-fragments" / "no-secrets.md").write_text(
+        "---\n"
+        "id: no-secrets\n"
+        "kind: constitution_fragment\n"
+        "atom_source: project\n"
+        "modality: MUST_NOT\n"
+        "---\n"
+        "**MUST NOT** commit secrets to git.\n"
+    )
+
+    fragments = project_local_from_config(
+        [{"file": ".spaex/local-fragments/no-secrets.md"}], repo_root=tmp_path
+    )
+
+    assert len(fragments) == 1
+    assert fragments[0].id == "no-secrets"
+    assert fragments[0].molecule_id == PROJECT_SCOPE
+    assert fragments[0].modality == Modality.MUST_NOT
+
+
+def test_project_local_from_config_file_reference_without_repo_root_raises() -> None:
+    """A file-reference entry cannot resolve without a repo_root anchor."""
+    with pytest.raises(ValueError, match="repo_root"):
+        project_local_from_config([{"file": "fragments/x.md"}])
+
+
 def test_materialize_orders_fragments_stably(tmp_path: Path) -> None:
     """Result order is (molecule_id, fragment_id) so downstream hashing is stable."""
     dir_b = tmp_path / "mol-b"
