@@ -36,6 +36,18 @@
     "identity_note": {
       "type": "string",
       "description": "v1 carry-over free-text operator note."
+    },
+    "constitution": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "local_fragments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/localFragmentEntry" },
+          "description": "Spec 023 FR-018 project-local behavior fragments. Each entry is either inline (id/body/...) or a file reference ({\"file\": <repo-relative-path>}) resolved against the repo root at install time. Materialized under the synthetic `_project` molecule scope."
+        }
+      },
+      "description": "Spec 023 project-local additions to the composed constitution."
     }
   },
   "$defs": {
@@ -101,6 +113,60 @@
           "description": "Deep-merged onto publisher defaults; validated against publisher config_schema after merge."
         }
       }
+    },
+    "repoRelativePath": {
+      "type": "string",
+      "pattern": "^(?!(?:\\.{1,2})(?:/|$))[^\\u0000-\\u001F\\u007F/\\\\]+(?:/(?!(?:\\.{1,2})(?:/|$))[^\\u0000-\\u001F\\u007F/\\\\]+)*$",
+      "minLength": 1,
+      "description": "Repo-relative path: no leading slash, no `.`/`..` traversal segments."
+    },
+    "inlineLocalFragment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "body"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "description": "Fragment-local id. Emitted identity is `_project/<id>` (FR-018)."
+        },
+        "atom_source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional provenance atom source. Defaults to `_project` when omitted."
+        },
+        "modality": {
+          "enum": ["MUST", "MUST_NOT", "SHOULD", "SHOULD_NOT", "MAY", "MAY_NOT"],
+          "description": "Optional RFC-2119 modality. Body wins if it contradicts."
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Optional grouping hints for the Composer."
+        },
+        "body": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Markdown body. Same conventions as a standalone fragment body."
+        }
+      }
+    },
+    "fileReferenceLocalFragment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file"],
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/repoRelativePath",
+          "description": "Repo-relative path to a standalone fragment file (contracts/fragment-format.md), e.g. `.spaex/local-fragments/<fragment-id>.md`. Resolved against the repo root at install time."
+        }
+      }
+    },
+    "localFragmentEntry": {
+      "oneOf": [
+        { "$ref": "#/$defs/inlineLocalFragment" },
+        { "$ref": "#/$defs/fileReferenceLocalFragment" }
+      ]
     }
   }
 }

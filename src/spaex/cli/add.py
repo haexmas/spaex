@@ -333,6 +333,7 @@ def _mutate_compounds(
         groups=manifest.groups,
         active_feature=manifest.active_feature,
         identity_note=manifest.identity_note,
+        local_fragments=manifest.local_fragments,
     )
 
 

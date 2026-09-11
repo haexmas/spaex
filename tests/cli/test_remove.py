@@ -61,6 +61,31 @@ def test_single_id_retraction(adopted_repo, haex_add_helpers, monkeypatch) -> No
     assert written["compounds"][0]["molecules"] == [_CONST_ID]
 
 
+def test_apply_removal_preserves_constitution_local_fragments() -> None:
+    """`_apply_removal` reconstructs `ConsumerManifest` field-by-field; a
+    project-local fragment (Spec 023 FR-018) must survive untouched."""
+    from spaex.cli import remove as remove_cli
+    from spaex.model.consumer_manifest import CompoundEntry, ConsumerManifest
+
+    local_fragments = ({"file": ".spaex/local-fragments/x.md"},)
+    manifest = ConsumerManifest(
+        spaex_version="4",
+        identity="com.example.project",
+        compounds=(
+            CompoundEntry(
+                source="https://example.com/publisher",
+                revision="0" * 40,
+                molecules=(_CONST_ID, _SKILL_ID),
+            ),
+        ),
+        local_fragments=local_fragments,
+    )
+
+    result = remove_cli._apply_removal(manifest, (_SKILL_ID,))
+
+    assert result.local_fragments == local_fragments
+
+
 def test_multi_id_comma_separated_retraction(
     adopted_repo, haex_add_helpers, monkeypatch
 ) -> None:

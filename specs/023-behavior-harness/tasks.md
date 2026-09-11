@@ -141,10 +141,10 @@ Most authoring machinery lands in Phase 2 (fragment schema + materialize). This 
 
 **Independent test**: fixture with one project-local fragment and zero molecules; `spaex install` produces `.spaex.md` with the project-local fragment. Fixture attempting to override an atom-provided fragment aborts with exit 22.
 
-- [ ] T044 [US5] Extend `.spaex.json` schema parsing in src/spaex/config.py (existing module) to read `constitution.local_fragments[]` inline entries and file-reference entries (FR-018)
-- [ ] T045 [US5] Extend src/spaex/behavior/materialize.py to write project-local fragments to `.spaex/constitution.d/_project/<fragment-id>.md` running through identical mechanical pre-check + Composer paths (FR-018, FR-019)
-- [ ] T046 [US5] Implement additive-only enforcement in src/spaex/behavior/precheck.py: treat `_project/<fragment-id>` as a distinct emitted identity but reject it when its bare `fragment_id` matches any atom-provided `<molecule-id>/<fragment-id>`, naming every match and the additive-only remedy with exit code 22 (FR-020)
-- [ ] T047 [P] [US5] Integration test tests/behavior/integration/test_project_local_fragments.py: local-only fragment appears in `.spaex.md` with `_project` source; override attempt aborts with exit 22 (SC-005, SC-010)
+- [X] T044 [US5] Extend `.spaex.json` schema parsing in src/spaex/config.py (existing module) to read `constitution.local_fragments[]` inline entries and file-reference entries (FR-018)
+- [X] T045 [US5] Extend src/spaex/behavior/materialize.py to write project-local fragments to `.spaex/constitution.d/_project/<fragment-id>.md` running through identical mechanical pre-check + Composer paths (FR-018, FR-019)
+- [X] T046 [US5] Implement additive-only enforcement in src/spaex/behavior/precheck.py: treat `_project/<fragment-id>` as a distinct emitted identity but reject it when its bare `fragment_id` matches any atom-provided `<molecule-id>/<fragment-id>`, naming every match and the additive-only remedy with exit code 22 (FR-020)
+- [X] T047 [P] [US5] Integration test tests/behavior/integration/test_project_local_fragments.py: local-only fragment appears in `.spaex.md` with `_project` source; override attempt aborts with exit 22 (SC-005, SC-010)
 
 **Checkpoint**: US5 project-local flow verified.
 

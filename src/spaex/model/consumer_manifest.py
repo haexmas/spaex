@@ -47,6 +47,7 @@ class ConsumerManifest:
     groups: tuple[str, ...] = ()
     active_feature: str | None = None
     identity_note: str | None = None
+    local_fragments: tuple[Mapping[str, Any], ...] = ()
 
     @staticmethod
     def from_json(raw: bytes) -> ConsumerManifest:
@@ -107,6 +108,11 @@ class ConsumerManifest:
                 )
             )
 
+        local_fragments = tuple(
+            freeze_json(entry)
+            for entry in data.get("constitution", {}).get("local_fragments", [])
+        )
+
         return ConsumerManifest(
             spaex_version=data["spaex_version"],
             identity=data["identity"],
@@ -115,6 +121,7 @@ class ConsumerManifest:
             groups=tuple(data.get("groups", [])),
             active_feature=data.get("active_feature"),
             identity_note=data.get("identity_note"),
+            local_fragments=local_fragments,
         )
 
     def to_json_bytes(self) -> bytes:
@@ -161,4 +168,8 @@ class ConsumerManifest:
             obj["active_feature"] = self.active_feature
         if self.identity_note is not None:
             obj["identity_note"] = self.identity_note
+        if self.local_fragments:
+            obj["constitution"] = {
+                "local_fragments": [thaw_json(e) for e in self.local_fragments]
+            }
         return json_deterministic.dumps(obj)

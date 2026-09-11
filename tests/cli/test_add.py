@@ -66,6 +66,35 @@ def test_happy_path_adopts_single_molecule(
     assert (consumer / ".spaex" / "install.lock").exists()
 
 
+def test_mutate_compounds_preserves_constitution_local_fragments() -> None:
+    """`_mutate_compounds` reconstructs `ConsumerManifest` field-by-field; a
+    project-local fragment (Spec 023 FR-018) must survive untouched."""
+    from spaex.model.consumer_manifest import ConsumerManifest
+
+    local_fragments = (
+        {
+            "id": "shared-client",
+            "modality": "MUST",
+            "body": "**MUST** route HTTP through the shared client.",
+        },
+    )
+    manifest = ConsumerManifest(
+        spaex_version="4",
+        identity="com.example.project",
+        compounds=(),
+        local_fragments=local_fragments,
+    )
+
+    result = add_cli._mutate_compounds(
+        manifest,
+        "https://example.com/publisher",
+        "0" * 40,
+        (_HELLO_ID,),
+    )
+
+    assert result.local_fragments == local_fragments
+
+
 def test_merge_into_existing_compound_same_source_and_revision(
     tmp_path, two_molecule_publisher, monkeypatch, haex_add_helpers
 ) -> None:

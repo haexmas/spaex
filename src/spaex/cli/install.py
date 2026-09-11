@@ -17,6 +17,8 @@ from contextlib import nullcontext
 from pathlib import Path
 
 from spaex.behavior import orchestrate as behavior_orchestrate
+from spaex.behavior.fragment import BehaviorFragment
+from spaex.behavior.materialize import project_local_from_config
 from spaex.constitution.publish import (
     CONSTITUTION_PATH,
     publish_constitution,
@@ -200,6 +202,9 @@ def run(
             inflight.clean_stale_siblings(live_root)
 
             manifest = _load_consumer_manifest(repo_root)
+            project_local = project_local_from_config(
+                getattr(manifest, "local_fragments", ()), repo_root=repo_root
+            )
             contributions, resolved = resolve_install_inputs(manifest, state_root)
             contributing_ids = {contribution.source.id for contribution in contributions}
 
@@ -234,9 +239,12 @@ def run(
                         repo_root=repo_root,
                         state_root=state_root,
                         resolved=resolved,
+                        project_local=project_local,
                     )
                     return exit_codes.SUCCESS
-                with _preserve_generation_for_behavior(repo_root, resolved):
+                with _preserve_generation_for_behavior(
+                    repo_root, resolved, project_local
+                ):
                     publish_constitution(
                         [],
                         repo_root,
@@ -256,6 +264,7 @@ def run(
                         repo_root=repo_root,
                         state_root=state_root,
                         resolved=resolved,
+                        project_local=project_local,
                     )
                 return exit_codes.SUCCESS
 
@@ -338,10 +347,13 @@ def run(
                     repo_root=repo_root,
                     state_root=state_root,
                     resolved=resolved,
+                    project_local=project_local,
                 )
                 return exit_codes.SUCCESS
 
-            with _preserve_generation_for_behavior(repo_root, resolved):
+            with _preserve_generation_for_behavior(
+                repo_root, resolved, project_local
+            ):
                 publish_constitution(
                     contributions,
                     repo_root,
@@ -355,6 +367,7 @@ def run(
                     repo_root=repo_root,
                     state_root=state_root,
                     resolved=resolved,
+                    project_local=project_local,
                 )
             return exit_codes.SUCCESS
     except HaexError:
@@ -368,11 +381,13 @@ def run(
 
 
 def _preserve_generation_for_behavior(
-    repo_root: Path, resolved: Sequence[ResolvedMolecule]
+    repo_root: Path,
+    resolved: Sequence[ResolvedMolecule],
+    project_local: Sequence[BehaviorFragment] = (),
 ):
     """Keep a copy of the live generation until behavior orchestration passes."""
     live = repo_root / transaction.SPAEX_DIR
-    if not _has_behavior_fragments(resolved):
+    if not project_local and not _has_behavior_fragments(resolved):
         return nullcontext()
 
     backup_root = Path(
@@ -487,19 +502,22 @@ def _run_behavior_pipeline(
     repo_root: Path,
     state_root: Path,
     resolved: list[ResolvedMolecule],
+    project_local: Sequence[BehaviorFragment] = (),
 ) -> None:
     """Spec 023 behavior-harness pass.
 
     Runs after the Spec 008 `.spaex/` rename-swap so behavior-authored
     files (`.spaex/constitution.d/`, `.spaex.md`, `.spaex/clarifications.json`)
     survive the swap. Fast-path exits when no molecule declares behavior
-    fragments (plan.md §Backward compatibility). Composer + emit
-    failures surface as typed HaexError with exit codes 20-22 / 30-34.
+    fragments and no project-local fragment is configured (plan.md
+    §Backward compatibility). Composer + emit failures surface as typed
+    HaexError with exit codes 20-22 / 30-34.
     """
     outcome = behavior_orchestrate.run(
         repo_root=repo_root,
         state_root=state_root,
         resolved=resolved,
+        project_local=project_local,
     )
     if outcome.published and not outcome.skipped_composer:
         sys.stdout.write(

@@ -93,6 +93,7 @@ def _apply_removal(
         groups=manifest.groups,
         active_feature=manifest.active_feature,
         identity_note=manifest.identity_note,
+        local_fragments=manifest.local_fragments,
     )
 
 
