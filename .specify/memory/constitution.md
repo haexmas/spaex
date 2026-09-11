@@ -1,4 +1,17 @@
 <!--
+Sync Impact Report (2026-09-12 amendment)
+Version change: 1.4.3 -> 1.4.4 (PATCH: delivery-repo relocation, no principle content change)
+Modified sections:
+- Intro paragraph: the Spec 023 behavior-fragment derivative moved from
+  this repo's own `.specify/memory/manifest.json` + `fragments/` (removed)
+  to a new molecule in the `haexmas/atoms` publisher,
+  `com.github.haexmas.atoms.spaex-constitution`. This document (and its
+  fragments' content) is unchanged; only which repo hosts the
+  machine-composable copy changed. spaex's own root `manifest.json` is
+  removed since the constitution was its only published molecule.
+See ADR 0016 for the full decision and its consumer-side follow-up
+(repointing `.spaex.json` once the atoms-repo PR merges).
+
 Sync Impact Report (2026-09-11 amendment, PR #105 review fixups)
 Version change: 1.4.2 -> 1.4.3 (PATCH: fidelity corrections, no principle content change)
 Modified sections:
@@ -57,12 +70,13 @@ implementation MUST respect them. A change to any of these principles requires
 an explicit constitution amendment (see Governance below), not a per-spec
 exception.
 
-This document is the authoritative, human-readable text. `manifest.json`
-declares the same directives as Spec 023 behavior fragments under
-`fragments/` (one file per directive); `spaex install` composes those
-fragments into a consumer's `.spaex.md`. Amending a principle here MUST be
-mirrored in its corresponding fragment file in the same commit (Governance,
-below).
+This document is the authoritative, human-readable text. The same
+directives are also published as Spec 023 behavior fragments (one file
+per directive) in the `haexmas/atoms` repo's `spaex-constitution`
+molecule (`com.github.haexmas.atoms.spaex-constitution`); `spaex install`
+composes those fragments into a consumer's `.spaex.md`. Amending a
+principle here MUST be mirrored in its corresponding fragment file in the
+same logical change (Governance, below).
 
 ## Core Principles
 
@@ -329,4 +343,4 @@ agent unfiltered — which is every cross-tool handoff in this system.
   Phase 7) validates that no committed file violates Principles I, II, or IV
   mechanically.
 
-**Version**: 1.4.3 | **Ratified**: 2026-08-26 | **Last Amended**: 2026-09-11
+**Version**: 1.4.4 | **Ratified**: 2026-08-26 | **Last Amended**: 2026-09-12

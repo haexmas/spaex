@@ -1,12 +1,17 @@
 # `.specify/memory/`
 
-`constitution.md` in this directory is spaex's own authoritative, human-readable
-constitution. `manifest.json` is this molecule's v4 manifest
-(`id: com.github.haexmas.spaex.constitution`); it declares the same
-directives as Spec 023 behavior fragments under `atoms.behavior`, one file
-per directive in `fragments/`. `spaex install` materializes those fragments
-and composes them into a consumer's `.spaex.md`.
+`constitution.md` in this directory is spaex's own authoritative,
+human-readable constitution. This is where speckit tooling
+(`/speckit-plan`, `/speckit-constitution`, etc.) reads it from directly.
 
-Amending a principle in `constitution.md` MUST update its corresponding
-fragment file in the same commit (see `constitution.md` lines 57-61 and
-the `amendment-mirrors-fragment-in-same-commit` fragment).
+The machine-composable Spec 023 behavior-fragment derivative (one file per
+directive, materialized and composed by `spaex install`) used to be
+self-published from here as `com.github.haexmas.spaex.constitution`
+(ADR 0014/0015). It has since moved to the `haexmas/atoms` publisher as
+`com.github.haexmas.atoms.spaex-constitution` (ADR 0016); spaex now
+consumes it via its own `.spaex.json` like any other consumer would,
+instead of self-publishing it.
+
+Amending a principle here MUST update the corresponding fragment file in
+`haexmas/atoms`' `spaex-constitution/fragments/` in the same logical
+change (see constitution.md's own Governance section).
