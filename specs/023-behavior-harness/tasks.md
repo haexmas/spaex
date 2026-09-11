@@ -128,8 +128,8 @@ Most authoring machinery lands in Phase 2 (fragment schema + materialize). This 
 
 **Independent test**: fixture with a semantically-overlapping fragment pair; first install prompts once; second install with unchanged fragments does not; third install after editing an involved fragment re-asks exactly once.
 
-- [ ] T042 [US4] Wire clarification storage into the Composer loop in src/spaex/behavior/composer/invoke.py: on Shape B, present question to operator, persist answer via clarifications.py, re-invoke Composer with updated input (FR-010, FR-011, contracts/composer-interface.md)
-- [ ] T043 [P] [US4] Integration test tests/behavior/integration/test_clarification_persistence.py: three-phase scenario (answer once, no re-ask, re-ask on body change) with a scripted operator (SC-008)
+- [X] T042 [US4] Wire clarification storage into the Composer loop in src/spaex/behavior/composer/invoke.py: on Shape B, present question to operator, persist answer via clarifications.py, re-invoke Composer with updated input (FR-010, FR-011, contracts/composer-interface.md)
+- [X] T043 [P] [US4] Integration test tests/behavior/integration/test_clarification_persistence.py: three-phase scenario (answer once, no re-ask, re-ask on body change) with a scripted operator (SC-008)
 
 **Checkpoint**: US4 clarification loop verified.
 

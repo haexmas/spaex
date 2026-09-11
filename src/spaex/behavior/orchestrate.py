@@ -9,9 +9,12 @@ Runs the whole per-project behavior pipeline inside a single transaction:
 5. Load persisted clarifications; drop invalidated entries.
 6. Reproducibility skip (FR-009): if the on-disk `.spaex.md` header already
    carries matching hashes, do not invoke the Composer.
-7. Invoke the Composer; parse Shape A or Shape B. Shape B has no operator
-   round-trip in the Phase 3 MVP and surfaces as `invalid-output` (Phase 6
-   T042 wires the clarification loop).
+7. Invoke the Composer; parse Shape A or Shape B. Shape B triggers one
+   bounded operator clarification round-trip (Phase 6 T042): each question
+   is answered once, persisted, and the Composer is re-invoked with the
+   staged answers. A non-interactive caller or a declined answer surfaces
+   as `behavior-clarification-required` (exit 21); a second Shape B
+   response in the same build is an `invalid-output` failure (exit 32).
 8. Verify hashes on the Composer output.
 9. COMMIT: publish `.spaex/constitution.d/`, `.spaex.md`, and
    `.spaex/clarifications.json` in a rollback-safe sequence. Any failure
@@ -25,22 +28,30 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from spaex.behavior.composer.clarifications import (
     CLARIFICATIONS_FILENAME,
+    CitedFragment,
+    Clarification,
     ClarificationsStore,
+    derive_key,
     invalidate,
     load,
     save,
+    utc_timestamp,
 )
+from spaex.behavior.composer.failure import ComposerFailureCategory, raise_for
 from spaex.behavior.composer.invoke import (
+    ClarificationQuestion,
     ComposedShape,
     ComposerInput,
     InvokeOptions,
+    InvokeOutcome,
     QuestionsShape,
     invoke_composer,
 )
@@ -94,6 +105,7 @@ def run(
     resolved: Sequence[ResolvedMolecule],
     project_local: Sequence[BehaviorFragment] = (),
     invoke_options: InvokeOptions | None = None,
+    operator_answer: Callable[[ClarificationQuestion], str] | None = None,
 ) -> BehaviorOutcome:
     """Execute the behavior-harness transaction for one install.
 
@@ -103,6 +115,13 @@ def run(
     are untouched and no `.spaex/` scratch directories are created,
     keeping the behavior pass invisible to consumers whose molecules
     ship no fragments (plan.md §Backward compatibility, FR-017d).
+
+    `operator_answer`, when given, answers each Shape-B clarification
+    question in place of prompting stdin (test seam mirroring
+    `InvokeOptions.stub_caller`, kept orchestrate-level because the
+    round-trip loop lives here, not in the composer subprocess wrapper).
+    Defaults to a real stdin prompt that refuses on a non-interactive
+    terminal (Phase 6, T042).
     """
     if not project_local and not _any_declares_behavior(resolved):
         return BehaviorOutcome(fragment_count=0)
@@ -189,19 +208,15 @@ def run(
     )
 
     if isinstance(invoke_result.result, QuestionsShape):
-        raise HaexError(
-            message=(
-                "Composer requested clarification but the Phase 3 install path "
-                "cannot yet prompt the operator; wire the clarification loop "
-                "(Phase 6 T042) or supply the answers via an updated "
-                ".spaex/clarifications.json"
-            ),
-            diagnostic_key="behavior-clarification-required",
-            exit_code=exit_codes.BEHAVIOR_SEMANTIC_REFUSE,
-            hint=(
-                "Rerun after the clarification loop is wired, or drop the "
-                "molecule whose fragments trigger the overlap/contradiction."
-            ),
+        store, build_input_hash, invoke_result = _resolve_clarifications(
+            questions=invoke_result.result.questions,
+            canonical_fragments=canonical_fragments,
+            store=store,
+            source_hash=source_hash,
+            prompt_hash=prompt_hash,
+            repo_root=repo_root,
+            invoke_options=invoke_options,
+            operator_answer=operator_answer or _default_operator_answer,
         )
 
     assert isinstance(invoke_result.result, ComposedShape)
@@ -228,6 +243,142 @@ def run(
         build_input_hash=emit_outcome.build_input_hash,
         dedup_provenance=dedup_provenance,
     )
+
+
+def _resolve_clarifications(
+    *,
+    questions: Sequence[ClarificationQuestion],
+    canonical_fragments: Sequence[BehaviorFragment],
+    store: ClarificationsStore,
+    source_hash: str,
+    prompt_hash: str,
+    repo_root: Path,
+    invoke_options: InvokeOptions | None,
+    operator_answer: Callable[[ClarificationQuestion], str],
+) -> tuple[ClarificationsStore, str, InvokeOutcome]:
+    """Answer each Shape-B question once, persist it, and re-invoke the
+    Composer exactly once with the staged clarifications
+    (contracts/composer-interface.md §Shape B, FR-010, FR-010a, FR-011).
+
+    A blank answer means the operator declined to reconcile (FR-005a) and
+    aborts with the same diagnostic as a non-interactive caller. A second
+    Shape B response from the re-invocation is an `invalid-output` failure;
+    the round is bounded to one re-invocation per build.
+    """
+    fragment_by_scoped_id = {f.scoped_id: f for f in canonical_fragments}
+    for question in questions:
+        cited = _cited_fragments_for_question(question, fragment_by_scoped_id)
+        answer = operator_answer(question).strip()
+        if not answer:
+            raise HaexError(
+                message=(
+                    "operator declined to reconcile clarification question: "
+                    f"{question.question}"
+                ),
+                diagnostic_key="behavior-clarification-required",
+                exit_code=exit_codes.BEHAVIOR_SEMANTIC_REFUSE,
+                hint=(
+                    "Provide a reconciling answer (choose one modality, merge, "
+                    "or reject both), or drop the molecule whose fragments "
+                    "trigger the overlap/contradiction."
+                ),
+            )
+        timestamp = utc_timestamp()
+        store = store.with_entry(
+            Clarification(
+                key=derive_key(cited),
+                question=question.question,
+                cited_fragments=cited,
+                answer=answer,
+                asked_at=timestamp,
+                answered_at=timestamp,
+            )
+        )
+
+    build_input_hash = compute_build_input_hash(
+        effective_prompt_sha256=prompt_hash,
+        composer_prompt_version=COMPOSER_PROMPT_VERSION,
+        valid_clarifications=store.entries.values(),
+    )
+    composer_input = ComposerInput(
+        fragments=tuple(canonical_fragments),
+        clarifications=tuple(store.entries.values()),
+        expected_source_hash=source_hash,
+        expected_build_input_hash=build_input_hash,
+    )
+    invoke_result = invoke_composer(
+        composer_input,
+        repo_root=repo_root,
+        options=invoke_options,
+    )
+    if isinstance(invoke_result.result, QuestionsShape):
+        raise_for(
+            ComposerFailureCategory.INVALID_OUTPUT,
+            "Composer returned a second Shape B response in the same build; "
+            "the clarification round is bounded to one re-invocation "
+            "(contracts/composer-interface.md §Shape B)",
+        )
+        raise AssertionError("unreachable")
+
+    return store, build_input_hash, invoke_result
+
+
+def _cited_fragments_for_question(
+    question: ClarificationQuestion,
+    fragment_by_scoped_id: Mapping[str, BehaviorFragment],
+) -> tuple[CitedFragment, ...]:
+    """Resolve a Shape-B question's cited fragments to current body hashes."""
+    cited: list[CitedFragment] = []
+    for entry in question.cited_fragments:
+        molecule_id = entry.get("molecule_id", "")
+        fragment_id = entry.get("fragment_id", "")
+        fragment = fragment_by_scoped_id.get(f"{molecule_id}/{fragment_id}")
+        if fragment is None:
+            raise_for(
+                ComposerFailureCategory.INVALID_OUTPUT,
+                "Shape B question cites unknown fragment "
+                f"{molecule_id}/{fragment_id}",
+            )
+            raise AssertionError("unreachable")
+        cited.append(
+            CitedFragment(
+                molecule_id=molecule_id,
+                fragment_id=fragment_id,
+                body_sha256=fragment.body_hash,
+            )
+        )
+    return tuple(cited)
+
+
+def _default_operator_answer(question: ClarificationQuestion) -> str:
+    """Prompt stdin for one Shape-B answer; refuse on a non-interactive TTY.
+
+    Mirrors `spaex.cli.add._prompt_interactive`'s isatty guard so pytest and
+    CI (never a real TTY) fail fast instead of hanging on stdin.
+    """
+    if not sys.stdin.isatty():
+        raise HaexError(
+            message=(
+                "Composer requested clarification but stdin is not a TTY; "
+                "cannot prompt the operator interactively"
+            ),
+            diagnostic_key="behavior-clarification-required",
+            exit_code=exit_codes.BEHAVIOR_SEMANTIC_REFUSE,
+            hint=(
+                "Rerun `spaex install` from an interactive terminal to answer "
+                "the Composer's clarification question, or drop the molecule "
+                "whose fragments trigger the overlap/contradiction."
+            ),
+        )
+    sys.stdout.write(f"\nComposer clarification needed ({question.kind}):\n")
+    sys.stdout.write(f"  {question.question}\n")
+    for cited in question.cited_fragments:
+        sys.stdout.write(
+            f"    - {cited.get('molecule_id')}/{cited.get('fragment_id')}\n"
+        )
+    sys.stdout.write("Answer (blank to decline and abort install): ")
+    sys.stdout.flush()
+    return sys.stdin.readline().strip()
 
 
 def _publish_empty_artifacts(
