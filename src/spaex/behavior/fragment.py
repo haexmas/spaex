@@ -273,7 +273,7 @@ def _build(
             ) from exc
 
     tags_raw = header.get("tags", [])
-    if not isinstance(tags_raw, list) or not all(
+    if not isinstance(tags_raw, (list, tuple)) or not all(
         isinstance(tag, str) for tag in tags_raw
     ):
         raise MalformedHeaderError(
