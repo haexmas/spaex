@@ -114,9 +114,9 @@ Most authoring machinery lands in Phase 2 (fragment schema + materialize). This 
 
 **Independent test**: two fixtures cover the two cases; each aborts with exit code 20 (A) or 21 (B) and no tracked file is modified.
 
-- [ ] T039 [P] [US3] Integration test tests/behavior/integration/test_case_a_intra_molecule.py: fixture with one molecule shipping two fragments under the same molecule-scoped id with contradictory modality; `spaex install` exits 20 before Composer runs (FR-005, SC-002 Case A)
-- [ ] T040 [P] [US3] Integration test tests/behavior/integration/test_case_b_cross_molecule.py: fixture with two molecules whose fragments the Composer flags as semantically contradictory; declined reconciliation causes exit 21 (FR-005a, FR-010a, SC-002 Case B)
-- [ ] T041 [P] [US3] Integration test tests/behavior/integration/test_install_is_non_destructive.py: assert that after each of exit codes 20, 21, 22, 30-34, the fixture repo's tracked files (`.spaex.md`, `.spaex/constitution.d/`, `.spaex/clarifications.json`) are byte-unchanged (FR-006)
+- [X] T039 [P] [US3] Integration test tests/behavior/integration/test_case_a_intra_molecule.py: fixture with one molecule shipping two fragments under the same molecule-scoped id with contradictory modality; `spaex install` exits 20 before Composer runs (FR-005, SC-002 Case A)
+- [X] T040 [P] [US3] Integration test tests/behavior/integration/test_case_b_cross_molecule.py: fixture with two molecules whose fragments the Composer flags as semantically contradictory; declined reconciliation causes exit 21 (FR-005a, FR-010a, SC-002 Case B)
+- [X] T041 [P] [US3] Integration test tests/behavior/integration/test_install_is_non_destructive.py: assert that after each of exit codes 20, 21, 22, 30-34, the fixture repo's tracked files (`.spaex.md`, `.spaex/constitution.d/`, `.spaex/clarifications.json`) are byte-unchanged (FR-006)
 
 **Checkpoint**: US3 conflict paths verified.
 
