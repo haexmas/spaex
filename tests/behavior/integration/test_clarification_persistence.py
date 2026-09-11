@@ -146,7 +146,13 @@ def _publish_overlap_molecules(tmp_path: Path) -> tuple[Path, str, str, Path]:
 
 
 def _update_focus_a_body(working: Path, state_root: Path, *, new_body: str) -> str:
-    """Commit a body-only edit to focus-a and resync the bare clone spaex reads."""
+    """Commit a body-only edit to focus-a and resync the bare clone spaex reads.
+
+    Fetches the new commit into the existing bare clone rather than deleting
+    and re-cloning it: git marks pack/object files read-only, and `rmtree`
+    on a bare repo fails with `PermissionError` on Windows CI (memory
+    feedback_verify_tool_behavior_empirically).
+    """
     (working / "overlap-a" / "fragments" / "focus-a.md").write_text(
         _focus_a_text(new_body)
     )
@@ -155,11 +161,7 @@ def _update_focus_a_body(working: Path, state_root: Path, *, new_body: str) -> s
     head = _git(working, "rev-parse", "HEAD")
 
     target = clone_dir(state_root, _CANONICAL)
-    shutil.rmtree(target)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        ["git", "clone", "--bare", "-q", str(working), str(target)], check=True
-    )
+    _git(target, "fetch", "-q", str(working), "+main:main")
     return head
 
 
