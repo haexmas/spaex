@@ -5,7 +5,7 @@
 
 ## Summary
 
-Add a behavior-harness layer to spaex. Each atom may contribute constitution fragments (Format C: small YAML header, molecule-scoped id, RFC-2119 Markdown body). At install time, spaex materializes fragments to `.spaex/constitution.d/`, runs a mechanical pre-check for intra-molecule id collisions, then invokes a hybrid Composer (LLM synthesis in the `/speckit-analyze` + `/speckit-clarify` pattern) that produces a single committed artifact `.spaex.md` at the repo root. Agent runtimes discover `.spaex.md` via a one-time global bootstrap block written into the user's `~/.claude/CLAUDE.md`, `~/.config/.../AGENTS.md`, etc. Composer failures fail-fast; project overrides are additive-only; clarifications persist keyed by SHA256 of involved fragment bodies.
+Add a behavior-harness layer to spaex. Each atom may contribute constitution fragments (Format C: small YAML header, molecule-scoped id, RFC-2119 Markdown body). At install time, spaex materializes fragments to `.spaex/constitution.d/`, runs a mechanical pre-check for intra-molecule id collisions, then invokes a hybrid Composer (LLM synthesis in the `/speckit-analyze` + `/speckit-clarify` pattern) that produces a single committed artifact `.spaex.md` at the repo root. Agent runtimes discover `.spaex.md` via a one-time global bootstrap block written through each runtime's own global-target resolver. Composer failures fail-fast; project overrides are additive-only; clarifications persist keyed by SHA256 of involved fragment bodies.
 
 The scope is additive (target release 4.2.0). Consumers without behavior fragments in their molecule set are unaffected.
 
@@ -13,7 +13,7 @@ The scope is additive (target release 4.2.0). Consumers without behavior fragmen
 
 **Language/Version**: Python 3.11+ (matches existing spaex baseline)
 **Primary Dependencies**: uv (project management), litellm (LLM adapter, already in stack for context-budget checks), existing spaex modules from Spec 016 (install-hook boundary) and Spec 017 (molecule store content access), pyyaml (fragment header parsing), pydantic (fragment schema validation, already in stack)
-**Storage**: filesystem only. Fragments in `.spaex/constitution.d/<molecule-id>/<fragment-id>.md`. Composed constitution at `<repo-root>/.spaex.md`. Clarifications at `.spaex/clarifications.json` (new file, additive; format defined in `contracts/clarifications-schema.md`). Global bootstrap in `~/.claude/CLAUDE.md`, `~/.config/codex/AGENTS.md`, `~/.gemini/GEMINI.md` (paths per runtime; exact set surveyed in research.md).
+**Storage**: filesystem only. Fragments in `.spaex/constitution.d/<molecule-id>/<fragment-id>.md`. Composed constitution at `<repo-root>/.spaex.md`. Clarifications at `.spaex/clarifications.json` (new file, additive; format defined in `contracts/clarifications-schema.md`). Global bootstrap targets are resolved per runtime: Claude's fixed user file, Codex's `$CODEX_HOME` (default `~/.codex`), and Gemini's configured `~/.gemini/<context.fileName>` (paths per runtime; exact rules surveyed in research.md).
 **Testing**: pytest (project standard), fault-injection fixtures for Composer failures (timeout, malformed output, runtime error), fixture repos under `tests/fixtures/023-behavior-harness/` covering hard-conflict Cases A and B from spec User Story 3.
 **Target Platform**: Linux, macOS, WSL2 (spaex platform contract). Global bootstrap paths are per-OS but reduce to the same runtime-config conventions.
 **Project Type**: CLI tool (single-project layout: `src/spaex/`, `tests/`). No frontend, no service.

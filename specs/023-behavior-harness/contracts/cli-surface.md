@@ -22,6 +22,14 @@ Installs or upgrades the global bootstrap block into the specified runtimes' use
 
 **Non-destructive contract**: content outside the paired HTML comment markers is preserved verbatim.
 
+**Runtime target resolution**: `claude` uses its fixed target. `codex` resolves
+`CODEX_HOME` (default `~/.codex`) and updates a non-empty
+`AGENTS.override.md` when present, otherwise `AGENTS.md`. `gemini` reads
+`~/.gemini/settings.json`; absent `context.fileName` means `GEMINI.md`, a
+string selects one basename, and an array updates every configured basename.
+Malformed configuration or path-bearing filenames fail before any target is
+written.
+
 ### `spaex constitution build`
 
 Explicitly invokes the Composer against the current fragment set and writes `.spaex.md`. Rarely needed under normal workflow (auto-invoked by `spaex install`), but useful for CI verification and for consumers who want to regenerate without running a full install.
@@ -43,12 +51,12 @@ Explicitly invokes the Composer against the current fragment set and writes `.sp
 Prints the provenance for one or more clauses in `.spaex.md`.
 
 **Arguments**:
-- `<query>`: either a fragment id (`<molecule-id>/<fragment-id>`) or a substring of a clause text.
+- `<query>`: either an exact scoped fragment id (`<molecule-id>/<fragment-id>`) or a substring of a clause text. A bare `<fragment-id>` is not accepted, because it can be ambiguous across molecules.
 - `--format text|json`: output format. Default `text`.
 
 **Exit codes**:
 - 0: match found.
-- 1: no match.
+- 1: no match or an unscoped/ambiguous fragment id.
 
 Sample output:
 
@@ -74,7 +82,7 @@ source is dropped when the clause is deduplicated.
 Existing per-project install. Extended to:
 1. Materialize behavior fragments (new Phase 0.5 in the install pipeline, between molecule extraction and install-hook execution).
 2. Run mechanical pre-check on fragments. Abort with new exit code 20 on intra-molecule conflict.
-3. Compute the local `source_hash` for the sorted fragment set and a separate `build_input_hash` for the Composer prompt version plus all valid persisted clarification answers. Invoke Composer if either fingerprint mismatches `.spaex.md`; otherwise preserve the committed artifact byte-for-byte.
+3. Compute the local `source_hash` for all canonical fragment records and a separate `build_input_hash` for the effective Composer prompt, prompt version, and all valid persisted clarification answers. Invoke Composer if either fingerprint mismatches `.spaex.md`; otherwise preserve the committed artifact byte-for-byte.
 4. Emit new hint at end of install if the global bootstrap is not detected for any installed runtime.
 
 **Backward compatibility**: consumers with no molecules shipping behavior fragments see the new phases skip silently (empty fragment set per FR-017d).

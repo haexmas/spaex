@@ -59,6 +59,32 @@ Passed as a single UTF-8 JSON document:
 `fragments` are sorted lexicographically by the full scoped key
 `<molecule-id>/<fragment-id>` for byte-identity determinism.
 
+## Build fingerprints
+
+spaex computes both fingerprints before deciding whether a build is needed and
+again outside the LLM before accepting Shape A:
+
+- `effective_prompt_sha256` is SHA256 of the effective Composer prompt after
+  resolving `.spaex/composer-prompt.md` when present, otherwise the shipped
+  canonical prompt. Prompt text is UTF-8 with CRLF converted to LF and one
+  final LF; the override content is therefore part of the fingerprint.
+- `build_input_hash` is SHA256 of the UTF-8 LF-joined canonical records
+  `composer_prompt_version=<version>`,
+  `effective_prompt_sha256=<hex>`, and one
+  `<clarification-key>|<normalized-answer>` record for each valid persisted
+  clarification, sorted by clarification key.
+- `source_hash` is SHA256 of one canonical JSON record per materialized
+  fragment, sorted by `(molecule_id, fragment_id, atom_source, modality,
+  tags, body_sha256)`. Each record contains `molecule_id`, `fragment_id`,
+  `atom_source`, `modality` (including `null`), `tags`, and `body_sha256`.
+  `body_sha256` is computed from the normalized body, so body content is part
+  of the source fingerprint. JSON uses sorted keys, UTF-8, compact separators,
+  and one LF between records with no trailing LF.
+
+The expected values are computed by spaex, not delegated to the LLM. Shape A
+must contain both claims and is rejected when either claim is missing or does
+not match the locally computed value.
+
 ## Composer output
 
 The Composer produces one of two response shapes:
@@ -128,8 +154,7 @@ The system prompt lives at `src/spaex/behavior/composer/prompt.py` as a string c
 - Instruct the LLM to omit empty modality sections.
 - Instruct the LLM to synthesize semantic overlaps (same rule stated differently) into a single clause with combined provenance.
 - Instruct the LLM to flag semantic contradictions (contradictory MUST across molecules) as a `contradiction` question in Shape B, never silently emit both.
-- Instruct the LLM to include `source_hash` and `build_input_hash` in the `spaex-composed` comment. `source_hash` is the SHA256 hex of concatenated `<molecule-id>/<fragment-id>|<body_sha256>` lines sorted lexicographically. `build_input_hash` is the SHA256 hex of the canonical Composer prompt version plus the valid clarification keys and answers.
-- Require spaex to compute both expected hashes outside the LLM and reject Shape A when either returned value is missing or mismatches. The LLM-provided values are claims to verify, not trusted drift metadata.
+- Instruct the LLM to include `source_hash` and `build_input_hash` in the `spaex-composed` comment using the Build fingerprints contract above.
 
 The prompt is versioned. `composer_prompt_version` in the input is the version spaex is currently shipping. On prompt-version bumps across spaex releases, all persisted clarifications are treated as invalidated (research.md §12; documented in spec Assumptions).
 

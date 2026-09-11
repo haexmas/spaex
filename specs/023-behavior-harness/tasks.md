@@ -78,7 +78,7 @@ Single-project Python layout: `src/spaex/`, `tests/behavior/` at repository root
 - [ ] T024 [P] [US1] Fault-injection test tests/behavior/fault_injection/test_composer_runtime_error.py (SC-011, exit 31)
 - [ ] T025 [P] [US1] Fault-injection test tests/behavior/fault_injection/test_composer_quota.py (SC-011, exit 33)
 - [ ] T026 [P] [US1] Fault-injection test tests/behavior/fault_injection/test_composer_no_runtime.py (SC-011, exit 34)
-- [ ] T027 [US1] Implement emission in src/spaex/behavior/emit.py: build `.spaex.md` content from Composer output (Shape A), write atomically (tmp+rename), include the `<!-- spaex-composed:source_hash=... version="1" -->` header (FR-013, FR-017a, FR-017b, contracts/spaex-md-format.md)
+- [ ] T027 [US1] Implement emission in src/spaex/behavior/emit.py: build `.spaex.md` content from Composer output (Shape A), write atomically (tmp+rename), include verified `source_hash` and `build_input_hash` in the `<!-- spaex-composed:... version="1" -->` header (FR-013, FR-017a, FR-017b, contracts/spaex-md-format.md)
 - [ ] T028 [P] [US1] Unit test for emission format in tests/behavior/unit/test_emit_format.py: section order, provenance regex, source_hash header, empty-set behavior (FR-008, FR-017d, contracts/spaex-md-format.md)
 - [ ] T029 [US1] Wire the behavior subsystem into src/spaex/install.py as one transaction: materialize into a staging tree, run precheck against the staged tree, run Composer and clarification staging there, then publish `.spaex/constitution.d/`, `.spaex.md`, and `.spaex/clarifications.json` only after every aborting step succeeds; duplicate producers and all failure paths leave tracked files untouched (FR-004, FR-006, FR-008, FR-017c)
 - [ ] T030 [P] [US1] Integration test tests/behavior/integration/test_install_end_to_end.py: fixture project with two pinned molecules each contributing one behavior fragment, `spaex install` produces `.spaex.md` with both directives + provenance (SC-001)
@@ -156,8 +156,8 @@ Most authoring machinery lands in Phase 2 (fragment schema + materialize). This 
 
 Reproducibility groundwork lands in Phase 3 (T031). This phase adds the fragment-drift-detection test.
 
-- [ ] T048 [US6] Implement source-hash comparison in src/spaex/behavior/emit.py: on `spaex install`, if the on-disk `.spaex.md` header's source_hash matches the computed hash from current fragments, skip Composer invocation (FR-009)
-- [ ] T049 [P] [US6] Integration test tests/behavior/integration/test_source_hash_skip.py: two runs with identical committed state, second run must not invoke the Composer (User Story 6 acceptance scenario 1)
+- [ ] T048 [US6] Implement source/build-input fingerprint comparison in src/spaex/behavior/emit.py: on `spaex install`, if the on-disk `.spaex.md` header's `source_hash` and `build_input_hash` match the locally computed hashes for current fragments, effective prompt, prompt version, and valid clarifications, skip Composer invocation (FR-009)
+- [ ] T049 [P] [US6] Integration test tests/behavior/integration/test_source_hash_skip.py: two runs with identical committed state, second run must not invoke the Composer; changing fragment metadata or the effective prompt must invalidate the matching fingerprint (User Story 6 acceptance scenario 1)
 - [ ] T050 [P] [US6] Integration test tests/behavior/integration/test_fragment_drift.py: fragments changed on disk without a Composer run; next `spaex install` detects drift and invokes the Composer (User Story 6 acceptance scenario 3)
 
 **Checkpoint**: US6 reproducibility guarantees verified.
@@ -182,7 +182,7 @@ Reproducibility groundwork lands in Phase 3 (T031). This phase adds the fragment
 **Purpose**: user-facing commands beyond `spaex install`.
 
 - [ ] T055 [P] Implement `spaex constitution build` subcommand in src/spaex/cli/behavior_commands.py with --force and --check flags (contracts/cli-surface.md §"spaex constitution build")
-- [ ] T056 [P] Implement `spaex constitution trace <query>` subcommand in src/spaex/cli/behavior_commands.py: parse `.spaex.md`, match by fragment id or text substring, and print every provenance record for merged clauses in text/json formats (FR-022, contracts/cli-surface.md §"spaex constitution trace")
+- [ ] T056 [P] Implement `spaex constitution trace <query>` subcommand in src/spaex/cli/behavior_commands.py: accept only an exact scoped fragment id `<molecule-id>/<fragment-id>` or a clause-text substring, reject bare fragment ids as ambiguous, and print every provenance record for merged clauses in text/json formats (FR-022, contracts/cli-surface.md §"spaex constitution trace")
 - [ ] T057 [P] Integration test tests/behavior/integration/test_provenance_trace.py covering both query modes and text/json output formats (SC-006)
 - [ ] T058 [P] Integration test tests/behavior/integration/test_constitution_build_check.py covering `--check` exit codes (SC-003 verification)
 
