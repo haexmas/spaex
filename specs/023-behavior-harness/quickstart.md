@@ -60,6 +60,20 @@ git add .spaex.json .spaex.md .spaex/constitution.d/ .spaex/clarifications.json
 git commit -m "chore: adopt speckit-strict behavior harness"
 ```
 
+### `.gitignore` for consumer repos
+
+Add the two behavior-harness sidecars, both per-checkout state, to your
+project's `.gitignore`:
+
+```gitignore
+.spaex/.stale
+.spaex/composer.log
+```
+
+Do NOT add `.spaex.md` or `.spaex/constitution.d/` to `.gitignore`; those are
+the versioned composed constitution and its source fragments, and both are
+review-gated on commit per ADR-0012.
+
 ### Runtime: open your agent
 
 Any of `claude`, `codex`, `gemini` opened in this project now reads `.spaex.md` at session start and treats its MUST directives as inviolable.
