@@ -7,10 +7,10 @@ Walkthrough of what a consumer and a molecule author do once spec 023 lands.
 ### One-time: install the global bootstrap
 
 ```bash
-spaex install --global claude,codex
+spaex install --global claude,codex,gemini
 ```
 
-Result: `~/.claude/CLAUDE.md` and `~/.config/codex/AGENTS.md` each get a small delimited spaex block instructing the runtime to read `.spaex.md` from the current project's root. For Gemini CLI, the default target is `~/.gemini/GEMINI.md`; if `context.fileName` is configured to `AGENTS.md`, select that configured target explicitly. Nothing else is touched.
+Result: Claude gets the block in `~/.claude/CLAUDE.md`; Codex gets it in the resolved `$CODEX_HOME` file (default `~/.codex/AGENTS.md`, or its non-empty `AGENTS.override.md`); Gemini gets it in every configured `~/.gemini/<context.fileName>` file (default `~/.gemini/GEMINI.md`). Nothing else is touched.
 
 Verify with `--check`:
 
@@ -18,7 +18,7 @@ Verify with `--check`:
 spaex install --global --check
 ```
 
-Exits 0 when both blocks are current.
+Exits 0 when all requested blocks are current.
 
 ### Per project: pin a molecule that ships behavior fragments
 
@@ -67,7 +67,7 @@ Any of `claude`, `codex`, `gemini` opened in this project now reads `.spaex.md` 
 Trace where a rule came from:
 
 ```bash
-spaex constitution trace tests-before-commit
+spaex constitution trace com.example.atoms.speckit-strict/tests-before-commit
 ```
 
 ### Adding a project-local rule (additive-only)

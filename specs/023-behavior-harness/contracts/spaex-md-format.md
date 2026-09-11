@@ -21,8 +21,8 @@ _Change fragments in `.spaex/constitution.d/` and re-run install._
 ```
 
 The `spaex-composed` HTML comment carries drift-detection metadata:
-- `source_hash`: SHA256 hex of the ordered fragment set that produced this content (research.md §5).
-- `build_input_hash`: SHA256 hex of the Composer prompt version plus the valid persisted clarification keys and answers used for this build.
+- `source_hash`: SHA256 hex of the canonical records for every fragment field used by validation, Composer, or provenance: scoped identifier, atom source, modality, tags, and normalized body hash (research.md §5).
+- `build_input_hash`: SHA256 hex of the effective prompt content, Composer prompt version, and valid persisted clarification keys and answers used for this build.
 - `version`: format version, currently `1`; bumps invalidate any tooling that parses the file (Composer tolerates the previous version for one release cycle).
 
 Content outside the metadata comment is human-readable Markdown.
@@ -78,7 +78,7 @@ version, and same clarification answers), spaex preserves an existing artifact
 when both fingerprints match. When composition is required, every invocation
 mode is parsed and canonicalized by spaex before publication:
 1. Fixing section order.
-2. Fixing bullet order within sections by the full provenance key, with merged-provenance lists as a deterministic tie-breaker.
+2. Fixing bullet order within sections by the first full provenance key, then the complete sorted provenance list, then normalized clause text.
 3. Normalizing clause whitespace, provenance ordering, and metadata before writing.
 4. Persisting all operator answers and including the prompt version plus valid answers in `build_input_hash`.
 

@@ -18,15 +18,24 @@ If a file named `.spaex.md` exists in the current working directory (or any ance
 - End marker: `<!-- spaex-bootstrap:end -->`.
 - Content between markers is static across all installs; it never carries per-project or per-user data (FR-016).
 
-## Target paths per runtime
+## Target resolution per runtime
 
-| Runtime | Target file (POSIX) | Target file (Windows) |
-|---------|--------------------|-----------------------|
+| Runtime | Resolver (POSIX) | Resolver (Windows) |
+|---------|------------------|--------------------|
 | Claude Code (`claude`) | `~/.claude/CLAUDE.md` | `%USERPROFILE%\.claude\CLAUDE.md` |
-| Codex CLI (`codex`) | `~/.config/codex/AGENTS.md` | `%APPDATA%\codex\AGENTS.md` |
-| Gemini CLI (`gemini`) | `~/.gemini/GEMINI.md` | `%USERPROFILE%\.gemini\GEMINI.md` |
+| Codex CLI (`codex`) | `$CODEX_HOME/AGENTS.md` or the non-empty `$CODEX_HOME/AGENTS.override.md` | `%CODEX_HOME%\AGENTS.md` or the non-empty `%CODEX_HOME%\AGENTS.override.md` |
+| Gemini CLI (`gemini`) | `~/.gemini/<context.fileName>` for every configured name | `%USERPROFILE%\.gemini\<context.fileName>` for every configured name |
 
-For each runtime, the installer creates parent directories if missing, then writes the block.
+`CODEX_HOME` defaults to `~/.codex` (or `%USERPROFILE%\.codex`). Gemini reads
+`context.fileName` from `~/.gemini/settings.json` (or the corresponding user
+`.gemini/settings.json` directory on Windows). A missing setting defaults to
+`GEMINI.md`; a string selects one filename and an array selects every listed
+filename. Each Gemini filename MUST be a non-empty basename with no path
+separator. Malformed settings or unsafe filenames abort before any write.
+
+For each resolved target, the installer creates parent directories if missing,
+then writes the block. The CLI discovers these targets from the runtime
+configuration; it does not require a second filename flag.
 
 ## Installer behavior
 
@@ -96,7 +105,7 @@ Guaranteed behaviors:
 Explicitly to prevent implementer confusion (per FR-017c):
 
 - Any project-level `CLAUDE.md`, `AGENTS.md`, or equivalent instruction file at any consumer's repo root or inside any consumer's `.claude/` directory.
-- Any file NOT listed under "Target paths per runtime" above.
+- Any file NOT returned by the runtime resolvers above.
 - Any file outside the user's home directory (POSIX) or `%USERPROFILE%` (Windows).
 
 The bootstrap installer's write scope is limited to the per-user, per-runtime global instruction files enumerated in the target-paths table. Nothing else.

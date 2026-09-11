@@ -28,21 +28,27 @@ Non-blocking research questions surfaced during planning. Each entry follows the
 
 ## 3. Global bootstrap target paths per runtime
 
-**Decision**: Bootstrap installer surveys the following paths and writes into whichever the runtime uses. Users opt in per runtime via a CLI flag list (`spaex install --global claude,codex,gemini`).
+**Decision**: Bootstrap installer resolves the runtime's actual global
+instruction target before writing. Users opt in per runtime via a CLI flag list
+(`spaex install --global claude,codex,gemini`).
 
-| Runtime | Global instruction file | Notes |
-|---------|--------------------------|-------|
-| Claude Code | `~/.claude/CLAUDE.md` | Standard location per Claude Code docs |
-| Codex CLI | `~/.config/codex/AGENTS.md` | Standard AGENTS.md convention |
-| Gemini CLI | `~/.gemini/GEMINI.md` | Gemini CLI default; `context.fileName` may be configured to another filename |
+| Runtime | Global instruction resolver | Notes |
+|---------|-----------------------------|-------|
+| Claude Code | `~/.claude/CLAUDE.md` | Fixed user-global target |
+| Codex CLI | `$CODEX_HOME/AGENTS.override.md` when non-empty, otherwise `$CODEX_HOME/AGENTS.md` | `CODEX_HOME` defaults to `~/.codex` |
+| Gemini CLI | `~/.gemini/<context.fileName>` for every configured filename | `context.fileName` comes from `~/.gemini/settings.json`; absent means `GEMINI.md` |
 | dsh | `~/.config/dsh/home-patch.yml` | Deferred to a future spec (out of scope for 023) |
 
-The installer resolves `~` per OS (POSIX vs. Windows `%USERPROFILE%`).
+The installer resolves `~` and environment variables per OS. Gemini accepts a
+single basename or an array of basenames from `context.fileName`; path-bearing
+values are rejected. The resolver writes the block to every configured Gemini
+filename so the file spaex updates is exactly one Gemini will read.
 
 **Rationale**: paths follow each runtime's documented default. Gemini CLI loads
 `~/.gemini/GEMINI.md` globally; an operator who configures `context.fileName`
-to `AGENTS.md` may select that configured target explicitly. The block content
-remains the same across runtimes.
+to `AGENTS.md` causes the resolver to update `~/.gemini/AGENTS.md`. Codex uses
+the same `CODEX_HOME` directory and override precedence as its instruction
+discovery. The block content remains the same across runtimes.
 
 **Alternatives considered**:
 - Auto-detect installed runtimes and write to all found. Rejected because it violates Principle V's opt-in spirit at the user-config level (spaex should not modify files the user did not authorize).
@@ -105,6 +111,22 @@ sorted provenance list, then by normalized clause text.
 **Alternatives considered**:
 - Structured JSON emitted alongside `.spaex.md` for machine parsing. Deferred as a follow-up; the inline regex-parseable provenance is enough for MVP.
 - Rich footnotes / linked references. Rejected: adds Markdown-renderer variance across agents, hurts byte-identity guarantee.
+
+### Canonical build fingerprints
+
+The Composer build uses two independently computed fingerprints. `source_hash`
+is the SHA256 of compact, sorted JSON records containing each materialized
+fragment's scoped id, `atom_source`, `modality`, `tags`, and normalized
+`body_sha256`; the normalized body hash covers the fragment content. The sort
+key is `(molecule_id, fragment_id, atom_source, modality, tags, body_sha256)`.
+
+`build_input_hash` is the SHA256 of the effective prompt version, the SHA256 of
+the effective prompt content, and all valid clarification keys plus normalized
+answers, in sorted canonical form. The effective prompt is the project
+override `.spaex/composer-prompt.md` when present, otherwise the shipped
+canonical prompt. CRLF is normalized to LF before hashing. spaex computes and
+verifies both hashes outside the LLM; the Composer's metadata claims are not
+trusted without a match.
 
 ## 6. Fragment identifier scoping enforcement
 
