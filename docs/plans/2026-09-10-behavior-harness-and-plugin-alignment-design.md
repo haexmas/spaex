@@ -2,6 +2,8 @@
 
 **Status**: Design record. Captured 2026-09-10 during a brainstorming session that asked whether spaex is reinventing Claude Code Plugins, and how the constitution layer should evolve. This document fixes direction and decisions, not contracts. Contracts are settled in a follow-up Speckit spec written through `/speckit-specify` per [ADR 0009](../adr/0009-declared-speckit-workflow-adherence.md).
 
+**Implementation status (2026-09-11)**: [Spec 023](../../specs/023-behavior-harness/) Phases 1 (setup) and 2 (foundational) landed on branch `023-behavior-harness` at commit `8b71437`, 539 tests pass. Fragment schema, body_sha256 normalization, materialization to a caller-owned staging tree, mechanical pre-check with exit codes 20/22, clarifications persistence, and the molecule-manifest v4 inline `constitution_fragments` extension are all in. Phase 3 (US1 MVP: Composer, emit, install-transaction integration, global bootstrap installer, `spaex install --global` CLI) is next; 19 tasks T018-T036.
+
 **Author**: brainstorming session 2026-09-10 with operator.
 
 **Target spaex version**: 5.x line. The behavior-harness decisions here refine the ontology already sketched in the 2026-09-08 roadmap; they do not add a new MAJOR beyond that roadmap.
