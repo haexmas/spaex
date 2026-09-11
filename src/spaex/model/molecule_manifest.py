@@ -41,6 +41,9 @@ class MoleculeManifest:
     defaults: Mapping[str, Any] = field(default_factory=dict)
     config_schema: str | None = None
     install_hook: InstallHook | None = None
+    constitution_fragments: Mapping[str, tuple[Mapping[str, Any], ...]] = field(
+        default_factory=dict
+    )
 
     @staticmethod
     def from_json(raw: bytes) -> MoleculeManifest:
@@ -77,6 +80,10 @@ class MoleculeManifest:
 
         install_hook = _parse_install_hook(data.get("install_hook"))
 
+        constitution_fragments = _freeze_constitution_fragments(
+            data.get("constitution_fragments", {})
+        )
+
         return MoleculeManifest(
             spaex_version=data["spaex_version"],
             id=data["id"],
@@ -86,6 +93,7 @@ class MoleculeManifest:
             defaults=freeze_json(defaults),
             config_schema=config_schema,
             install_hook=install_hook,
+            constitution_fragments=constitution_fragments,
         )
 
 
@@ -100,3 +108,27 @@ def _parse_install_hook(raw: Any) -> InstallHook | None:
         args=tuple(args_raw),
         on_failure=raw.get("on_failure", "abort"),
     )
+
+
+def _freeze_constitution_fragments(
+    raw: Any,
+) -> Mapping[str, tuple[Mapping[str, Any], ...]]:
+    """Freeze the inline constitution_fragments block for read-only exposure.
+
+    The JSON Schema validated shape is `{<atom-id>: [entry, ...]}`. Each entry
+    is preserved as a frozen mapping; deep validation of individual fragment
+    fields happens in `spaex.behavior.fragment.BehaviorFragment.from_inline`
+    at materialization time (Spec 023 T012).
+    """
+    if not raw:
+        return {}
+    if not isinstance(raw, Mapping):
+        raise ValueError("constitution_fragments must be an object keyed by atom-id")
+    frozen: dict[str, tuple[Mapping[str, Any], ...]] = {}
+    for atom_id, entries in raw.items():
+        if not isinstance(entries, list):
+            raise ValueError(
+                f"constitution_fragments[{atom_id!r}] must be a list"
+            )
+        frozen[atom_id] = tuple(freeze_json(entry) for entry in entries)
+    return frozen

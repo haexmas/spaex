@@ -12,6 +12,7 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "spaex contributors" }]
 dependencies = [
     "jsonschema>=4.18",
+    "pyyaml>=6.0",
 ]
 
 [project.scripts]
