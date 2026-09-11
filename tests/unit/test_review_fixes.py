@@ -278,11 +278,17 @@ def test_install_runs_hook_only_alongside_constitution_molecule(
     captured_hook_only: list[tuple] = []
 
     def capture_publish(
-        contributions_arg, repo_root, *, state_root=None, hook_status=None, hook_only_records=()
+        contributions_arg,
+        repo_root,
+        *,
+        state_root=None,
+        hook_status=None,
+        hook_only_records=(),
+        preserved_files=(),
     ):
         """Capture hook-only records forwarded to constitution publication."""
         captured_hook_only.append(tuple(hook_only_records))
-        del contributions_arg, repo_root, state_root, hook_status
+        del contributions_arg, repo_root, state_root, hook_status, preserved_files
 
     monkeypatch.setattr(install_cli, "default_state_root", lambda: tmp_path / "state")
     monkeypatch.setattr(install_cli, "_load_consumer_manifest", lambda root: object())

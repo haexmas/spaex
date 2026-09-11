@@ -174,6 +174,24 @@ def test_project_local_from_config_file_reference_without_repo_root_raises() -> 
         project_local_from_config([{"file": "fragments/x.md"}])
 
 
+def test_project_local_from_config_rejects_symlink_escape(tmp_path: Path) -> None:
+    """Reject a file reference whose symlink target leaves the repository."""
+    outside = tmp_path.parent / f"{tmp_path.name}-outside.md"
+    outside.write_text(
+        "---\nid: outside\nkind: constitution_fragment\n---\nbody\n",
+        encoding="utf-8",
+    )
+    link = tmp_path / "fragments" / "escape.md"
+    link.parent.mkdir()
+    try:
+        link.symlink_to(outside)
+    except OSError:
+        pytest.skip("symlinks are not available")
+
+    with pytest.raises(ValueError, match="escapes repository root"):
+        project_local_from_config([{"file": "fragments/escape.md"}], repo_root=tmp_path)
+
+
 def test_materialize_orders_fragments_stably(tmp_path: Path) -> None:
     """Result order is (molecule_id, fragment_id) so downstream hashing is stable."""
     dir_b = tmp_path / "mol-b"
