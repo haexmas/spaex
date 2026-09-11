@@ -27,13 +27,13 @@ Single-project Python layout: `src/spaex/`, `tests/behavior/` at repository root
 
 **Purpose**: project scaffolding required before any behavior-harness code runs.
 
-- [ ] T001 Create the module skeleton at src/spaex/behavior/ with empty __init__.py plus empty stub modules fragment.py, materialize.py, precheck.py, emit.py, bootstrap.py so imports resolve during scaffolding
-- [ ] T002 [P] Create the module skeleton at src/spaex/behavior/composer/ with empty __init__.py plus empty stub modules prompt.py, invoke.py, clarifications.py, failure.py
-- [ ] T003 [P] Create the test tree at tests/behavior/ with subdirectories unit/, integration/, fault_injection/, fixtures/ and empty __init__.py files where pytest requires them
-- [ ] T004 [P] Draft ADR-0012 stub at docs/adr/0012-behavior-harness-reserved-paths.md capturing the reserved-paths update ($<repo-root>/.spaex.md$, .spaex/constitution.d/, .spaex/clarifications.json, .spaex/.stale, .spaex/composer.log) and the "commit-as-review-gate for .spaex.md" framing under Principle VI
-- [ ] T005 [P] Draft ADR-0013 stub at docs/adr/0013-global-bootstrap-block-contract.md capturing the paired HTML comment markers with version attribute and the target-paths table per runtime
-- [ ] T006 [P] Add .spaex/.stale and .spaex/composer.log to the project template .gitignore for consumer repos and document that .spaex.md and .spaex/constitution.d/ MUST NOT be gitignored
-- [ ] T007 Confirm pytest and existing spaex test fixtures work in the fresh worktree by running uv run pytest -q against the current main branch; note baseline pass count as a comparison anchor
+- [X] T001 Create the module skeleton at src/spaex/behavior/ with empty __init__.py plus empty stub modules fragment.py, materialize.py, precheck.py, emit.py, bootstrap.py so imports resolve during scaffolding
+- [X] T002 [P] Create the module skeleton at src/spaex/behavior/composer/ with empty __init__.py plus empty stub modules prompt.py, invoke.py, clarifications.py, failure.py
+- [X] T003 [P] Create the test tree at tests/behavior/ with subdirectories unit/, integration/, fault_injection/, fixtures/ and empty __init__.py files where pytest requires them
+- [X] T004 [P] Draft ADR-0012 stub at docs/adr/0012-behavior-harness-reserved-paths.md capturing the reserved-paths update ($<repo-root>/.spaex.md$, .spaex/constitution.d/, .spaex/clarifications.json, .spaex/.stale, .spaex/composer.log) and the "commit-as-review-gate for .spaex.md" framing under Principle VI
+- [X] T005 [P] Draft ADR-0013 stub at docs/adr/0013-global-bootstrap-block-contract.md capturing the paired HTML comment markers with version attribute and the target-paths table per runtime
+- [X] T006 [P] Add .spaex/.stale and .spaex/composer.log to the project template .gitignore for consumer repos and document that .spaex.md and .spaex/constitution.d/ MUST NOT be gitignored
+- [X] T007 Confirm pytest and existing spaex test fixtures work in the fresh worktree by running uv run pytest -q against the current main branch; note baseline pass count as a comparison anchor (baseline: 463 passed, 1 skipped, 9 deselected on 2026-09-11)
 
 **Checkpoint**: module and test scaffolding present, ADR stubs live, imports resolve. Nothing observable to a consumer yet.
 
