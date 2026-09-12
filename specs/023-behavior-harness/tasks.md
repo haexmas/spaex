@@ -101,8 +101,8 @@ Single-project Python layout: `src/spaex/`, `tests/behavior/` at repository root
 
 Most authoring machinery lands in Phase 2 (fragment schema + materialize). This phase adds author-focused tests.
 
-- [ ] T037 [P] [US2] Integration test tests/behavior/integration/test_inline_behavior_blocks.py: a typed atom (e.g., speckit_workflow) with an inline `constitution_fragments:` block materializes identically to a standalone fragment atom (FR-003)
-- [ ] T038 [P] [US2] Integration test tests/behavior/integration/test_molecule_without_fragments.py: a molecule shipping zero behavior fragments MUST NOT alter the composed constitution (User Story 2 acceptance scenario 3)
+- [X] T037 [P] [US2] Integration test tests/behavior/integration/test_inline_behavior_blocks.py: a typed atom (e.g., speckit_workflow) with an inline `constitution_fragments:` block materializes identically to a standalone fragment atom (FR-003)
+- [X] T038 [P] [US2] Integration test tests/behavior/integration/test_molecule_without_fragments.py: a molecule shipping zero behavior fragments MUST NOT alter the composed constitution (User Story 2 acceptance scenario 3)
 
 **Checkpoint**: US2 authoring surface verified against the format docs.
 
