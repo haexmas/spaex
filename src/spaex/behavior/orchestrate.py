@@ -109,6 +109,7 @@ def run(
     invoke_options: InvokeOptions | None = None,
     operator_answer: Callable[[ClarificationQuestion], str] | None = None,
     abort_on_contradiction: bool = True,
+    force_composer: bool = False,
 ) -> BehaviorOutcome:
     """Execute the behavior-harness transaction for one install.
 
@@ -140,6 +141,14 @@ def run(
     normally regardless of `abort_on_contradiction`, exactly as a plain
     `spaex install` would (contracts/cli-surface.md §add/remove: "On no
     contradiction, `.spaex.md` regenerates cleanly").
+
+    `force_composer` (default `False`): when `True`, the reproducibility
+    skip (FR-009) is bypassed even when the on-disk `.spaex.md` header
+    already matches the freshly computed fingerprints, forcing a real
+    Composer invocation. Used by `spaex constitution build --force`
+    (contracts/cli-surface.md §"spaex constitution build"); every other
+    caller (`spaex install`, the internal install `spaex add`/`spaex
+    remove` trigger) leaves this at its default and is unaffected.
     """
     spaex_dir = repo_root / SPAEX_DIR
     if not project_local and not _any_declares_behavior(resolved):
@@ -218,6 +227,7 @@ def run(
         existing is not None
         and existing == (source_hash, build_input_hash)
         and not removed_keys
+        and not force_composer
     ):
         _commit_behavior_artifacts(
             repo_root=repo_root,
@@ -312,6 +322,76 @@ def run(
         build_input_hash=emit_outcome.build_input_hash,
         dedup_provenance=dedup_provenance,
     )
+
+
+@dataclass(frozen=True)
+class ComputedFingerprints:
+    """Current `source_hash`/`build_input_hash` for a resolved fragment set,
+    computed without invoking the Composer.
+
+    Both hashes are `None` for the empty-fragment-set case (FR-017d): no
+    resolved molecule declares behavior fragments and no project-local
+    fragment is configured, matching the state in which `.spaex.md` should
+    not exist.
+    """
+
+    source_hash: str | None
+    build_input_hash: str | None
+    fragment_count: int
+
+
+def compute_fingerprints(
+    *,
+    repo_root: Path,
+    state_root: Path,
+    resolved: Sequence[ResolvedMolecule],
+    project_local: Sequence[BehaviorFragment] = (),
+) -> ComputedFingerprints:
+    """Compute the current fingerprints without invoking the Composer.
+
+    Reuses the exact materialization and hashing steps `run()` performs
+    before its reproducibility-skip check (module docstring steps 1-5:
+    materialize, compute `source_hash`, load the effective prompt, load and
+    invalidate clarifications, compute `build_input_hash`). Used by `spaex
+    constitution build --check` to compare against the published
+    `.spaex.md` header (via `read_header_hashes`) without ever shelling out
+    to an LLM (contracts/cli-surface.md: "--check ... MUST NOT invoke the
+    Composer").
+    """
+    spaex_dir = repo_root / SPAEX_DIR
+    if not project_local and not _any_declares_behavior(resolved):
+        return ComputedFingerprints(None, None, 0)
+
+    staging = spaex_dir / STAGING_DIRNAME
+    _reset_scratch(staging)
+    try:
+        molecule_inputs = _build_molecule_inputs(resolved, state_root=state_root)
+        materialized = materialize(
+            molecule_inputs,
+            staging_root=staging,
+            project_local=tuple(project_local),
+        )
+    finally:
+        _reset_scratch(staging)
+    fragments = tuple(m.fragment for m in materialized)
+    if not fragments:
+        return ComputedFingerprints(None, None, 0)
+
+    source_hash = compute_source_hash(fragments)
+    prompt_text = load_effective_prompt(repo_root)
+    prompt_hash = effective_prompt_sha256(prompt_text)
+
+    clarifications_path = spaex_dir / CLARIFICATIONS_FILENAME
+    store = load(clarifications_path)
+    current_hashes = {f.scoped_id: f.body_hash for f in fragments}
+    store, _removed_keys = invalidate(store, current_hashes)
+
+    build_input_hash = compute_build_input_hash(
+        effective_prompt_sha256=prompt_hash,
+        composer_prompt_version=COMPOSER_PROMPT_VERSION,
+        valid_clarifications=store.entries.values(),
+    )
+    return ComputedFingerprints(source_hash, build_input_hash, len(fragments))
 
 
 def _resolve_clarifications(
@@ -658,9 +738,11 @@ def _is_clarifications_content_changed(
 __all__ = [
     "BehaviorOutcome",
     "CONSTITUTION_D_DIRNAME",
+    "ComputedFingerprints",
     "PREV_DIRNAME",
     "SPAEX_DIR",
     "STAGING_DIRNAME",
     "PrecheckOutcome",
+    "compute_fingerprints",
     "run",
 ]

@@ -181,10 +181,10 @@ Reproducibility groundwork lands in Phase 3 (T031). This phase adds the fragment
 
 **Purpose**: user-facing commands beyond `spaex install`.
 
-- [ ] T055 [P] Implement `spaex constitution build` subcommand in src/spaex/cli/behavior_commands.py with --force and --check flags (contracts/cli-surface.md §"spaex constitution build")
-- [ ] T056 [P] Implement `spaex constitution trace <query>` subcommand in src/spaex/cli/behavior_commands.py: accept only an exact scoped fragment id `<molecule-id>/<fragment-id>` or a clause-text substring, reject bare fragment ids as ambiguous, and print every provenance record for merged clauses in text/json formats (FR-022, contracts/cli-surface.md §"spaex constitution trace")
-- [ ] T057 [P] Integration test tests/behavior/integration/test_provenance_trace.py covering both query modes and text/json output formats (SC-006)
-- [ ] T058 [P] Integration test tests/behavior/integration/test_constitution_build_check.py covering `--check` exit codes (SC-003 verification)
+- [X] T055 [P] Implement `spaex constitution build` subcommand in src/spaex/cli/behavior_commands.py with --force and --check flags (contracts/cli-surface.md §"spaex constitution build")
+- [X] T056 [P] Implement `spaex constitution trace <query>` subcommand in src/spaex/cli/behavior_commands.py: accept only an exact scoped fragment id `<molecule-id>/<fragment-id>` or a clause-text substring, reject bare fragment ids as ambiguous, and print every provenance record for merged clauses in text/json formats (FR-022, contracts/cli-surface.md §"spaex constitution trace")
+- [X] T057 [P] Integration test tests/behavior/integration/test_provenance_trace.py covering both query modes and text/json output formats (SC-006)
+- [X] T058 [P] Integration test tests/behavior/integration/test_constitution_build_check.py covering `--check` exit codes (SC-003 verification)
 
 **Checkpoint**: full CLI surface delivered.
 
