@@ -1,4 +1,4 @@
-"""Emit the composed constitution to `<repo-root>/.spaex.md` (Spec 023 T027).
+"""Emit the composed constitution to `<repo-root>/.spaex/constitution.md`.
 
 Two responsibilities:
 
@@ -7,9 +7,10 @@ Two responsibilities:
   research.md §5.
 - Verify the Composer's Shape A response echoes those hashes in the
   `<!-- spaex-composed:... -->` header, then write the body atomically to
-  `.spaex.md`. A mismatch is an `invalid-output` failure (FR-012a).
+  `.spaex/constitution.md`. A mismatch is an `invalid-output` failure (FR-012a).
 
-Empty-set behavior (FR-017d): install.py decides whether `.spaex.md` should
+Empty-set behavior (FR-017d): install.py decides whether the composed
+Constitution should
 be removed for an empty fragment set; `emit.py` exposes `remove_if_exists`
 for that path.
 """
@@ -32,8 +33,9 @@ from spaex.behavior.composer.failure import (
 )
 from spaex.behavior.composer.invoke import ComposedShape
 from spaex.behavior.fragment import BehaviorFragment
+from spaex.paths import composed_constitution_path
 
-SPAEX_MD_FILENAME = ".spaex.md"
+SPAEX_MD_FILENAME = ".spaex/constitution.md"
 
 _HEADER_RE = re.compile(
     r'^<!--\s*spaex-composed:'
@@ -123,11 +125,11 @@ def emit_composed(
     expected_source_hash: str,
     expected_build_input_hash: str,
 ) -> EmitOutcome:
-    """Verify the Composer's header hashes, then atomically write `.spaex.md`.
+    """Verify the Composer's header hashes, then atomically write the artifact.
 
     Mismatches (missing header, wrong hash, wrong version) raise
     `ComposerInvalidOutputError` (exit 32) so the fail-fast contract holds
-    (FR-012a) and no `.spaex.md` is published from a suspect Composer output.
+    (FR-012a) and no `.spaex/constitution.md` is published from a suspect Composer output.
     """
     header = _parse_header(shape.body)
     if header is None:
@@ -160,7 +162,7 @@ def emit_composed(
             f"Composer header version {header['version']!r} is not '1'",
         )
 
-    target = repo_root / SPAEX_MD_FILENAME
+    target = composed_constitution_path(repo_root)
     _atomic_write(target, shape.body)
     return EmitOutcome(
         path=target,
@@ -170,12 +172,12 @@ def emit_composed(
 
 
 def remove_if_exists(repo_root: Path) -> bool:
-    """FR-017d empty-set path: remove `.spaex.md` when it exists.
+    """FR-017d empty-set path: remove the composed Constitution when present.
 
     Returns True iff a file was removed. Callers use the return value to
     surface a "removed" hint at the end of install.
     """
-    target = repo_root / SPAEX_MD_FILENAME
+    target = composed_constitution_path(repo_root)
     if not target.exists():
         return False
     target.unlink()
@@ -183,13 +185,13 @@ def remove_if_exists(repo_root: Path) -> bool:
 
 
 def read_header_hashes(repo_root: Path) -> tuple[str, str] | None:
-    """Return (source_hash, build_input_hash) from an existing `.spaex.md`.
+    """Return hashes from the existing composed Constitution artifact.
 
     Used by the reproducibility skip-path (FR-009, Phase 8): if the on-disk
     hashes match the freshly computed ones for the current fragment set and
     effective prompt, the Composer is not invoked.
     """
-    target = repo_root / SPAEX_MD_FILENAME
+    target = composed_constitution_path(repo_root)
     if not target.exists():
         return None
     header = _parse_header(target.read_text(encoding="utf-8"))

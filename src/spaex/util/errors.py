@@ -34,7 +34,7 @@ class HaexError(Exception):
         Exception.__init__(self, self.message or self.diagnostic_key)
 
 
-# --- Migrate boundary --------------------------------------------------------
+# --- Source and manifest boundaries -----------------------------------------
 
 
 @dataclass
@@ -66,31 +66,10 @@ class IdentityMismatchError(HaexError):
 
 
 @dataclass
-class InvalidHaexHiveManifestError(HaexError):
-    diagnostic_key: str = "spaex-json-invalid"
-    exit_code: int = exit_codes.INPUT_REFUSE
-    hint: str = "Fix .spaex.json and retry the migration."
-
-
-@dataclass
-class MigrationManifestInvalidError(HaexError):
-    diagnostic_key: str = "migration-manifest-invalid"
-    exit_code: int = exit_codes.INPUT_REFUSE
-    hint: str = "Fix the malformed source manifest and retry the migration."
-
-
-@dataclass
-class MigrationPathOutsideRepositoryError(HaexError):
-    diagnostic_key: str = "migration-path-outside-repository"
-    exit_code: int = exit_codes.INPUT_REFUSE
-    hint: str = "Use a repository-relative molecule path within the selected repository."
-
-
-@dataclass
 class MissingRemoteOriginError(HaexError):
     diagnostic_key: str = "missing-remote-origin"
     exit_code: int = exit_codes.IO_REFUSE
-    hint: str = "Configure `git remote add origin` before running migrate."
+    hint: str = "Configure `git remote add origin` before running spaex."
 
 
 @dataclass
@@ -132,10 +111,7 @@ class VersionBelowMinError(HaexError):
 class SpaexVersionUnsupportedError(HaexError):
     diagnostic_key: str = "spaex-version-unsupported"
     exit_code: int = exit_codes.INPUT_REFUSE
-    hint: str = (
-        "Run `spaex migrate`, review `.spaex.json.migrated`, and adopt it as "
-        "`.spaex.json`."
-    )
+    hint: str = "Use the current `.spaex/manifest.json` schema."
 
 
 @dataclass
@@ -326,7 +302,7 @@ class WorkflowMoleculeAlreadyAdoptedError(HaexError):
 class UnknownMoleculeIdError(HaexError):
     diagnostic_key: str = "unknown-molecule-id"
     exit_code: int = exit_codes.INPUT_REFUSE
-    hint: str = "The molecule id is not adopted in `.spaex.json`."
+    hint: str = "The molecule id is not adopted in `.spaex/manifest.json`."
 
 
 @dataclass
@@ -343,5 +319,5 @@ class ManifestRollbackFailedError(HaexError):
     diagnostic_key: str = "manifest-rollback-failed"
     exit_code: int = exit_codes.POST_WRITE_VALIDATION
     hint: str = (
-        "Restore `.spaex.json` from version control, then run `spaex install` again."
+        "Restore `.spaex/manifest.json` from version control, then run `spaex install` again."
     )

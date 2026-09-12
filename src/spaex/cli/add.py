@@ -1,6 +1,6 @@
-"""`haex add` — adopt one or more molecules from a source repository.
+"""`spaex add` — adopt one or more molecules from a source repository.
 
-Spec 013 T074 / T075. Reads and mutates ``.spaex.json`` under the
+Spec 013 T074 / T075. Reads and mutates ``.spaex/manifest.json`` under the
 permanent advisory manifest lock, then delegates to ``haex install``
 in-process through ``write_and_reinstall``. See
 ``specs/013-add-cli-and-molecule-rename/contracts/haex-add.cli.md`` for
@@ -17,9 +17,8 @@ from spaex.git import publisher_fetch
 from spaex.git import show as git_show
 from spaex.install.manifest_lock import (
     DEFAULT_LOCK_TIMEOUT_SECONDS,
-    MANIFEST_LOCK_NAME,
-    MANIFEST_NAME,
     ManifestLockContext,
+    active_manifest_lock_path,
     parse_lock_timeout,
 )
 from spaex.install.write_and_reinstall import write_and_reinstall
@@ -28,6 +27,7 @@ from spaex.model.consumer_manifest import ConsumerManifest
 from spaex.model.molecule_manifest import MoleculeManifest
 from spaex.model.publisher_manifest import PublisherManifest
 from spaex.model.source_url import canonicalize
+from spaex.paths import MANIFEST_RELATIVE_PATH, manifest_path
 from spaex.util import exit_codes
 from spaex.util.errors import (
     ConstitutionAlreadyAdoptedError,
@@ -193,7 +193,7 @@ def _existing_category_owners(
     A missing clone is treated as "no owner" for this pre-check — install
     itself will surface any clone-availability refusal downstream.
     """
-    from spaex.migrate.transform import clone_dir
+    from spaex.git.cache import clone_dir
 
     owners: list[str] = []
     for compound in manifest.compounds:
@@ -375,20 +375,20 @@ def run(args: argparse.Namespace) -> int:
     repo_root = Path(args.repo_root).resolve()
     state_root = default_state_root()
 
-    manifest_path = repo_root / MANIFEST_NAME
-    if not manifest_path.exists():
+    path = manifest_path(repo_root)
+    if not path.exists():
         raise HaexError(
             message=(
-                f"{manifest_path} is missing; create it before running `spaex add`"
+                f"{path} is missing; create it before running `spaex add`"
             ),
-            context={"path": str(manifest_path)},
+            context={"path": str(path)},
             diagnostic_key="spaex-json-missing",
             exit_code=exit_codes.INCOMPLETE_TRANSACTION,
-            hint="Create a v4 .spaex.json first.",
+            hint=f"Create a v4 {MANIFEST_RELATIVE_PATH} first.",
         )
 
     lock = ManifestLockContext(
-        repo_root / MANIFEST_LOCK_NAME,
+        active_manifest_lock_path(repo_root),
         timeout_seconds=args.lock_timeout,
     )
     with lock:
@@ -400,7 +400,7 @@ def run(args: argparse.Namespace) -> int:
         molecule_ids = _select_molecule_ids(args, publisher)
         _verify_ids_in_source(molecule_ids, publisher)
 
-        current_manifest = ConsumerManifest.from_json(manifest_path.read_bytes())
+        current_manifest = ConsumerManifest.from_json(path.read_bytes())
 
         added_category_declarers = _categories_declared_by(
             molecule_ids, publisher, repo_dir, sha

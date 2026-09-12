@@ -62,7 +62,7 @@ class ComposerInput:
 
     `expected_source_hash` and `expected_build_input_hash` are computed by
     spaex outside the LLM (research.md §5). The prompt tells the LLM to echo
-    them verbatim in the `.spaex.md` header; spaex verifies the echo before
+    them verbatim in the `.spaex/constitution.md` header; spaex verifies the echo before
     accepting Shape A.
     """
 

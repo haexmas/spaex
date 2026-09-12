@@ -22,7 +22,7 @@ Exits 0 when all requested blocks are current.
 
 ### Per project: pin a molecule that ships behavior fragments
 
-Edit `.spaex.json`:
+Edit `.spaex/manifest.json`:
 
 ```json
 {
@@ -50,13 +50,13 @@ spaex install
 Result:
 1. spaex materializes the molecules' fragments into `.spaex/constitution.d/<molecule-id>/<fragment-id>.md`.
 2. Mechanical pre-check runs; hard intra-molecule conflicts abort with exit code 20.
-3. Composer runs via the first available `claude`, `codex`, or `gemini` executable (in that order); it produces `.spaex.md` at the repo root.
+3. Composer runs via the first available `claude`, `codex`, or `gemini` executable (in that order); it produces `.spaex/constitution.md` at the repo root.
 4. If the Composer reports a clarification requirement, provide the answer in `.spaex/clarifications.json` or use the clarification loop introduced in the later phase; it is reused on future installs.
 
 Stage and commit:
 
 ```bash
-git add .spaex.json .spaex.md .spaex/constitution.d/ .spaex/clarifications.json
+git add .spaex/manifest.json .spaex/constitution.md .spaex/constitution.d/ .spaex/clarifications.json
 git commit -m "chore: adopt speckit-strict behavior harness"
 ```
 
@@ -70,13 +70,13 @@ project's `.gitignore`:
 .spaex/composer.log
 ```
 
-Do NOT add `.spaex.md` or `.spaex/constitution.d/` to `.gitignore`; those are
+Do NOT add `.spaex/constitution.md` or `.spaex/constitution.d/` to `.gitignore`; those are
 the versioned composed constitution and its source fragments, and both are
 review-gated on commit per ADR-0012.
 
 ### Runtime: open your agent
 
-Any of `claude`, `codex`, `gemini` opened in this project now reads `.spaex.md` at session start and treats its MUST directives as inviolable.
+Any of `claude`, `codex`, `gemini` opened in this project now reads `.spaex/constitution.md` at session start and treats its MUST directives as inviolable.
 
 Trace where a rule came from:
 
@@ -86,7 +86,7 @@ spaex constitution trace com.example.atoms.speckit-strict/tests-before-commit
 
 ### Adding a project-local rule (additive-only)
 
-Edit `.spaex.json` to add a local fragment:
+Edit `.spaex/manifest.json` to add a local fragment:
 
 ```json
 {
@@ -106,7 +106,7 @@ Edit `.spaex.json` to add a local fragment:
 
 `spaex install`:
 - Local fragment materializes under `.spaex/constitution.d/_project/http-through-shared-client.md`.
-- Composer merges it into `.spaex.md` alongside atom-provided rules.
+- Composer merges it into `.spaex/constitution.md` alongside atom-provided rules.
 - If your local fragment's bare `fragment_id` matches an atom-provided fragment in any molecule, install aborts with exit code 22, names every matching `<molecule-id>/<fragment-id>`, and explains the additive-only remedy. `_project/<fragment-id>` remains a distinct emitted identity; the comparison intentionally uses the bare id.
 
 ## For a molecule author
@@ -150,7 +150,7 @@ tags: [testing, git]
 **MUST** run the project's test suite before creating any commit. If tests fail,
 address the failures before writing the commit.
 
-**Rationale:** mocked test runs have historically masked broken migrations.
+**Rationale:** mocked test runs have historically masked broken setup paths.
 ```
 
 Publish the molecule at a commit SHA. Consumers pin the SHA and see the fragment materialize on their next `spaex install`.
@@ -191,9 +191,9 @@ Covers the five Composer failure categories (timeout, runtime-error, invalid-out
 uv run pytest tests/behavior/integration/test_reproducibility.py
 ```
 
-Runs `spaex install` twice on the same fixture project, asserts `.spaex.md` is byte-identical.
+Runs `spaex install` twice on the same fixture project, asserts `.spaex/constitution.md` is byte-identical.
 
-### Regenerate `.spaex.md` without a full install
+### Regenerate `.spaex/constitution.md` without a full install
 
 ```bash
 spaex constitution build --force
@@ -203,12 +203,12 @@ Bypasses the source-hash check; useful for iterating on the Composer prompt.
 
 ### Manual verification: cross-runtime discoverability (SC-007)
 
-The automated `test_bootstrap_discoverability.py` covers the CLI-level file-read behavior via mocks. Once per spaex release, a maintainer manually verifies that real runtimes actually respect `.spaex.md`:
+The automated `test_bootstrap_discoverability.py` covers the CLI-level file-read behavior via mocks. Once per spaex release, a maintainer manually verifies that real runtimes actually respect `.spaex/constitution.md`:
 
 1. Run `spaex install --global claude,codex,gemini` on a scratch account.
 2. Create a fixture project with a single MUST fragment declaring an unambiguous constraint (e.g., "MUST prefix every reply with the token `HARNESS-OK`").
 3. Open each runtime in the project and issue any prompt.
-4. Verify each response begins with `HARNESS-OK`. This confirms the runtime actually read `.spaex.md` after the bootstrap indirection.
+4. Verify each response begins with `HARNESS-OK`. This confirms the runtime actually read `.spaex/constitution.md` after the bootstrap indirection.
 5. Record the observation in the release notes.
 
 This is a small human-in-the-loop step because full-agent-behavior verification is out of scope for automated tests.
@@ -218,7 +218,7 @@ This is a small human-in-the-loop step because full-agent-behavior verification 
 | Symptom | Exit code | Remedy |
 |---------|-----------|--------|
 | Two fragments same molecule same id, contradictory modality | 20 | Fix the molecule; one of its atoms has an author bug. |
-| Cross-molecule semantic contradiction, operator declined to reconcile | 21 | Remove one molecule from `.spaex.json`, or add a project-local fragment that supersedes both, or provide a reconciling answer. |
+| Cross-molecule semantic contradiction, operator declined to reconcile | 21 | Remove one molecule from `.spaex/manifest.json`, or add a project-local fragment that supersedes both, or provide a reconciling answer. |
 | Project-local fragment tries to override atom-provided rule | 22 | Remove the offending molecule instead of trying to override its rule. |
 | Composer timeout | 30 | Reduce fragment count, increase `SPAEX_COMPOSER_TIMEOUT`, or switch runtime. |
 | Composer produced invalid output | 32 | Check `$SPAEX_COMPOSER_LOG` (default `.spaex/composer.log`); retry; report if reproducible. |

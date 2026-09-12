@@ -46,7 +46,7 @@ All other `MoleculeManifest` fields (from Spec 007/013) are unchanged.
 
 ### ResolvedMolecule (new complete resolver record)
 
-A complete resolver record produced from a consumer's `.spaex.json` compounds + publisher manifests + molecule manifests. The current resolver returns only `ResolvedConstitutionContribution` objects; T009 introduces this molecule-level record alongside or within an equivalent result type, retaining the existing contribution data for publication.
+A complete resolver record produced from a consumer's `.spaex/manifest.json` compounds + publisher manifests + molecule manifests. The current resolver returns only `ResolvedConstitutionContribution` objects; T009 introduces this molecule-level record alongside or within an equivalent result type, retaining the existing contribution data for publication.
 
 **Record contract** (existing resolver-local metadata is exposed to the hook runner; the parsed hook is added by this spec):
 
@@ -114,13 +114,13 @@ There are no long-lived stateful entities introduced by this feature. Every `spa
 5. Publishes the install.lock (with hook_status fields) and swaps the staged generation, OR aborts and rolls back per `on_failure: "abort"` policy.
 
 The parsed `InstallHook` and the resolved records are ephemeral to one invocation. Persistent state is captured only in:
-- `.spaex.json` (unchanged by this feature; new `--no-install-hooks` flag is per-invocation, not written back).
+- `.spaex/manifest.json` (unchanged by this feature; new `--no-install-hooks` flag is per-invocation, not written back).
 - `.spaex/install.lock` (per-molecule `hook_status` field added, per generation).
 
 ## Relationships
 
 ```text
-ConsumerManifest (.spaex.json)
+ConsumerManifest (.spaex/manifest.json)
   └── compounds[] (source, revision, molecules[], config[])
         └── PublisherManifest (fetched via git_show, unchanged)
               └── molecules[molecule_id] { path, version }

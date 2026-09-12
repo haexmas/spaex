@@ -22,7 +22,7 @@ from spaex.behavior import bootstrap
 from spaex.behavior import orchestrate as behavior_orchestrate
 from spaex.behavior.composer.clarifications import CLARIFICATIONS_FILENAME
 from spaex.behavior.composer.invoke import COMPOSER_LOG_ENV, DEFAULT_COMPOSER_LOG
-from spaex.behavior.emit import SPAEX_MD_FILENAME, read_header_hashes
+from spaex.behavior.emit import read_header_hashes
 from spaex.behavior.fragment import (
     PROJECT_SCOPE,
     BehaviorFragment,
@@ -34,10 +34,10 @@ from spaex.cli.install import _load_consumer_manifest
 from spaex.constitution.resolve import ResolvedMolecule, resolve_install_inputs
 from spaex.io.state import default_state_root
 from spaex.model.consumer_manifest import ConsumerManifest
+from spaex.paths import composed_constitution_path, manifest_path
 from spaex.util import exit_codes
 from spaex.util.errors import HaexError
 
-MANIFEST_NAME = ".spaex.json"
 CONSTITUTION_D_DIRNAME = "constitution.d"
 
 
@@ -76,7 +76,7 @@ def run_constitution_build(args: argparse.Namespace) -> int:
     §"spaex constitution build").
 
     Explicitly invokes the Composer against the current fragment set and
-    writes `.spaex.md`, standing in for the behavior-harness slice of a full
+    writes `.spaex/constitution.md`, standing in for the behavior-harness slice of a full
     `spaex install` (no Spec 008 `constitution.md`/hooks/`install.lock`
     publish here). Reuses `behavior_orchestrate.run()`'s fingerprint
     comparison and Composer-invocation machinery unchanged; `--force` maps
@@ -139,7 +139,7 @@ def _check_build(
         resolved=resolved,
         project_local=project_local,
     )
-    spaex_md_exists = (repo_root / SPAEX_MD_FILENAME).exists()
+    spaex_md_exists = composed_constitution_path(repo_root).exists()
     if fingerprints.source_hash is None:
         match = not spaex_md_exists
     else:
@@ -150,11 +150,11 @@ def _check_build(
         )
     if match:
         sys.stdout.write(
-            "spaex constitution build --check: .spaex.md is current\n"
+            "spaex constitution build --check: .spaex/constitution.md is current\n"
         )
         return exit_codes.SUCCESS
     sys.stdout.write(
-        "spaex constitution build --check: .spaex.md is stale "
+        "spaex constitution build --check: .spaex/constitution.md is stale "
         "(source_hash/build_input_hash differ); run `spaex constitution "
         "build` to regenerate\n"
     )
@@ -171,7 +171,7 @@ def _force_check_build(
     """`--force --check`: an explicit fresh Composer comparison
     (contracts/cli-surface.md). Forces a real Composer invocation via
     `force_composer=True`, then reports whether the freshly composed
-    `.spaex.md` matches what was already on disk (the regenerate-then-diff
+    `.spaex/constitution.md` matches what was already on disk (the regenerate-then-diff
     pattern SC-003 reproducibility verification calls for).
 
     `--check` never mutates the repository, even combined with `--force`:
@@ -180,7 +180,7 @@ def _force_check_build(
     always read-only). Any change from the fresh rebuild is reverted
     before returning; only the exit code reports drift.
     """
-    spaex_md_path = repo_root / SPAEX_MD_FILENAME
+    spaex_md_path = composed_constitution_path(repo_root)
     with TemporaryDirectory(prefix=".spaex-force-check-", dir=repo_root) as temp_dir:
         snapshots = _snapshot_managed_artifacts(repo_root, Path(temp_dir))
         before = spaex_md_path.read_bytes() if spaex_md_path.exists() else None
@@ -200,12 +200,12 @@ def _force_check_build(
     if matches:
         sys.stdout.write(
             "spaex constitution build --force --check: a fresh Composer "
-            "rebuild matches the committed .spaex.md\n"
+            "rebuild matches the committed .spaex/constitution.md\n"
         )
         return exit_codes.SUCCESS
     sys.stdout.write(
         "spaex constitution build --force --check: a fresh Composer "
-        "rebuild produced different output; .spaex.md left unchanged "
+        "rebuild produced different output; .spaex/constitution.md left unchanged "
         "(rerun `spaex constitution build --force` to persist it)\n"
     )
     return 1
@@ -270,7 +270,7 @@ def _managed_artifact_paths(repo_root: Path) -> tuple[Path, ...]:
     """Return every repository artifact that a Composer build can mutate."""
     spaex_dir = repo_root / behavior_orchestrate.SPAEX_DIR
     paths = [
-        repo_root / SPAEX_MD_FILENAME,
+        composed_constitution_path(repo_root),
         spaex_dir / behavior_orchestrate.CONSTITUTION_D_DIRNAME,
         spaex_dir / CLARIFICATIONS_FILENAME,
         spaex_dir / STALE_FILENAME,
@@ -292,15 +292,15 @@ def _managed_artifact_paths(repo_root: Path) -> tuple[Path, ...]:
 def _report_constitution_build(outcome: behavior_orchestrate.BehaviorOutcome) -> None:
     if outcome.published and not outcome.skipped_composer:
         sys.stdout.write(
-            f"composed .spaex.md ({outcome.fragment_count} fragment(s))\n"
+            f"composed .spaex/constitution.md ({outcome.fragment_count} fragment(s))\n"
         )
     elif outcome.skipped_composer:
         sys.stdout.write(
-            f"reused .spaex.md ({outcome.fragment_count} fragment(s), "
+            f"reused .spaex/constitution.md ({outcome.fragment_count} fragment(s), "
             "source_hash/build_input_hash unchanged)\n"
         )
-    elif outcome.removed_spaex_md:
-        sys.stdout.write("removed .spaex.md (no active fragments)\n")
+    elif outcome.removed_constitution:
+        sys.stdout.write("removed .spaex/constitution.md (no active fragments)\n")
     else:
         sys.stdout.write(
             "spaex constitution build: nothing to do (no fragments)\n"
@@ -324,7 +324,7 @@ _PROVENANCE_ID_RE = re.compile(r"`([^`]+)`")
 
 @dataclass(frozen=True)
 class _TracedClause:
-    """One `.spaex.md` clause parsed for `spaex constitution trace`."""
+    """One `.spaex/constitution.md` clause parsed for `spaex constitution trace`."""
 
     modality: str
     text: str
@@ -332,7 +332,7 @@ class _TracedClause:
 
 
 def _parse_clauses(body: str) -> list[_TracedClause]:
-    """Parse every clause in a composed `.spaex.md` body.
+    """Parse every clause in a composed `.spaex/constitution.md` body.
 
     Follows contracts/spaex-md-format.md's stable clause regex under each
     `##` modality section header; lines outside a recognized section (the
@@ -377,13 +377,13 @@ def run_constitution_trace(args: argparse.Namespace) -> int:
     query = str(args.query)
     fmt = getattr(args, "format", None) or "text"
 
-    spaex_md_path = repo_root / SPAEX_MD_FILENAME
+    spaex_md_path = composed_constitution_path(repo_root)
     if not spaex_md_path.exists():
         return _emit_trace_result(
             fmt,
             matches=(),
             error=(
-                f"no {SPAEX_MD_FILENAME} found; run `spaex install` or "
+                "no .spaex/constitution.md found; run `spaex install` or "
                 "`spaex constitution build` first"
             ),
         )
@@ -448,7 +448,7 @@ def _emit_trace_result(
             json.dumps({"matches": records}, indent=2, sort_keys=True) + "\n"
         )
     else:
-        blocks = [_render_clause_text(record) for record in records]
+        blocks = [_render_clause_text(record, repo_root=repo_root) for record in records]
         sys.stdout.write("\n\n".join(blocks) + "\n")
     return exit_codes.SUCCESS
 
@@ -474,12 +474,12 @@ def _render_clause(
             if pin is not None:
                 source["molecule_source"] = pin[0]
                 source["molecule_revision"] = pin[1]
-                source["pinned_in"] = MANIFEST_NAME
+                source["pinned_in"] = _manifest_display_path(repo_root)
         sources.append(source)
     return {"modality": clause.modality, "text": clause.text, "sources": sources}
 
 
-def _render_clause_text(record: dict[str, object]) -> str:
+def _render_clause_text(record: dict[str, object], *, repo_root: Path) -> str:
     lines = [
         f'Directive: "{record["text"]}."',
         f"Modality:  {record['modality']}",
@@ -494,7 +494,7 @@ def _render_clause_text(record: dict[str, object]) -> str:
         if source.get("project_local"):
             lines.append(
                 "    Molecule: (project-local fragment; declared in "
-                f"{MANIFEST_NAME}'s constitution.local_fragments)"
+                f"{_manifest_display_path(repo_root)}'s constitution.local_fragments)"
             )
         elif "molecule_source" in source:
             lines.append(
@@ -503,7 +503,10 @@ def _render_clause_text(record: dict[str, object]) -> str:
                 f"{source['pinned_in']})"
             )
         else:
-            lines.append(f"    Molecule: (unknown; not found in {MANIFEST_NAME})")
+            lines.append(
+                "    Molecule: (unknown; not found in "
+                f"{_manifest_display_path(repo_root)})"
+            )
     return "\n".join(lines)
 
 
@@ -512,11 +515,11 @@ def _lookup_atom_source(
 ) -> str | None:
     """Read `atom_source` from the materialized fragment file.
 
-    Not available from `.spaex.md` itself (only the composed clause text
+    Not available from `.spaex/constitution.md` itself (only the composed clause text
     and scoped provenance ids are), so this reads
     `.spaex/constitution.d/<molecule-id>/<fragment-id>.md` back, per
     fragment-format.md's header schema. Returns `None` when the fragment
-    file is missing or unparseable (e.g. a stale `.spaex.md` after the
+    file is missing or unparseable (e.g. a stale composed Constitution after the
     fragment was removed) rather than failing the whole trace.
     """
     path = (
@@ -536,18 +539,18 @@ def _lookup_atom_source(
 
 
 def _load_molecule_pins(repo_root: Path) -> dict[str, tuple[str, str]]:
-    """Best-effort `molecule_id -> (source, revision)` map from `.spaex.json`.
+    """Best-effort `molecule_id -> (source, revision)` map from the manifest.
 
-    Returns an empty map when `.spaex.json` is missing or invalid:
+    Returns an empty map when the manifest is missing or invalid:
     `constitution trace`'s own exit codes are only 0/1
     (contracts/cli-surface.md §"spaex constitution trace"), so an unrelated
     manifest problem must not fail the whole command.
     """
-    manifest_path = repo_root / MANIFEST_NAME
-    if not manifest_path.exists():
+    path = manifest_path(repo_root)
+    if not path.exists():
         return {}
     try:
-        manifest = ConsumerManifest.from_json(manifest_path.read_bytes())
+        manifest = ConsumerManifest.from_json(path.read_bytes())
     except (OSError, ValueError, KeyError):
         return {}
     pins: dict[str, tuple[str, str]] = {}
@@ -555,6 +558,11 @@ def _load_molecule_pins(repo_root: Path) -> dict[str, tuple[str, str]]:
         for molecule_id in compound.molecules:
             pins[molecule_id] = (compound.source, compound.revision)
     return pins
+
+
+def _manifest_display_path(repo_root: Path) -> str:
+    """Return the active manifest path for human-readable provenance output."""
+    return manifest_path(repo_root).relative_to(repo_root).as_posix()
 
 
 def maybe_emit_no_bootstrap_hint() -> None:
@@ -574,7 +582,8 @@ def maybe_emit_no_bootstrap_hint() -> None:
             continue
     sys.stderr.write(
         "hint: no runtime global bootstrap detected on this machine; "
-        "run `spaex install --global` so agent runtimes discover .spaex.md "
+        "run `spaex install --global` so agent runtimes discover "
+        ".spaex/constitution.md "
         "(FR-023, contracts/cli-surface.md)\n"
     )
 

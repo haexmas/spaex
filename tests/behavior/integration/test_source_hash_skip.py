@@ -4,7 +4,7 @@
 `orchestrate.run` computes `source_hash` (per-fragment identity, metadata,
 and body) and `build_input_hash` (effective prompt, prompt version, valid
 clarifications) outside the LLM and compares them against the committed
-`.spaex.md` header before deciding whether to invoke the Composer at all
+`.spaex/constitution.md` header before deciding whether to invoke the Composer at all
 (FR-009, contracts/composer-interface.md Build fingerprints; the skip
 decision itself lives in `orchestrate.run`, wired in Phase 3 T029/T031).
 
@@ -39,7 +39,7 @@ from spaex.behavior.composer.invoke import (
 from spaex.behavior.emit import read_header_hashes
 from spaex.cli import add as add_cli
 from spaex.cli import install as install_cli
-from spaex.migrate.transform import clone_dir
+from spaex.git.cache import clone_dir
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None, reason="git binary required"
@@ -150,7 +150,8 @@ def _commit_modality_change(
 def _make_consumer(tmp_path: Path) -> Path:
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-    (consumer / ".spaex.json").write_text(
+    (consumer / ".spaex").mkdir()
+    (consumer / ".spaex/manifest.json").write_text(
         json.dumps(
             {
                 "spaex_version": "4",
@@ -163,7 +164,7 @@ def _make_consumer(tmp_path: Path) -> Path:
 
 
 def _bump_consumer_revision(consumer: Path, revision: str) -> None:
-    manifest_path = consumer / ".spaex.json"
+    manifest_path = consumer / ".spaex/manifest.json"
     data = json.loads(manifest_path.read_text())
     data["compounds"][0]["revision"] = revision
     manifest_path.write_text(json.dumps(data, indent=2))
@@ -252,13 +253,13 @@ def test_second_install_skips_composer_when_state_unchanged(
         == 0
     )
     assert stub.calls == 1
-    first = (consumer / ".spaex.md").read_bytes()
+    first = (consumer / ".spaex/constitution.md").read_bytes()
 
     assert _run_install(consumer, state_root, monkeypatch) == 0
     assert stub.calls == 1, (
         "unchanged fragment set + prompt must skip the Composer entirely (FR-009)"
     )
-    assert (consumer / ".spaex.md").read_bytes() == first
+    assert (consumer / ".spaex/constitution.md").read_bytes() == first
 
 
 def test_fragment_metadata_change_invalidates_skip(
@@ -275,7 +276,7 @@ def test_fragment_metadata_change_invalidates_skip(
         == 0
     )
     assert stub.calls == 1
-    first = (consumer / ".spaex.md").read_bytes()
+    first = (consumer / ".spaex/constitution.md").read_bytes()
     first_hashes = read_header_hashes(consumer)
     assert first_hashes is not None
     assert b"## MUST" in first
@@ -287,7 +288,7 @@ def test_fragment_metadata_change_invalidates_skip(
     assert stub.calls == 2, (
         "a metadata-only fragment change must invalidate the fingerprint skip"
     )
-    second = (consumer / ".spaex.md").read_bytes()
+    second = (consumer / ".spaex/constitution.md").read_bytes()
     second_hashes = read_header_hashes(consumer)
     assert second_hashes is not None
     assert second_hashes[0] != first_hashes[0], (
@@ -313,7 +314,7 @@ def test_effective_prompt_change_invalidates_skip(
         == 0
     )
     assert stub.calls == 1
-    first = (consumer / ".spaex.md").read_bytes()
+    first = (consumer / ".spaex/constitution.md").read_bytes()
     first_hashes = read_header_hashes(consumer)
     assert first_hashes is not None
 
@@ -325,7 +326,7 @@ def test_effective_prompt_change_invalidates_skip(
     assert stub.calls == 2, (
         "an effective-prompt change must invalidate build_input_hash"
     )
-    second = (consumer / ".spaex.md").read_bytes()
+    second = (consumer / ".spaex/constitution.md").read_bytes()
     second_hashes = read_header_hashes(consumer)
     assert second_hashes is not None
     assert second_hashes[0] == first_hashes[0], (

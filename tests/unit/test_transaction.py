@@ -27,7 +27,8 @@ from spaex.util.errors import (
 def _init_project(repo_root: Path) -> Path:
     """Prepare a project fixture with an identity and return its state root."""
     state_root = repo_root / "state"
-    (repo_root / ".spaex.json").write_text(
+    (repo_root / ".spaex").mkdir()
+    (repo_root / ".spaex/manifest.json").write_text(
         json.dumps({"identity": "com.example.consumer"})
     )
     return state_root
@@ -35,6 +36,7 @@ def _init_project(repo_root: Path) -> Path:
 
 def _staged(constitution: bytes, install_lock: bytes) -> list[transaction.StagedFile]:
     return [
+        transaction.StagedFile("manifest.json", b'{"identity": "com.example.consumer"}\n'),
         transaction.StagedFile(transaction.CONSTITUTION_NAME, constitution),
         transaction.StagedFile(transaction.INSTALL_LOCK_NAME, install_lock),
     ]
@@ -202,7 +204,10 @@ def test_post_write_verify_rollback_removes_first_generation(tmp_path: Path) -> 
             repo_root=tmp_path,
         )
 
-    assert not live.exists()
+    assert live.exists()
+    assert (live / "manifest.json").exists()
+    assert not (live / transaction.CONSTITUTION_NAME).exists()
+    assert not (live / transaction.INSTALL_LOCK_NAME).exists()
     assert not (tmp_path / f"{transaction.SPAEX_DIR}.prev").exists()
 
 

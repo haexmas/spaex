@@ -1,6 +1,6 @@
-"""`haex install` handler (Spec 008, US1 MVP).
+"""`spaex install` handler (Spec 008, US1 MVP).
 
-Resolves `.spaex.json`'s adopted atoms and publishes a new generation
+Resolves `.spaex/manifest.json`'s adopted atoms and publishes a new generation
 via the rename-swap primitive. Idempotent: a re-invocation with an
 unchanged effective input set is a no-op and reports "no changes" without
 allocating a new generation ID or touching disk.
@@ -38,44 +38,46 @@ from spaex.install.hook_runner import HookOutcomeKind, run_install_hook
 from spaex.install.lock import OwnerToken
 from spaex.install.manifest_lock import (
     DEFAULT_LOCK_TIMEOUT_SECONDS,
-    MANIFEST_LOCK_NAME,
-    MANIFEST_NAME,
     ManifestLockContext,
+    active_manifest_lock_path,
 )
 from spaex.io import transaction
 from spaex.io.state import default_state_root, transaction_paths
 from spaex.io.writer_lock import ConstitutionWriterLock
 from spaex.model.consumer_manifest import ConsumerManifest
 from spaex.model.install_lock import HookStatus, InstallLock, MoleculeEntry
+from spaex.paths import (
+    MANIFEST_RELATIVE_PATH,
+    composed_constitution_path,
+    manifest_path,
+)
 from spaex.util import exit_codes
 from spaex.util.errors import ConstitutionAlreadyAdoptedError, HaexError
 
 
 def _load_consumer_manifest(repo_root: Path) -> ConsumerManifest:
     """Load and validate the consumer's v4 harness manifest."""
-    manifest_path = repo_root / MANIFEST_NAME
-    if not manifest_path.exists():
+    path = manifest_path(repo_root)
+    if not path.exists():
         raise HaexError(
-            message=".spaex.json not found",
-            context={"path": str(manifest_path)},
+            message=f"{MANIFEST_RELATIVE_PATH} not found",
+            context={"path": str(path)},
             diagnostic_key="spaex-json-missing",
             exit_code=exit_codes.INCOMPLETE_TRANSACTION,
             hint=(
-                "Run `spaex migrate`, review `.spaex.json.migrated`, and adopt "
-                "it as `.spaex.json`."
+                "Create `.spaex/manifest.json` and retry."
             ),
         )
-    raw = manifest_path.read_bytes()
+    raw = path.read_bytes()
     try:
         return ConsumerManifest.from_json(raw)
     except (ValueError, KeyError) as exc:
         raise HaexError(
-            message=f".spaex.json is not a valid v4 manifest: {exc}",
-            diagnostic_key="spaex-json-invalid",
+            message=f"{MANIFEST_RELATIVE_PATH} is not a valid v4 manifest: {exc}",
+            diagnostic_key="spaex-manifest-invalid",
             exit_code=exit_codes.INCOMPLETE_TRANSACTION,
             hint=(
-                "Run `spaex migrate`, review `.spaex.json.migrated`, and adopt "
-                "it as `.spaex.json`."
+                "Repair `.spaex/manifest.json` and retry."
             ),
         ) from exc
 
@@ -96,6 +98,8 @@ def _is_no_op(
     repo_root: Path,
     expected_body: bytes | None,
     expected_records: Sequence[MoleculeEntry],
+    *,
+    allow_existing_behavior_artifact: bool = False,
 ) -> bool:
     """True when the published state already matches the desired body + molecule map.
 
@@ -120,22 +124,32 @@ def _is_no_op(
     hook-only), not just the single-source MVP shape.
     """
     live_root = repo_root / transaction.SPAEX_DIR
-    constitution_path = live_root / transaction.CONSTITUTION_NAME
+    constitution_path = composed_constitution_path(repo_root)
     lock_path = live_root / transaction.INSTALL_LOCK_NAME
     if not lock_path.exists():
         return False
+    try:
+        lock = InstallLock.from_json(lock_path.read_bytes())
+    except (OSError, ValueError, HaexError):
+        return False
+    has_constitution_record = any(
+        CONSTITUTION_PATH in molecule.paths for molecule in lock.molecules
+    )
     if expected_body is None:
-        if constitution_path.exists():
+        # Behavior-only manifests also use `.spaex/constitution.md`, but that
+        # artifact is not represented by an install.lock constitution record.
+        # The behavior pass may therefore keep it only when the current
+        # resolved set still declares behavior fragments. A manifest with no
+        # behavior sources must remove any composed artifact.
+        if constitution_path.exists() and (
+            has_constitution_record or not allow_existing_behavior_artifact
+        ):
             return False
     else:
         if not constitution_path.exists():
             return False
         if constitution_path.read_bytes() != expected_body:
             return False
-    try:
-        lock = InstallLock.from_json(lock_path.read_bytes())
-    except (OSError, ValueError, HaexError):
-        return False
     expected_sorted = tuple(
         sorted(
             expected_records,
@@ -178,7 +192,7 @@ def run(
     When ``held_manifest_lock`` is passed, install reuses the caller's
     acquired manifest lock via reference counting (Spec 013 T071). Standalone
     invocations acquire the manifest lock themselves before reading
-    ``.spaex.json``; the install mutex is acquired second per FR-026.
+    ``.spaex/manifest.json``; the install mutex is acquired second per FR-026.
     """
     repo_root = Path(args.repo_root).resolve()
     state_root = default_state_root()
@@ -202,7 +216,7 @@ def run(
         held_manifest_lock
         if held_manifest_lock is not None
         else ManifestLockContext(
-            repo_root / MANIFEST_LOCK_NAME,
+            active_manifest_lock_path(repo_root),
             timeout_seconds=timeout_seconds,
         )
     )
@@ -248,7 +262,14 @@ def run(
                 # (empty constitution + molecule map with hook_status)
                 # differs from disk. A hook-only re-install with an
                 # identical hook_status map is a clean no-op.
-                if _is_no_op(repo_root, None, hook_only_records):
+                if _is_no_op(
+                    repo_root,
+                    None,
+                    hook_only_records,
+                    allow_existing_behavior_artifact=(
+                        bool(project_local) or _has_behavior_fragments(resolved)
+                    ),
+                ):
                     inflight.clean_stale_siblings(
                         repo_root / transaction.SPAEX_DIR,
                         remove_prev=True,
@@ -455,9 +476,24 @@ def _preserved_project_local_files(
     repo_root: Path,
     entries: Sequence[Mapping[str, object]],
 ) -> tuple[transaction.StagedFile, ...]:
-    """Snapshot configured local fragment files that live inside `.spaex`."""
+    """Snapshot the manifest and configured local files inside `.spaex`.
+
+    The manifest is now part of the repository-local `.spaex/` tree. Since
+    install publication swaps that directory as a whole, it must be carried
+    into every generation alongside configured local fragment sources.
+    """
     root = repo_root.resolve()
     preserved: dict[str, transaction.StagedFile] = {}
+    manifest = manifest_path(root)
+    if manifest.is_file():
+        preserved["manifest.json"] = transaction.StagedFile(
+            "manifest.json", manifest.read_bytes()
+        )
+    manifest_lock = manifest.parent / "manifest.json.lock"
+    if manifest_lock.is_file():
+        preserved["manifest.json.lock"] = transaction.StagedFile(
+            "manifest.json.lock", manifest_lock.read_bytes()
+        )
     for entry in entries:
         if "file" not in entry:
             continue
@@ -505,7 +541,7 @@ def _run_hooks(
     with ``molecule_id`` + ``hook_failure`` context (FR-016, FR-017),
     which trips the Spec-008 stage-generation rollback via the enclosing
     ``stage_constitution`` context and, upstream, ``write_and_reinstall``'s
-    ``.spaex.json`` restore. A non-OK outcome under ``on_failure="warn"``
+    ``.spaex/manifest.json`` restore. A non-OK outcome under ``on_failure="warn"``
     records ``hook_status="failed"``, emits ONE ``WARN:`` line on stderr
     naming the molecule id and failure reason (after the hook subprocess
     has exited so its inherited stderr is never prefixed, FR-019), and
@@ -562,7 +598,8 @@ def _announce_stale_contradiction(marker: StaleMarker) -> None:
     (the fragment set changed since the marker was written, so the
     reproducibility fast-path in `orchestrate.run` cannot match), routing the
     same contradiction through the interactive reconciliation prompt (or an
-    immediate refusal on a non-interactive terminal) before `.spaex.md` is
+    immediate refusal on a non-interactive terminal) before the composed
+    Constitution is
     rewritten.
     """
     sys.stdout.write(
@@ -590,10 +627,10 @@ def _run_behavior_pipeline(
     """Spec 023 behavior-harness pass.
 
     Runs after the Spec 008 `.spaex/` rename-swap so behavior-authored
-    files (`.spaex/constitution.d/`, `.spaex.md`, `.spaex/clarifications.json`)
+    files (`.spaex/constitution.d/`, `.spaex/constitution.md`, `.spaex/clarifications.json`)
     survive the swap. Fast-path exits when no molecule declares behavior
     fragments and no project-local fragment is configured (plan.md
-    §Backward compatibility). Composer + emit failures surface as typed
+    behavior-harness contract). Composer + emit failures surface as typed
     HaexError with exit codes 20-22 / 30-34.
 
     `abort_on_contradiction=False` (set only by the internal install that
@@ -610,24 +647,24 @@ def _run_behavior_pipeline(
     )
     if outcome.published and not outcome.skipped_composer:
         sys.stdout.write(
-            f"composed .spaex.md ({outcome.fragment_count} fragment(s))\n"
+            f"composed .spaex/constitution.md ({outcome.fragment_count} fragment(s))\n"
         )
     elif outcome.skipped_composer:
         sys.stdout.write(
-            f"reused .spaex.md ({outcome.fragment_count} fragment(s), "
+            f"reused .spaex/constitution.md ({outcome.fragment_count} fragment(s), "
             "source_hash/build_input_hash unchanged)\n"
         )
-    elif outcome.removed_spaex_md:
-        sys.stdout.write("removed .spaex.md (no active fragments)\n")
+    elif outcome.removed_constitution:
+        sys.stdout.write("removed .spaex/constitution.md (no active fragments)\n")
     elif outcome.stale:
         sys.stdout.write(
             f"add-time plausibility check found a cross-molecule "
             f"contradiction ({outcome.fragment_count} fragment(s)); "
-            ".spaex.md left unchanged, marked stale (see .spaex/.stale)\n"
+            ".spaex/constitution.md left unchanged, marked stale (see .spaex/.stale)\n"
         )
     if outcome.published or outcome.skipped_composer:
         # T036: nudge the operator to run `spaex install --global` when no
-        # runtime has the bootstrap block yet, so `.spaex.md` gets picked up.
+        # runtime has the bootstrap block yet, so `.spaex/constitution.md` gets picked up.
         from spaex.cli import behavior_commands  # local import to avoid cycles
 
         behavior_commands.maybe_emit_no_bootstrap_hint()

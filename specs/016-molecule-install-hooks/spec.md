@@ -22,7 +22,7 @@ With Story 1 landed, the molecule author declares one field in their manifest po
 
 **Why this priority**: this is the whole point of the feature. Without Story 1 the gap that motivated Spec 016 is not closed. The concrete downstream unblock is graphify-first-authoring 1.0.3, which lets three current consumers (haex-crdt, specifyr, holzi) stop maintaining a manual `.gitignore` line per repo.
 
-**Independent Test**: create a fresh consumer repo with a seed `.spaex.json`; publish a minimal molecule whose manifest declares `install_hook` pointing at a script that writes a marker file outside the spaex-managed generation; run `spaex add`; verify the marker file exists in the consumer repo after `spaex add` returns.
+**Independent Test**: create a fresh consumer repo with a seed `.spaex/manifest.json`; publish a minimal molecule whose manifest declares `install_hook` pointing at a script that writes a marker file outside the spaex-managed generation; run `spaex add`; verify the marker file exists in the consumer repo after `spaex add` returns.
 
 **Acceptance Scenarios**:
 
@@ -42,7 +42,7 @@ A molecule author needs different failure semantics depending on how essential t
 
 **Acceptance Scenarios**:
 
-1. **Given** a molecule declaring `install_hook: {..., on_failure: "abort"}` and a script that exits 1, **When** the consumer runs `spaex add`, **Then** no new spaex-managed atoms remain materialised in `.spaex/`, `.spaex/install.lock` is not written, `.spaex.json` is unchanged (compound not added), the CLI exits non-zero with the `install-failed` diagnostic key, and the diagnostic context names the molecule id. External hook side effects are outside the rollback guarantee.
+1. **Given** a molecule declaring `install_hook: {..., on_failure: "abort"}` and a script that exits 1, **When** the consumer runs `spaex add`, **Then** no new spaex-managed atoms remain materialised in `.spaex/`, `.spaex/install.lock` is not written, `.spaex/manifest.json` is unchanged (compound not added), the CLI exits non-zero with the `install-failed` diagnostic key, and the diagnostic context names the molecule id. External hook side effects are outside the rollback guarantee.
 2. **Given** a molecule declaring `install_hook: {..., on_failure: "warn"}` and a script that exits 1, **When** the consumer runs `spaex add`, **Then** atoms are materialised, `.spaex/install.lock` is written with `hook_status: "failed"` for that molecule, one post-exit `WARN:` line appears on the operator's terminal, and the CLI exits 0.
 3. **Given** a molecule declaring `install_hook` whose `interpreter` value is not on the operator's `PATH`, **When** the consumer runs `spaex add`, **Then** the outcome matches the same molecule's `on_failure` policy exactly as if the script had exited non-zero.
 
@@ -59,7 +59,7 @@ A consumer running in a locked-down environment (CI, air-gapped machine, review-
 **Acceptance Scenarios**:
 
 1. **Given** a molecule with an install_hook that would ordinarily write a marker file, **When** the consumer runs `spaex add --no-install-hooks`, **Then** the marker file is not created, atoms are still materialised, `.spaex/install.lock` records `hook_status: "skipped"` for that molecule, and the CLI exits 0.
-2. **Given** the same molecule, **When** the consumer runs `spaex install --no-install-hooks` after a prior `spaex add`, **Then** the same skip behaviour applies to this invocation, and a subsequent `spaex install` without the flag runs the hook (skip is per-invocation, not sticky in `.spaex.json`).
+2. **Given** the same molecule, **When** the consumer runs `spaex install --no-install-hooks` after a prior `spaex add`, **Then** the same skip behaviour applies to this invocation, and a subsequent `spaex install` without the flag runs the hook (skip is per-invocation, not sticky in `.spaex/manifest.json`).
 
 ---
 
@@ -125,7 +125,7 @@ When a consumer adopts several molecules in one project, each with its own insta
 
 **Failure policy**
 
-- **FR-016**: `on_failure = "abort"` MUST trigger the Spec-008 install-transaction rollback on any hook failure (non-zero exit, `OSError` on process launch, missing interpreter on `PATH`, or path-containment failure). Rollback covers spaex-managed staged/published state and a delegated `.spaex.json` update (via `spaex add`); it MUST revert that manifest update. The published atom generation MUST remain the pre-install one and `.spaex/install.lock` for this generation MUST NOT be written. Rollback MUST NOT claim to undo external hook side effects such as `.gitignore` edits, installed tools, or created git hooks.
+- **FR-016**: `on_failure = "abort"` MUST trigger the Spec-008 install-transaction rollback on any hook failure (non-zero exit, `OSError` on process launch, missing interpreter on `PATH`, or path-containment failure). Rollback covers spaex-managed staged/published state and a delegated `.spaex/manifest.json` update (via `spaex add`); it MUST revert that manifest update. The published atom generation MUST remain the pre-install one and `.spaex/install.lock` for this generation MUST NOT be written. Rollback MUST NOT claim to undo external hook side effects such as `.gitignore` edits, installed tools, or created git hooks.
 - **FR-017**: `on_failure = "abort"` failures MUST cause the CLI to exit with the existing `install-failed` diagnostic key (defined at `src/spaex/cli/install.py:232`), with the failing molecule id and failure kind in the diagnostic context.
 - **FR-018**: `on_failure = "warn"` MUST NOT roll back the transaction. spaex MUST proceed to publish the atom generation (and any hook-only lock changes for other molecules), MUST write `.spaex/install.lock` with `hook_status: "failed"` for this molecule, and MUST exit 0.
 - **FR-019**: When a hook fails under `on_failure = "warn"`, spaex MAY emit one post-exit `WARN:` line naming the molecule id and failure kind. spaex MUST NOT prefix any of the hook's inherited stderr lines with a `WARN:` prefix.
@@ -146,7 +146,7 @@ When a consumer adopts several molecules in one project, each with its own insta
 
 - **FR-026**: `spaex add` and `spaex install` MUST accept a `--no-install-hooks` flag. When set, spaex MUST NOT invoke any declared install_hook during that invocation and MUST record `hook_status: "skipped"` for every molecule that declared a hook.
 - **FR-027**: `--no-install-hooks` supplied to `spaex add` MUST propagate to the `spaex install` step it delegates to.
-- **FR-028**: `--no-install-hooks` MUST be per-invocation only. It MUST NOT be persisted to `.spaex.json` or `.spaex/install.lock`; a subsequent `spaex install` without the flag MUST run the hooks normally.
+- **FR-028**: `--no-install-hooks` MUST be per-invocation only. It MUST NOT be persisted to `.spaex/manifest.json` or `.spaex/install.lock`; a subsequent `spaex install` without the flag MUST run the hooks normally.
 
 **spaex remove interaction**
 
@@ -164,7 +164,7 @@ When a consumer adopts several molecules in one project, each with its own insta
 
 - **SC-001**: A consumer adopting a molecule with an `install_hook` completes the molecule's declared setup (gitignore lines, git hooks, external tool provisioning) in a single `spaex add` command, with zero manual follow-up steps. Baseline: today, three current graphify-first-authoring consumers had to hand-add `graphify-out/` to their `.gitignore` after `spaex add`; after this feature lands, that number drops to zero.
 - **SC-002**: The `install_hook` field is expressible in one manifest edit; a molecule author does not need to publish separate documentation to make their setup script discoverable or invocable by consumers. Baseline: today, graphify-first-authoring's install.py requires consumers to read its README and run it by hand; after this feature lands, the README's "run install.py after adopt" line becomes obsolete.
-- **SC-003**: A hook failure under `on_failure = "abort"` produces zero orphaned files in the consumer's spaex-managed `.spaex/` directory and leaves the delegated `.spaex.json` unchanged: those managed surfaces match the state that existed before the failing `spaex install`. Verifiable by comparing the managed `.spaex/` tree and `.spaex.json` byte-for-byte before and after the failing invocation; external hook side effects are not part of this criterion.
+- **SC-003**: A hook failure under `on_failure = "abort"` produces zero orphaned files in the consumer's spaex-managed `.spaex/` directory and leaves the delegated `.spaex/manifest.json` unchanged: those managed surfaces match the state that existed before the failing `spaex install`. Verifiable by comparing the managed `.spaex/` tree and `.spaex/manifest.json` byte-for-byte before and after the failing invocation; external hook side effects are not part of this criterion.
 - **SC-004**: When a hook fails under `on_failure = "warn"`, the consumer can determine which molecule's hook failed by inspecting `.spaex/install.lock` alone, without consulting the terminal transcript.
 - **SC-005**: `spaex add --no-install-hooks` skips exactly the set of hooks that would otherwise have run in that invocation (no more, no fewer) and records the skip in `.spaex/install.lock` such that a later `spaex install --no-install-hooks` produces the same skip state.
 - **SC-006**: Between the pre-Spec-016 baseline and the post-Spec-016 release, no existing molecule (graphify-first-authoring 1.0.2, speckit-session-hopper 0.1.0) fails schema validation under the extended `molecule-manifest.v4.schema.json`. Backwards-compatibility of the schema addition is verifiable by re-validating existing published manifests against the new schema.
@@ -185,7 +185,7 @@ When a consumer adopts several molecules in one project, each with its own insta
 - **Spec 007** (Unified Manifest v2): establishes the atom-category model that this spec extends via a new manifest field on the same schema version.
 - **Spec 008** (Install Transaction): supplies the staging-generation-then-publish machinery that `on_failure: "abort"` rollback relies on. `hook_status` field additions extend the existing `install.lock` shape without breaking its Spec-008 contract.
 - **Spec 013** (CLI and molecule rename): defined the `spaex add` / `spaex install` command surface that gains the `--no-install-hooks` flag and the hook-invocation behaviour.
-- **Spec 014** (Rename to spaex): established the v4 vocabulary (`spaex_version`, `.spaex.json`, `.spaex/install.lock`) that this feature extends.
+- **Spec 014** (Rename to spaex): established the v4 vocabulary (`spaex_version`, `.spaex/manifest.json`, `.spaex/install.lock`) that this feature extends.
 - **Spec 017** (Molecule tree materialization store): the **landed store MVP** is a hard dependency, discovered mid-implementation of this spec and merged 2026-09-09. Its `spaex.git.molecule_store.get_or_extract()` supplies the on-disk molecule directory for hook execution. Archive validation complements, but does not replace, this spec's execution-time script containment (FR-014/FR-015; see plan.md's corrected amendment). Spec 017's resolver migration T016–T021 remains pending and is not required to consume the store API from the hook runner.
 - **Design doc**: [docs/plans/2026-09-08-spec-016-molecule-install-hooks-design.md](../../docs/plans/2026-09-08-spec-016-molecule-install-hooks-design.md), brainstormed 2026-09-08, merged in PR #83 with review-driven refinements to the resolver contract, cache containment, stdio-prefix boundary, and hook-only-transaction semantics.
 

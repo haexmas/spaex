@@ -7,7 +7,7 @@ Runs the whole per-project behavior pipeline inside a single transaction:
 3. Run mechanical pre-check (raises exit 20 / 22 on collision).
 4. Compute canonical `source_hash` + `build_input_hash` outside the LLM.
 5. Load persisted clarifications; drop invalidated entries.
-6. Reproducibility skip (FR-009): if the on-disk `.spaex.md` header already
+6. Reproducibility skip (FR-009): if the on-disk composed Constitution header already
    carries matching hashes, do not invoke the Composer.
 7. Invoke the Composer; parse Shape A or Shape B. Shape B triggers one
    bounded operator clarification round-trip (Phase 6 T042): each question
@@ -16,11 +16,11 @@ Runs the whole per-project behavior pipeline inside a single transaction:
    as `behavior-clarification-required` (exit 21); a second Shape B
    response in the same build is an `invalid-output` failure (exit 32).
 8. Verify hashes on the Composer output.
-9. COMMIT: publish `.spaex/constitution.d/`, `.spaex.md`, and
+9. COMMIT: publish `.spaex/constitution.d/`, `.spaex/constitution.md`, and
    `.spaex/clarifications.json` in a rollback-safe sequence. Any failure
    leaves tracked files byte-unchanged (FR-006).
 
-The empty fragment set path (FR-017d) removes `.spaex.md` and clears the
+The empty fragment set path (FR-017d) removes the composed Constitution and clears the
 staging tree without invoking the Composer.
 """
 
@@ -75,6 +75,7 @@ from spaex.behavior.stale import STALE_FILENAME, clear_stale, write_stale
 from spaex.constitution.resolve import ResolvedMolecule
 from spaex.git import molecule_store
 from spaex.model.molecule_manifest import MoleculeManifest
+from spaex.paths import composed_constitution_path
 from spaex.util import exit_codes
 from spaex.util.errors import HaexError
 
@@ -91,7 +92,7 @@ class BehaviorOutcome:
     fragment_count: int
     published: bool = False
     skipped_composer: bool = False
-    removed_spaex_md: bool = False
+    removed_constitution: bool = False
     stale: bool = False
     source_hash: str | None = None
     build_input_hash: str | None = None
@@ -118,7 +119,7 @@ def run(
     supplies no `project_local` fragments. In that case tracked files
     are untouched and no `.spaex/` scratch directories are created,
     keeping the behavior pass invisible to consumers whose molecules
-    ship no fragments (plan.md §Backward compatibility, FR-017d).
+    ship no behavior fragments (FR-017d).
 
     `operator_answer`, when given, answers each Shape-B clarification
     question in place of prompting stdin (test seam mirroring
@@ -134,16 +135,16 @@ def run(
     FR-024a) only changes handling of a detected cross-molecule
     *contradiction*: instead of aborting, it prints a WARN with
     provenance, writes `.spaex/.stale` summarizing the finding, and
-    returns without committing `.spaex.md` or `.spaex/constitution.d/` —
+    returns without committing the composed Constitution or `.spaex/constitution.d/` —
     the operation completes without aborting and reconciliation is
     deferred to the next `spaex install`. Every other outcome (no
     contradiction, empty fragment set, reproducibility skip) publishes
     normally regardless of `abort_on_contradiction`, exactly as a plain
     `spaex install` would (contracts/cli-surface.md §add/remove: "On no
-    contradiction, `.spaex.md` regenerates cleanly").
+    contradiction, the composed Constitution regenerates cleanly").
 
     `force_composer` (default `False`): when `True`, the reproducibility
-    skip (FR-009) is bypassed even when the on-disk `.spaex.md` header
+    skip (FR-009) is bypassed even when the on-disk Constitution header
     already matches the freshly computed fingerprints, forcing a real
     Composer invocation. Used by `spaex constitution build --force`
     (contracts/cli-surface.md §"spaex constitution build"); every other
@@ -152,28 +153,11 @@ def run(
     """
     spaex_dir = repo_root / SPAEX_DIR
     if not project_local and not _any_declares_behavior(resolved):
-        target = spaex_dir / CONSTITUTION_D_DIRNAME
-        if not any(
-            path.exists()
-            for path in (
-                repo_root / ".spaex.md",
-                target,
-                spaex_dir / STALE_FILENAME,
-            )
-        ):
-            return BehaviorOutcome(fragment_count=0)
-        staging = spaex_dir / STAGING_DIRNAME
-        prev = spaex_dir / PREV_DIRNAME
-        _reset_scratch(staging)
-        _reset_scratch(prev)
-        staging.mkdir(parents=True, exist_ok=True)
-        removed = _publish_empty_artifacts(
-            repo_root=repo_root,
-            staging=staging,
-            target=target,
-            prev=prev,
-        )
-        return BehaviorOutcome(fragment_count=0, removed_spaex_md=removed)
+        # The install transaction owns `.spaex/constitution.md` for
+        # atoms.constitution molecules as well as behavior composition. With
+        # the canonical all-in-one `.spaex/` layout, the behavior pass must
+        # never remove an artifact it did not produce.
+        return BehaviorOutcome(fragment_count=0)
 
     target = spaex_dir / CONSTITUTION_D_DIRNAME
     staging = spaex_dir / STAGING_DIRNAME
@@ -198,7 +182,7 @@ def run(
             target=target,
             prev=prev,
         )
-        return BehaviorOutcome(fragment_count=0, removed_spaex_md=removed)
+        return BehaviorOutcome(fragment_count=0, removed_constitution=removed)
 
     canonical_fragments = fragments
     dedup_provenance = {
@@ -331,7 +315,7 @@ class ComputedFingerprints:
 
     Both hashes are `None` for the empty-fragment-set case (FR-017d): no
     resolved molecule declares behavior fragments and no project-local
-    fragment is configured, matching the state in which `.spaex.md` should
+    fragment is configured, matching the state in which the composed Constitution should
     not exist.
     """
 
@@ -354,7 +338,7 @@ def compute_fingerprints(
     materialize, compute `source_hash`, load the effective prompt, load and
     invalidate clarifications, compute `build_input_hash`). Used by `spaex
     constitution build --check` to compare against the published
-    `.spaex.md` header (via `read_header_hashes`) without ever shelling out
+    composed Constitution header (via `read_header_hashes`) without ever shelling out
     to an LLM (contracts/cli-surface.md: "--check ... MUST NOT invoke the
     Composer").
     """
@@ -531,7 +515,7 @@ def _warn_stale_contradiction(questions: Sequence[ClarificationQuestion]) -> Non
     """Print the FR-024a WARN naming each contradiction's fragments/molecules."""
     sys.stderr.write(
         "WARN: Composer plausibility check found a cross-molecule semantic "
-        "contradiction; `.spaex.md` is left unchanged and marked stale until "
+        "contradiction; the composed Constitution is left unchanged and marked stale until "
         "reconciled by the next `spaex install` (see `.spaex/.stale`):\n"
     )
     for question in questions:
@@ -547,7 +531,7 @@ def _publish_empty_artifacts(
     *, repo_root: Path, staging: Path, target: Path, prev: Path
 ) -> bool:
     """Commit an empty behavior generation with rollback protection."""
-    removed = (repo_root / ".spaex.md").exists()
+    removed = composed_constitution_path(repo_root).exists()
     _commit_behavior_artifacts(
         repo_root=repo_root,
         staging=staging,
@@ -573,7 +557,7 @@ def _commit_behavior_artifacts(
     remove_spaex_md: bool = False,
 ) -> EmitOutcome | None:
     """Publish behavior outputs as one rollback boundary."""
-    spaex_md = repo_root / ".spaex.md"
+    spaex_md = composed_constitution_path(repo_root)
     backup_dir = Path(tempfile.mkdtemp(prefix=".behavior-backup-", dir=repo_root))
     backups: dict[Path, Path | None] = {}
     for path in (spaex_md, clarifications_path):
@@ -617,7 +601,7 @@ def _commit_behavior_artifacts(
         raise
     else:
         _reset_scratch(prev)
-        # A successful commit means `.spaex.md` (or its absence, for the
+        # A successful commit means the composed Constitution (or its absence, for the
         # empty-fragment-set path) now reflects the current fragment set, so
         # any FR-024a stale marker left by a prior `spaex add`/`spaex remove`
         # no longer applies.

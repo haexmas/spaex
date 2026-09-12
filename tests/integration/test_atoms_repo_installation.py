@@ -72,8 +72,8 @@ def test_add_graphify_from_atoms_repo_installs_end_to_end(
     )
     assert rc == 0
 
-    # `.spaex.json` records the adopted molecule at the pinned SHA
-    manifest = json.loads((consumer / ".spaex.json").read_text())
+    # `.spaex/manifest.json` records the adopted molecule at the pinned SHA
+    manifest = json.loads((consumer / ".spaex/manifest.json").read_text())
     assert manifest["compounds"] == [
         {
             "source": _ATOMS_URL,

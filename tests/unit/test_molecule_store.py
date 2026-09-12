@@ -12,8 +12,8 @@ from unittest import mock
 import pytest
 
 from spaex.git import revparse
+from spaex.git.cache import clone_dir
 from spaex.git.molecule_store import get_or_extract
-from spaex.migrate.transform import clone_dir
 from spaex.util.errors import MoleculeTreeExtractionError, MoleculeTreePathNotFoundError
 
 pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git binary required")

@@ -22,10 +22,11 @@ graphify-out/
 .worktrees/
 
 # Manifest lock is per-checkout advisory-lock state (Spec 013), never committed.
-.spaex.json.lock
+.spaex/manifest.json.lock
 
 # Spec 023 behavior-harness sidecars (per-checkout state, not versioned).
-# NOTE: .spaex.md and .spaex/constitution.d/ are versioned content and MUST NOT
-# be gitignored; they are the composed constitution and its source fragments.
+# NOTE: .spaex/constitution.md and .spaex/constitution.d/ are versioned content
+# and MUST NOT be gitignored; they are the composed constitution and its source
+# fragments.
 .spaex/.stale
 .spaex/composer.log

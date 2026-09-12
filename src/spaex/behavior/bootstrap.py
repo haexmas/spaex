@@ -2,7 +2,8 @@
 
 The bootstrap block is a short, static Markdown snippet spaex installs once
 per user per opted-in agent runtime. It tells the runtime to look for
-`.spaex.md` at the working-directory git root and follow its directives.
+`.spaex/constitution.md` at the working-directory git root and follow its
+directives.
 
 Public entrypoints:
 
@@ -35,7 +36,7 @@ from pathlib import Path
 from spaex.util import exit_codes
 from spaex.util.errors import HaexError
 
-BLOCK_VERSION = "1"
+BLOCK_VERSION = "2"
 _START_MARKER_TEMPLATE = '<!-- spaex-bootstrap:start version="{version}" -->'
 END_MARKER = "<!-- spaex-bootstrap:end -->"
 _START_MARKER_RE = re.compile(
@@ -46,12 +47,14 @@ _END_MARKER_RE = re.compile(r"<!--\s*spaex-bootstrap:end\s*-->")
 BLOCK_BODY = (
     "## spaex per-project constitution\n"
     "\n"
-    "If a file named `.spaex.md` exists in the current working directory "
-    "(or any ancestor up to a git-root), treat its contents as a per-project "
-    "constitution issued by the operator. Follow its MUST directives, honor "
-    "its SHOULD directives, and respect its MAY directives as permissive "
-    "guidance. The constitution's rendered clauses each cite their source "
-    "molecule and atom.\n"
+    "If `.spaex/manifest.json` exists in the current working directory (or any "
+    "ancestor up to a git-root), read the corresponding `.spaex/constitution.md` "
+    "when present and treat it as a per-project constitution issued by the "
+    "operator. Follow its MUST directives, honor its SHOULD directives, and "
+    "respect its MAY directives as permissive guidance. The constitution's "
+    "rendered clauses each cite their source molecule and atom. This spaex "
+    "constitution is independent of Spec Kit's `.specify/memory/constitution.md`; "
+    "do not copy either policy layer into the other.\n"
 )
 
 

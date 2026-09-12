@@ -1,6 +1,6 @@
 """Every behavior-harness abort leaves tracked files byte-unchanged (T041, FR-006).
 
-Each of the eight documented failure exit codes MUST leave `.spaex.md`,
+Each of the eight documented failure exit codes MUST leave `.spaex/constitution.md`,
 `.spaex/constitution.d/`, and `.spaex/clarifications.json` byte-identical to
 their pre-install snapshot:
 
@@ -14,7 +14,7 @@ their pre-install snapshot:
 - 34: Composer no-runtime
 
 Each test seeds a successful first install (fragment set materialized,
-`.spaex.md` composed, `.spaex/clarifications.json` planted), snapshots the
+`.spaex/constitution.md` composed, `.spaex/clarifications.json` planted), snapshots the
 tracked files, triggers the specific failure on a second install, and asserts
 byte-for-byte equality. Exit 22 is exercised through
 `spaex.behavior.orchestrate.run` directly because the project-local CLI wiring
@@ -54,7 +54,7 @@ from spaex.behavior.composer.invoke import (
 from spaex.behavior.fragment import PROJECT_SCOPE, BehaviorFragment, Modality
 from spaex.cli import install as install_cli
 from spaex.constitution.resolve import resolve_install_inputs
-from spaex.migrate.transform import clone_dir
+from spaex.git.cache import clone_dir
 from spaex.model.consumer_manifest import ConsumerManifest
 from spaex.util import exit_codes
 from spaex.util.errors import HaexError
@@ -168,7 +168,8 @@ def _publish_seed_molecule(tmp_path: Path) -> tuple[str, str, str, Path, Path]:
 
 def _write_consumer(consumer: Path, *, source: str, revision: str) -> None:
     consumer.mkdir(exist_ok=True)
-    (consumer / ".spaex.json").write_text(
+    (consumer / ".spaex").mkdir(exist_ok=True)
+    (consumer / ".spaex/manifest.json").write_text(
         json.dumps(
             {
                 "spaex_version": "4",
@@ -236,7 +237,7 @@ def _seed_successful_install(
     monkeypatch.undo()
     monkeypatch.setenv("SPAEX_STATE", str(state_root))
 
-    assert (consumer / ".spaex.md").exists()
+    assert (consumer / ".spaex/constitution.md").exists()
     assert (consumer / ".spaex" / "constitution.d" / _MOL / "bar.md").exists()
 
     return consumer, state_root, canonical, head_good, head_case_a, bare_target
@@ -263,12 +264,12 @@ def _invalidate_reproducibility_skip(consumer: Path) -> None:
 
 def _snapshot_tracked(consumer: Path) -> dict[str, bytes | None]:
     """Read every tracked path FR-006 protects. `None` records absence."""
-    spaex_md = consumer / ".spaex.md"
+    spaex_md = consumer / ".spaex/constitution.md"
     constitution_d = consumer / ".spaex" / "constitution.d"
     clarifications = consumer / ".spaex" / "clarifications.json"
 
     snapshot: dict[str, bytes | None] = {}
-    snapshot[".spaex.md"] = spaex_md.read_bytes() if spaex_md.exists() else None
+    snapshot[".spaex/constitution.md"] = spaex_md.read_bytes() if spaex_md.exists() else None
     snapshot[".spaex/clarifications.json"] = (
         clarifications.read_bytes() if clarifications.exists() else None
     )
@@ -362,7 +363,7 @@ def test_exit_22_project_local_override_leaves_tracked_files_untouched(
 ) -> None:
     """Trigger exit 22 through `orchestrate.run` directly.
 
-    Project-local CLI wiring (`.spaex.json` -> `constitution.local_fragments`)
+    Project-local CLI wiring (`.spaex/manifest.json` -> `constitution.local_fragments`)
     lands in Phase 7 T044-T046; the additive-only enforcement itself is Phase
     2's `precheck` and Spec 023's non-destructive contract is Phase 5's
     concern.
@@ -371,7 +372,7 @@ def test_exit_22_project_local_override_leaves_tracked_files_untouched(
     _seed_clarifications_json(consumer)
     baseline = _snapshot_tracked(consumer)
 
-    manifest = ConsumerManifest.from_json((consumer / ".spaex.json").read_bytes())
+    manifest = ConsumerManifest.from_json((consumer / ".spaex/manifest.json").read_bytes())
     _contributions, resolved = resolve_install_inputs(manifest, state_root)
 
     shadow = BehaviorFragment(

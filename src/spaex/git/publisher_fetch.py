@@ -23,11 +23,11 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from spaex.git.cache import clone_dir
 from spaex.install.manifest_lock import (
     DEFAULT_LOCK_TIMEOUT_SECONDS,
     ManifestLockContext,
 )
-from spaex.migrate.transform import clone_dir
 from spaex.util.errors import RevisionNotFoundError, SourceUrlInvalidError
 
 _SHA40_RE = re.compile(r"^[0-9a-f]{40}$")

@@ -21,7 +21,7 @@ COMPOSER_PROMPT_VERSION = "1"
 
 PROMPT_OVERRIDE_PATH = ".spaex/composer-prompt.md"
 
-_SPAEX_MD_HEADER_TEMPLATE = (
+_SPAEX_CONSTITUTION_HEADER_TEMPLATE = (
     '<!-- spaex-composed:source_hash="{source_hash}" '
     'build_input_hash="{build_input_hash}" version="1" -->\n'
     "# spaex Behavior Harness\n"
@@ -173,13 +173,13 @@ def effective_prompt_sha256(prompt_text: str) -> str:
 
 
 def render_spaex_md_header(*, source_hash: str, build_input_hash: str) -> str:
-    """Return the fixed `.spaex.md` header block.
+    """Return the fixed `.spaex/constitution.md` header block.
 
     Kept next to the prompt so the header string ships in exactly one place;
     the prompt tells the LLM to emit an identical string, and spaex verifies
     the header line-by-line before writing.
     """
-    return _SPAEX_MD_HEADER_TEMPLATE.format(
+    return _SPAEX_CONSTITUTION_HEADER_TEMPLATE.format(
         source_hash=source_hash, build_input_hash=build_input_hash
     )
 

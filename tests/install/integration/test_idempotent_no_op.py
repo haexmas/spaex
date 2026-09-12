@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from spaex.migrate.transform import clone_dir
+from spaex.git.cache import clone_dir
 
 pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git binary required")
 
@@ -91,7 +91,7 @@ def test_changed_source_url_republishes_lock(
     new_clone = clone_dir(state_root, new_source)
     shutil.copytree(old_clone, new_clone)
 
-    manifest_path = consumer / ".spaex.json"
+    manifest_path = consumer / ".spaex/manifest.json"
     manifest = json.loads(manifest_path.read_text())
     manifest["compounds"][0]["source"] = new_source
     manifest_path.write_text(json.dumps(manifest, indent=2))

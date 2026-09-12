@@ -34,7 +34,7 @@ def _run_haex(
 def test_migrate_dry_run_completes_under_5s(self_migration_fixture: dict, tmp_path: Path) -> None:
     consumer = tmp_path / "consumer"
     shutil.copytree(self_migration_fixture["publisher"], consumer)
-    (consumer / ".spaex.json").write_text(
+    (consumer / ".spaex/manifest.json").write_text(
         json.dumps(
             {
                 "haex_hive_version": "1",

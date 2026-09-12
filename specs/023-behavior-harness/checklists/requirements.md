@@ -33,7 +33,7 @@
 
 Validation run 2026-09-10 against the spec produced by /speckit-specify on branch 023-behavior-harness.
 
-**Content Quality**: the spec references specific file names (AGENTS.md, CLAUDE.md, .spaex.json, .spaex/constitution.d/) because these are the observable artifacts the feature interacts with, not implementation choices. Agent runtime names (Claude Code, Codex CLI, Gemini CLI) appear as target platforms in FR-023 and SC-007 because "multi-agent portability across these three" is the load-bearing user requirement, and naming them makes acceptance verifiable. Neither introduces implementation lock-in.
+**Content Quality**: the spec references specific file names (AGENTS.md, CLAUDE.md, .spaex/manifest.json, .spaex/constitution.d/) because these are the observable artifacts the feature interacts with, not implementation choices. Agent runtime names (Claude Code, Codex CLI, Gemini CLI) appear as target platforms in FR-023 and SC-007 because "multi-agent portability across these three" is the load-bearing user requirement, and naming them makes acceptance verifiable. Neither introduces implementation lock-in.
 
 **Requirement Completeness**: all 24 FRs are stated as observable system behavior. Edge cases cover empty sets, permissive-only sets, missing runtime, duplicate content, pre-existing operator-authored content, stale clarifications, prompt-version bumps, large fragment counts, and non-English prose.
 

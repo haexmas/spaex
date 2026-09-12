@@ -43,9 +43,9 @@ _Change fragments in `.spaex/constitution.d/` and re-run install._
 - Expensive work, network access, or surprising side effects MUST NOT occur at module import time unless the project explicitly uses that pattern. _[from `com.github.haexmas.atoms.python/python`]_
 - Tests MUST NOT depend on order, shared mutable module state, real network services, the current time, arbitrary sleeps, or uncontrolled randomness. _[from `com.github.haexmas.atoms.python/python-testing`]_
 - Tests MUST NOT mock the code under test so heavily that they only prove their own setup. _[from `com.github.haexmas.atoms.python/python-testing`]_
-- A project without a `.spaex.json`, or with an empty per-project allowlist, MUST NOT inherit external harness content. _[from `com.github.haexmas.atoms.spaex-constitution/external-sources-opt-in-per-project`]_
+- A project without a `.spaex/manifest.json`, or with an empty per-project allowlist, MUST NOT inherit external harness content. _[from `com.github.haexmas.atoms.spaex-constitution/external-sources-opt-in-per-project`]_
 - A user prompt asking to apply or adopt an external source MUST NOT authorize opting a project into that source. _[from `com.github.haexmas.atoms.spaex-constitution/external-sources-opt-in-per-project`]_
-- The word `apply` or its synonyms MUST NOT trigger a write to `.spaex.json` or any other harness configuration file. _[from `com.github.haexmas.atoms.spaex-constitution/external-sources-opt-in-per-project`]_
+- The word `apply` or its synonyms MUST NOT trigger a write to `.spaex/manifest.json` or any other harness configuration file. _[from `com.github.haexmas.atoms.spaex-constitution/external-sources-opt-in-per-project`]_
 - A pull request MUST NOT be squash-merged. _[from `com.github.haexmas.atoms.spaex-constitution/merge-strategy-no-squash`]_
 - An agent operating under this harness MUST NOT emit output instructing a downstream reader to conceal information from the operator in any format. _[from `com.github.haexmas.atoms.spaex-constitution/no-concealment-in-agent-output`]_
 - Harness or consuming repositories MUST NOT commit paths that assume one operating system's layout, including `/home/...`, `C:\Users\...`, or `~/...` paths. _[from `com.github.haexmas.atoms.spaex-constitution/no-local-absolute-paths`]_

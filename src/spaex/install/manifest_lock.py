@@ -1,7 +1,7 @@
-"""Permanent advisory manifest lock (`.spaex.json.lock`) — Spec 013 T070.
+"""Permanent advisory manifest lock (`.spaex/manifest.json.lock`).
 
 Bounded-wait exclusive file lock serialising `haex add`, `haex remove`, and
-`haex install` reads/writes of `.spaex.json`. Modeled on
+`spaex` reads/writes of `.spaex/manifest.json`. Modeled on
 `io/writer_lock.py` (Spec 008) but polls until a deadline instead of failing
 immediately, per FR-028.
 
@@ -27,6 +27,10 @@ import time
 from pathlib import Path
 from types import TracebackType
 
+from spaex.paths import (
+    MANIFEST_LOCK_FILENAME,
+    manifest_lock_path,
+)
 from spaex.util.errors import ManifestLockContendedError
 
 _IS_WINDOWS = sys.platform == "win32"
@@ -49,12 +53,20 @@ def parse_lock_timeout(raw: str) -> float:
             "lock timeout must be a finite number greater than or equal to zero"
         )
     return value
-MANIFEST_NAME = ".spaex.json"
-MANIFEST_LOCK_NAME = ".spaex.json.lock"
+
+def active_manifest_lock_path(repo_root: Path) -> Path:
+    """Return the canonical lock, including an in-flight recovery tree."""
+    canonical = manifest_lock_path(repo_root)
+    if canonical.exists():
+        return canonical
+    recovery = repo_root / ".spaex.prev" / MANIFEST_LOCK_FILENAME
+    if recovery.exists():
+        return recovery
+    return canonical
 
 
 class ManifestLockContext:
-    """Bounded-wait exclusive advisory lock on `.spaex.json.lock`."""
+    """Bounded-wait exclusive advisory lock on the active manifest lock."""
 
     def __init__(
         self,

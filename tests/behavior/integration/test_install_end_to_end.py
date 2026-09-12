@@ -7,7 +7,7 @@ Fixture project:
   the spaex-computed hashes.
 
 Verifies:
-- `<repo-root>/.spaex.md` is written with both directives.
+- `<repo-root>/.spaex/constitution.md` is written with both directives.
 - Provenance suffix names both molecule/fragment scoped keys.
 - `.spaex/constitution.d/<molecule-id>/<fragment-id>.md` is materialized for
   each molecule (SC-001 acceptance scenario).
@@ -35,7 +35,7 @@ from spaex.behavior.composer.invoke import (
 )
 from spaex.cli import add as add_cli
 from spaex.cli import install as install_cli
-from spaex.migrate.transform import clone_dir
+from spaex.git.cache import clone_dir
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None, reason="git binary required"
@@ -144,7 +144,8 @@ def _publish_two_molecules_with_fragments(tmp_path: Path) -> tuple[str, str, Pat
 def _make_consumer(tmp_path: Path) -> Path:
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-    (consumer / ".spaex.json").write_text(
+    (consumer / ".spaex").mkdir()
+    (consumer / ".spaex/manifest.json").write_text(
         json.dumps(
             {
                 "spaex_version": "4",
@@ -266,7 +267,7 @@ def test_install_composes_both_fragments_into_spaex_md(
     )
     assert _run_install(consumer, state_root, monkeypatch) == 0
 
-    spaex_md = consumer / ".spaex.md"
+    spaex_md = consumer / ".spaex/constitution.md"
     assert spaex_md.exists()
     content = spaex_md.read_text(encoding="utf-8")
 
@@ -300,7 +301,7 @@ def _add_and_prepare_for_reinstall(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[Path, Path]:
-    """Add both molecules, install once, then delete `.spaex.md` so the next
+    """Add both molecules, install once, then delete `.spaex/constitution.md` so the next
     install cannot short-circuit via the reproducibility skip.
     """
     canonical, head, state_root = _publish_two_molecules_with_fragments(tmp_path)
@@ -323,14 +324,14 @@ def _add_and_prepare_for_reinstall(
         == 0
     )
     assert _run_install(consumer, state_root, monkeypatch) == 0
-    (consumer / ".spaex.md").unlink()
+    (consumer / ".spaex/constitution.md").unlink()
     return consumer, state_root
 
 
 def test_install_composer_failure_leaves_spec_023_files_untouched(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Composer failure on re-install must not (re-)create `.spaex.md`."""
+    """Composer failure on re-install must not (re-)create `.spaex/constitution.md`."""
     consumer, state_root = _add_and_prepare_for_reinstall(tmp_path, monkeypatch)
 
     class InjectedComposerError(RuntimeError):
@@ -345,7 +346,7 @@ def test_install_composer_failure_leaves_spec_023_files_untouched(
 
     with pytest.raises(InjectedComposerError):
         _run_install(consumer, state_root, monkeypatch)
-    assert not (consumer / ".spaex.md").exists()
+    assert not (consumer / ".spaex/constitution.md").exists()
 
 
 def test_install_shape_b_response_refuses_with_exit_21(
@@ -385,4 +386,4 @@ def test_install_shape_b_response_refuses_with_exit_21(
     with pytest.raises(HaexError) as exc:
         _run_install(consumer, state_root, monkeypatch)
     assert exc.value.exit_code == 21
-    assert not (consumer / ".spaex.md").exists()
+    assert not (consumer / ".spaex/constitution.md").exists()

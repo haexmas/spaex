@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from spaex.git.cache import clone_dir
 from spaex.git.molecule_store import get_or_extract
-from spaex.migrate.transform import clone_dir
 from spaex.util.errors import MoleculeTreeExtractionError
 
 pytestmark = pytest.mark.skipif(

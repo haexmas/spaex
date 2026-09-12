@@ -10,7 +10,7 @@ Fixture: one publisher ships two molecules --
 Two consumers pin the same molecule set except one also adds `no-fragment`.
 Both run `spaex install` against the same Composer stub. Verifies:
 
-- Both consumers produce byte-identical `.spaex.md` (the fragment-less
+- Both consumers produce byte-identical `.spaex/constitution.md` (the fragment-less
   molecule's presence changes nothing about the composed output).
 """
 
@@ -33,7 +33,7 @@ from spaex.behavior.composer.invoke import (
     RuntimeDescriptor,
 )
 from spaex.cli import add as add_cli
-from spaex.migrate.transform import clone_dir
+from spaex.git.cache import clone_dir
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None, reason="git binary required"
@@ -132,7 +132,8 @@ def _publish_molecules(tmp_path: Path) -> tuple[str, str, Path]:
 def _make_consumer(tmp_path: Path, name: str) -> Path:
     consumer = tmp_path / name
     consumer.mkdir()
-    (consumer / ".spaex.json").write_text(
+    (consumer / ".spaex").mkdir()
+    (consumer / ".spaex/manifest.json").write_text(
         json.dumps(
             {
                 "spaex_version": "4",
@@ -246,8 +247,8 @@ def test_fragment_less_molecule_does_not_alter_composed_constitution(
         == 0
     )
 
-    baseline_md = (baseline / ".spaex.md").read_text(encoding="utf-8")
-    with_extra_md = (with_extra / ".spaex.md").read_text(encoding="utf-8")
+    baseline_md = (baseline / ".spaex/constitution.md").read_text(encoding="utf-8")
+    with_extra_md = (with_extra / ".spaex/constitution.md").read_text(encoding="utf-8")
     assert baseline_md == with_extra_md
 
     assert (

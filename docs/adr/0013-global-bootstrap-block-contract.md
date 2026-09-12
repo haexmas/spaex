@@ -1,6 +1,6 @@
 # ADR 0013: Global Bootstrap Block Contract
 
-**Status**: Draft (finalized under Spec 023 Phase 11 T060)
+**Status**: Accepted
 **Date**: 2026-09-11
 **Related**:
 [Spec 023](../../specs/023-behavior-harness/);
@@ -13,8 +13,9 @@
 Every agent runtime spaex targets (Claude Code, Codex CLI, Gemini CLI, and
 future runtimes) reads a global instruction file from a per-user location.
 Spec 023 needs to install one short piece of content into each of those files
-that tells the runtime to look for `<cwd>/.spaex.md` (or any ancestor up to a
-git-root) and treat it as the per-project constitution.
+that tells the runtime to opt in when `<cwd>/.spaex/manifest.json` exists, then
+look for `<cwd>/.spaex/constitution.md` (or any ancestor up to a git-root) and
+treat it as the per-project constitution.
 
 This content must be:
 
@@ -29,16 +30,11 @@ This content must be:
 
 ## Decision
 
-TBD (this stub reserves the ADR number; final decision text lands in T060
-with the full Spec 023 PR).
-
-Working answer, subject to refinement:
-
 Use paired HTML comment markers with a version attribute on the opening
 marker:
 
 ```markdown
-<!-- spaex-bootstrap:start version="1" -->
+<!-- spaex-bootstrap:start version="2" -->
 ...content...
 <!-- spaex-bootstrap:end -->
 ```
@@ -51,8 +47,10 @@ and uninstall. The exact target-path table per runtime is captured in
 
 ## Consequences
 
-TBD in T060.
+The global files remain user-owned. spaex changes only its marked block and
+never writes project-level `CLAUDE.md`, `AGENTS.md`, or Spec-Kit files.
 
 ## Alternatives considered
 
-TBD in T060.
+The block is intentionally static and contains no project-specific content;
+all project policy remains in `.spaex/constitution.md`.

@@ -40,6 +40,7 @@ _IS_WINDOWS = sys.platform == "win32"
 
 CONSTITUTION_NAME = "constitution.md"
 INSTALL_LOCK_NAME = "install.lock"
+MANIFEST_LOCK_NAME = "manifest.json.lock"
 INSTALL_MUTEX_NAME = "install.mutex"
 SPAEX_DIR = ".spaex"
 
@@ -105,6 +106,27 @@ def _write_staging(next_dir: Path, files: Sequence[StagedFile]) -> None:
     _fsync_dir(next_dir)
 
 
+def _preserve_manifest_lock(
+    live: Path, next_dir: Path, files: Sequence[StagedFile]
+) -> None:
+    """Carry the active manifest-lock inode through a directory swap.
+
+    The lock lives inside `.spaex/` by design, while the directory itself is
+    published with rename-swap. Hard-linking the active lock into the staged
+    generation keeps the descriptor and pathname tied to the same inode across
+    the swap, so another process cannot acquire a replacement lock mid-install.
+    """
+    if not any(staged.relative_path == MANIFEST_LOCK_NAME for staged in files):
+        return
+    live_lock = live / MANIFEST_LOCK_NAME
+    staged_lock = next_dir / MANIFEST_LOCK_NAME
+    if not live_lock.is_file() or not staged_lock.exists():
+        return
+    staged_lock.unlink()
+    os.link(str(live_lock), str(staged_lock))
+    _fsync_dir(next_dir)
+
+
 def _rollback_swap(
     live: Path,
     next_dir: Path,
@@ -151,6 +173,7 @@ def stage_generation(
 
     try:
         _write_staging(next_dir, files_list)
+        _preserve_manifest_lock(live, next_dir, files_list)
         if state_root is not None:
             paths = transaction_paths(
                 repo_root if repo_root is not None else parent,
@@ -235,6 +258,7 @@ def publish_generation(
 
     try:
         _write_staging(next_dir, files_list)
+        _preserve_manifest_lock(live, next_dir, files_list)
 
         if state_root is not None:
             paths = transaction_paths(

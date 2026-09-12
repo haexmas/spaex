@@ -10,6 +10,7 @@ from pathlib import Path
 
 from spaex.git.remote import origin_url
 from spaex.model.source_url import canonicalize
+from spaex.paths import MANIFEST_FILENAME, SPAEX_DIRNAME, manifest_path
 from spaex.util.errors import MissingRemoteOriginError
 
 
@@ -49,8 +50,8 @@ def project_identity(repo_root: Path) -> str:
     """Resolve the canonical, device-independent identity for a project.
 
     Git-backed projects use the canonical origin URL. Non-git folders use the
-    contents of `.harness-id`. The manifest identity is retained as a narrow
-    compatibility fallback for pre-Spec-008 fixture projects that have neither.
+    contents of `.harness-id`. The manifest identity is used as a fallback for
+    non-git project folders that have neither an origin URL nor a `.harness-id`.
     """
     try:
         return canonicalize(origin_url(repo_root))
@@ -61,8 +62,13 @@ def project_identity(repo_root: Path) -> str:
             if identity:
                 return identity
 
-        manifest = repo_root / ".spaex.json"
-        if manifest.is_file():
+        manifest_candidates = (
+            manifest_path(repo_root),
+            repo_root / f"{SPAEX_DIRNAME}.prev" / MANIFEST_FILENAME,
+        )
+        for manifest in manifest_candidates:
+            if not manifest.is_file():
+                continue
             try:
                 identity = json.loads(manifest.read_text(encoding="utf-8"))["identity"]
             except (OSError, KeyError, TypeError, ValueError):
@@ -76,7 +82,7 @@ def transaction_paths(repo_root: Path, state_root: Path | None = None) -> Transa
     """Return shared transaction paths for ``repo_root``.
 
     The full identity is never used as a path segment. Transaction state is
-    device-local and checkout-scoped; no in-repository compatibility paths are
+    device-local and checkout-scoped; no alternate in-repository paths are
     exposed.
     """
     identity = project_identity(repo_root)

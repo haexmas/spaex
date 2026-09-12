@@ -1,28 +1,25 @@
 """Canonical exit codes for every `spaex` command.
 
-Codes are unified across `spaex migrate`, `spaex install`, and
-`spaex constitution show` so a caller never has to disambiguate divergent values
-for the same numeric result.
+Codes are shared across `spaex install` and `spaex constitution show` so a caller
+never has to disambiguate divergent values for the same numeric result.
 """
 
 from __future__ import annotations
 
 SUCCESS = 0
 
-# 2 — resolution / input refuse (migrate: v1 shape not migratable; assemble:
-# zero constitution sources or an unresolvable manifest; show: constitution
-# file missing).
+# 2 — resolution / input refuse (zero constitution sources or an unresolvable
+# manifest; show: constitution file missing).
 INPUT_REFUSE = 2
 
 # 3 — I/O refuse (missing publisher clone, unavailable pinned revision,
 # missing contribution file, missing install.lock for show).
 IO_REFUSE = 3
 
-# 4 — validation refuse (post-migration schema failure, corrupt install.lock
-# in show).
+# 4 — validation refuse (corrupt install.lock in show).
 VALIDATION_REFUSE = 4
 
-# 5 — system refuse (missing `.spaex.json` or version mismatch).
+# 5 — system refuse (missing `.spaex/manifest.json` or version mismatch).
 SYSTEM_REFUSE = 5
 
 # 6 — post-write validation failure (content integrity mismatch).

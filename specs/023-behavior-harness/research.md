@@ -96,7 +96,7 @@ discovery. The block content remains the same across runtimes.
 
 ## spaex per-project constitution
 
-If a file named `.spaex.md` exists in the current working directory (or any ancestor up to a git-root), treat its contents as a per-project constitution issued by the operator. Follow its MUST directives, honor its SHOULD directives, and respect its MAY directives as permissive guidance. The constitution's rendered clauses each cite their source molecule and atom.
+If a file named `.spaex/constitution.md` exists in the current working directory (or any ancestor up to a git-root), treat its contents as a per-project constitution issued by the operator. Follow its MUST directives, honor its SHOULD directives, and respect its MAY directives as permissive guidance. The constitution's rendered clauses each cite their source molecule and atom.
 
 <!-- spaex-bootstrap:end -->
 ```
@@ -142,7 +142,7 @@ sorted provenance list, then by normalized clause text.
 **Rationale**: matches the spec's Emission FRs (FR-008 modality grouping, FR-021 per-clause provenance) and gives a canonical target for the byte-identity reproducibility test (SC-003), including merged clauses.
 
 **Alternatives considered**:
-- Structured JSON emitted alongside `.spaex.md` for machine parsing. Deferred as a follow-up; the inline regex-parseable provenance is enough for MVP.
+- Structured JSON emitted alongside `.spaex/constitution.md` for machine parsing. Deferred as a follow-up; the inline regex-parseable provenance is enough for MVP.
 - Rich footnotes / linked references. Rejected: adds Markdown-renderer variance across agents, hurts byte-identity guarantee.
 
 ### Canonical build fingerprints
@@ -210,27 +210,35 @@ trusted without a match.
 
 ## 10. `.spaex/clarifications.json` schema location and evolution
 
-**Decision**: new file `.spaex/clarifications.json` (not embedded in `.spaex.json`) because clarifications can be lengthy and re-asked-on-change semantics differ from the pinning semantics of `.spaex.json`. Schema versioned per Principle VI's schema-migration clause.
+**Decision**: new file `.spaex/clarifications.json` (not embedded in `.spaex/manifest.json`) because clarifications can be lengthy and re-asked-on-change semantics differ from the pinning semantics of `.spaex/manifest.json`. The schema is versioned, and future schema changes are explicit clean-cut updates rather than in-place compatibility rewrites.
 
-**Rationale**: separation of concerns. `.spaex.json` is a small, human-authored allowlist; clarifications are machine-authored history. Mixing them would violate the "committed, review-gated" contract for `.spaex.json`.
+**Rationale**: separation of concerns. `.spaex/manifest.json` is a small, human-authored allowlist; clarifications are machine-authored history. Mixing them would violate the "committed, review-gated" contract for `.spaex/manifest.json`.
 
 **Alternatives considered**:
-- Embed in `.spaex.json` under a `constitution.clarifications` key. Rejected: bloats the human-facing config, complicates schema migration.
+- Embed in `.spaex/manifest.json` under a `constitution.clarifications` key. Rejected: bloats the human-facing config and mixes authored pins with generated history.
 - Store outside version control. Rejected: breaks byte-identity across machines (SC-003).
 
-## 11. Existing `.spaex/constitution.md` supersession
+## 11. Canonical spaex policy artifact
 
-**Decision**: `.spaex/constitution.md` (spec-007 D2/D16) is removed as part of this spec's rollout. All content migrations happen inside `haexmas/atoms` publishers: molecules that used to declare an `atoms.constitution` (single-file monolithic constitution) migrate to declare `atoms.behavior` fragments. Consumers who pin the migrated molecule versions get `.spaex.md` instead of `.spaex/constitution.md`.
+**Decision**: `.spaex/constitution.md` is the single spaex policy artifact.
+Atom-provided behavior fragments and project-local behavior fragments compose
+there. Spec-Kit's separate policy artifact remains
+`.specify/memory/constitution.md`; spaex never copies its content into that
+file.
 
-**Rationale**: pre-user (memory `spaex_pre_user`), no consumer is holding the old file's content on disk that we'd break. Cleaner mental model: one composed-constitution path, not two.
+Molecules that declare the older `atoms.constitution` contribution shape still
+publish their effective content to the same canonical spaex path. There is no
+second root-level constitution path and no migration layer.
 
 **Alternatives considered**:
-- Keep both paths, populate both. Rejected: duplication + drift risk.
-- Symlink `.spaex/constitution.md` → `.spaex.md`. Rejected: Windows compatibility issues for spaex users on WSL2.
+- Keep a second root-level constitution alias. Rejected: duplicate discovery
+  paths and drift risk.
+- Copy spaex clauses into the Spec-Kit constitution. Rejected: the two policy
+  layers have different owners and change workflows.
 
 ## 12. dsh emission (deferred)
 
-**Decision**: not in scope for spec 023. A future spec adds `.spaex.md → dsh home patch` translation once a dsh consumer exists.
+**Decision**: not in scope for spec 023. A future spec adds `.spaex/constitution.md → dsh home patch` translation once a dsh consumer exists.
 
 **Rationale**: matches the 2026-09-08 roadmap "Not now" section on dsh bundle producer.
 

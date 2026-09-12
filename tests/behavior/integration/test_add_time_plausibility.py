@@ -4,7 +4,7 @@
 already-pinned molecule's fragment must not abort: the Composer's
 plausibility check (a Shape B response) prints a WARN naming the
 contradiction's fragments/molecules, writes `.spaex/.stale` summarizing the
-finding, and the command exits 0. `.spaex.md`, already composed from the
+finding, and the command exits 0. `.spaex/constitution.md`, already composed from the
 first successful `spaex add`, is left byte-unchanged — regeneration is
 deferred to the next `spaex install` (FR-024a, contracts/cli-surface.md
 §add/remove).
@@ -31,7 +31,7 @@ from spaex.behavior.composer.invoke import (
     RuntimeDescriptor,
 )
 from spaex.cli import install as install_cli
-from spaex.migrate.transform import clone_dir
+from spaex.git.cache import clone_dir
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None, reason="git binary required"
@@ -202,9 +202,9 @@ def test_add_of_contradicting_molecule_warns_marks_stale_and_exits_zero(
     monkeypatch.setattr(behavior_orchestrate, "invoke_composer", stub)
 
     # A clean add runs the plausibility check and, finding no contradiction,
-    # publishes `.spaex.md` immediately -- `spaex add` always finishes with a
+    # publishes `.spaex/constitution.md` immediately -- `spaex add` always finishes with a
     # full `spaex install` (contracts/cli-surface.md §add/remove: "On no
-    # contradiction, `.spaex.md` regenerates cleanly").
+    # contradiction, `.spaex/constitution.md` regenerates cleanly").
     rc = haex_add_helpers["run_add"](
         consumer,
         state_root,
@@ -215,7 +215,7 @@ def test_add_of_contradicting_molecule_warns_marks_stale_and_exits_zero(
     )
     assert rc == 0
     assert calls == [1]
-    spaex_md_path = consumer / ".spaex.md"
+    spaex_md_path = consumer / ".spaex/constitution.md"
     assert spaex_md_path.exists()
     baseline_bytes = spaex_md_path.read_bytes()
     assert not (consumer / ".spaex" / ".stale").exists()
@@ -239,7 +239,7 @@ def test_add_of_contradicting_molecule_warns_marks_stale_and_exits_zero(
     assert _MOL_A in captured.err
     assert _MOL_B in captured.err
 
-    # `.spaex.md` is untouched: no regeneration at add-time (FR-024a).
+    # `.spaex/constitution.md` is untouched: no regeneration at add-time (FR-024a).
     assert spaex_md_path.read_bytes() == baseline_bytes
 
     stale_path = consumer / ".spaex" / ".stale"
@@ -253,7 +253,7 @@ def test_add_of_contradicting_molecule_warns_marks_stale_and_exits_zero(
     cited_molecules = {c["molecule_id"] for c in question["cited_fragments"]}
     assert cited_molecules == {_MOL_A, _MOL_B}
 
-    written = json.loads((consumer / ".spaex.json").read_text())
+    written = json.loads((consumer / ".spaex/manifest.json").read_text())
     pinned = {mid for compound in written["compounds"] for mid in compound["molecules"]}
     assert pinned == {_MOL_A, _MOL_B}
 
@@ -278,7 +278,7 @@ def test_remove_rechecks_without_regenerating_and_clears_resolved_stale(
         )
         == 0
     )
-    baseline_bytes = (consumer / ".spaex.md").read_bytes()
+    baseline_bytes = (consumer / ".spaex/constitution.md").read_bytes()
 
     assert (
         haex_add_helpers["run_add"](
@@ -307,7 +307,7 @@ def test_remove_rechecks_without_regenerating_and_clears_resolved_stale(
         == 0
     )
     assert calls == [1, 2]
-    assert (consumer / ".spaex.md").read_bytes() == baseline_bytes
+    assert (consumer / ".spaex/constitution.md").read_bytes() == baseline_bytes
     assert not (consumer / ".spaex" / ".stale").exists()
     capsys.readouterr()
 
@@ -322,7 +322,7 @@ def test_remove_rechecks_without_regenerating_and_clears_resolved_stale(
         )
         == 0
     )
-    assert not (consumer / ".spaex.md").exists()
+    assert not (consumer / ".spaex/constitution.md").exists()
 
 
 def test_overlap_shape_b_does_not_mark_add_as_contradiction(
@@ -345,7 +345,7 @@ def test_overlap_shape_b_does_not_mark_add_as_contradiction(
         )
         == 0
     )
-    baseline_bytes = (consumer / ".spaex.md").read_bytes()
+    baseline_bytes = (consumer / ".spaex/constitution.md").read_bytes()
 
     assert (
         haex_add_helpers["run_add"](
@@ -365,7 +365,7 @@ def test_overlap_shape_b_does_not_mark_add_as_contradiction(
     assert not (consumer / ".spaex" / ".stale").exists()
     # An overlap-kind Shape B carries no composed body to publish; the
     # previously-published artifact (MOL_A alone) is left untouched.
-    assert (consumer / ".spaex.md").read_bytes() == baseline_bytes
+    assert (consumer / ".spaex/constitution.md").read_bytes() == baseline_bytes
 
 
 def test_install_reconciles_pending_stale_marker_before_publishing(
@@ -390,7 +390,7 @@ def test_install_reconciles_pending_stale_marker_before_publishing(
             == 0
         )
 
-    baseline_bytes = (consumer / ".spaex.md").read_bytes()
+    baseline_bytes = (consumer / ".spaex/constitution.md").read_bytes()
     assert (consumer / ".spaex" / ".stale").exists()
     capsys.readouterr()
 
@@ -404,6 +404,6 @@ def test_install_reconciles_pending_stale_marker_before_publishing(
     captured = capsys.readouterr()
     assert "stale, unresolved" in captured.out
     assert calls == [1, 2, 2, 2]
-    assert (consumer / ".spaex.md").exists()
-    assert (consumer / ".spaex.md").read_bytes() != baseline_bytes
+    assert (consumer / ".spaex/constitution.md").exists()
+    assert (consumer / ".spaex/constitution.md").read_bytes() != baseline_bytes
     assert not (consumer / ".spaex" / ".stale").exists()

@@ -1,7 +1,7 @@
 """Canonical source URL normalization (D3, R9).
 
 Accepted schemes on output: `https` and `ssh`, both lowercase, both userinfo-
-free. During migration input normalization only, credential-free SCP form
+free. During source normalization, credential-free SCP form
 `git@host:path` and `ssh://git@host/path` map to `ssh://host/path`. Every
 other userinfo, every other scheme (including `git://`), and any credential
 material are refused.

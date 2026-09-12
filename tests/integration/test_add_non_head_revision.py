@@ -73,7 +73,7 @@ def test_add_pins_non_head_revision_via_fetched_sha(
         revision=head,
     )
     assert rc == 0
-    written = json.loads((consumer / ".spaex.json").read_text())
+    written = json.loads((consumer / ".spaex/manifest.json").read_text())
     assert written["compounds"][0]["revision"] == head
     published = (consumer / ".spaex" / "constitution.md").read_bytes()
     assert b"hello constitution constitution.md" in published

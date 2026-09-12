@@ -21,8 +21,8 @@ from unittest import mock
 import pytest
 
 from spaex.git import revparse
+from spaex.git.cache import clone_dir
 from spaex.git.molecule_store import _validate_and_extract, get_or_extract
-from spaex.migrate.transform import clone_dir
 from spaex.util.errors import MoleculeTreeExtractionError
 
 # T012/T013 need a real git repo; T001-T011's crafted-tar tests above do not,

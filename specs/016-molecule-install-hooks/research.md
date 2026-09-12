@@ -10,7 +10,7 @@ The feature was fully brainstormed with the operator on 2026-09-08 and captured 
 - **Rationale**: Matches pip/npm postinstall precedent. The pinned 40-hex SHA is the single trust anchor and is what the consumer explicitly reviewed. Additional per-invocation gates (prompts, allow-lists) add friction without a corresponding security benefit while the underlying process model is unrestricted.
 - **Alternatives considered**:
   - Prompt on first adoption per molecule (rejected: consent noise; the pin already IS the consent).
-  - Per-molecule consumer allow-list in `.spaex.json` (rejected: YAGNI; nobody has asked for it; global opt-out sufficient).
+  - Per-molecule consumer allow-list in `.spaex/manifest.json` (rejected: YAGNI; nobody has asked for it; global opt-out sufficient).
   - Sandboxed hook execution via Spec 009 hook-boundary contract (rejected for v1: adds substantial implementation surface, blocks the concrete unblock — graphify-out gitignore — that motivated this spec).
 
 ## Environment variable inheritance
@@ -41,12 +41,12 @@ The feature was fully brainstormed with the operator on 2026-09-08 and captured 
 
 ## Failure semantics
 
-- **Decision**: Per-molecule `on_failure: "abort" | "warn"`. Default `"abort"`. `abort` triggers Spec-008 install-transaction rollback (staged atoms discarded, published generation preserved, install.lock not written, delegated `.spaex.json` compound-entry update reverted, CLI exits with existing `install-failed` diagnostic key at `src/spaex/cli/install.py:232`). `warn` records `hook_status: "failed"` in install.lock, spaex emits one post-exit `WARN:` line, exits 0.
+- **Decision**: Per-molecule `on_failure: "abort" | "warn"`. Default `"abort"`. `abort` triggers Spec-008 install-transaction rollback (staged atoms discarded, published generation preserved, install.lock not written, delegated `.spaex/manifest.json` compound-entry update reverted, CLI exits with existing `install-failed` diagnostic key at `src/spaex/cli/install.py:232`). `warn` records `hook_status: "failed"` in install.lock, spaex emits one post-exit `WARN:` line, exits 0.
 - **Rationale**: Molecule authors know whether their hook is essential (gitignore-critical → abort) or best-effort (agent-harness registration → warn). Reusing the existing install-failed key avoids a new diagnostic key and keeps consumer error-handling paths unified.
 - **Alternatives considered**:
   - Always abort (rejected: surprises molecule authors whose script is intentionally best-effort; blocks constitution adoption on a missing external CLI).
   - Always warn (rejected: consumer never learns a required setup step silently failed).
-  - Configurable in consumer `.spaex.json` (rejected: molecule author is the correct authority on essential-vs-best-effort; consumer already has `--no-install-hooks` for global disable).
+  - Configurable in consumer `.spaex/manifest.json` (rejected: molecule author is the correct authority on essential-vs-best-effort; consumer already has `--no-install-hooks` for global disable).
 
 ## Idempotency and re-run semantics
 

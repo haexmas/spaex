@@ -11,7 +11,7 @@
 - Boolean flag (no value). Absent → hooks run (default). Present → hooks skipped for this invocation.
 - Placed among the top-level CLI options of `spaex add` and `spaex install`.
 - No short form (no `-N`), to keep it distinct from the visually-similar `--no-...` family and avoid future collisions.
-- Not persisted anywhere. Not written into `.spaex.json`, not written into `.spaex/install.lock`, not remembered between invocations.
+- Not persisted anywhere. Not written into `.spaex/manifest.json`, not written into `.spaex/install.lock`, not remembered between invocations.
 
 ## Behaviour
 
@@ -37,7 +37,7 @@
 ## Non-behaviour (deliberately deferred)
 
 - **No per-molecule flag** (no `--no-install-hook <molecule-id>`): only the global boolean exists. Fine-grained per-molecule allow/deny lists are out of scope for v1.
-- **No consumer-manifest persistence** (no `allow_install_hooks: false` in `.spaex.json`): the flag is per-invocation only. If consumers want to always skip in a CI environment, they wrap `spaex` in a script that always passes `--no-install-hooks`.
+- **No consumer-manifest persistence** (no `allow_install_hooks: false` in `.spaex/manifest.json`): the flag is per-invocation only. If consumers want to always skip in a CI environment, they wrap `spaex` in a script that always passes `--no-install-hooks`.
 - **No inverse flag** (no `--install-hooks`): the default IS to run hooks, so a "yes, run them" flag would be redundant.
 
 ## Diagnostic-key contract

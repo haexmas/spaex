@@ -41,7 +41,7 @@ def test_install_creates_missing_claude_target(tmp_path: Path) -> None:
     target = home / ".claude" / "CLAUDE.md"
     assert target.exists()
     text = target.read_text(encoding="utf-8")
-    assert '<!-- spaex-bootstrap:start version="1" -->' in text
+    assert '<!-- spaex-bootstrap:start version="2" -->' in text
     assert bootstrap.END_MARKER in text
     assert "## spaex per-project constitution" in text
 
@@ -55,7 +55,7 @@ def test_install_appends_when_target_has_content_but_no_markers(tmp_path: Path) 
     assert [o.action for o in outcomes] == ["appended"]
     text = target.read_text(encoding="utf-8")
     assert text.startswith("existing operator content\n")
-    assert '<!-- spaex-bootstrap:start version="1" -->' in text
+    assert '<!-- spaex-bootstrap:start version="2" -->' in text
 
 
 def test_install_preserves_symlink_and_mode(tmp_path: Path) -> None:
@@ -127,7 +127,7 @@ def test_install_upgrades_older_version_and_preserves_surrounding_content(
     assert [o.action for o in outcomes] == ["upgraded"]
     text = target.read_text(encoding="utf-8")
     assert text.startswith("preamble\n")
-    assert '<!-- spaex-bootstrap:start version="1" -->' in text
+    assert '<!-- spaex-bootstrap:start version="2" -->' in text
     assert "old body" not in text
     assert text.endswith("trailing operator notes\n")
 
@@ -137,8 +137,8 @@ def test_preflight_rejects_multiple_start_markers(tmp_path: Path) -> None:
     target = home / ".claude" / "CLAUDE.md"
     target.parent.mkdir(parents=True)
     target.write_text(
-        '<!-- spaex-bootstrap:start version="1" -->\n\nbody\n\n<!-- spaex-bootstrap:end -->\n'
-        '<!-- spaex-bootstrap:start version="1" -->\n\nbody\n\n<!-- spaex-bootstrap:end -->\n',
+        '<!-- spaex-bootstrap:start version="2" -->\n\nbody\n\n<!-- spaex-bootstrap:end -->\n'
+        '<!-- spaex-bootstrap:start version="2" -->\n\nbody\n\n<!-- spaex-bootstrap:end -->\n',
         encoding="utf-8",
     )
     original = target.read_text(encoding="utf-8")
@@ -153,7 +153,7 @@ def test_preflight_rejects_end_before_start(tmp_path: Path) -> None:
     target.parent.mkdir(parents=True)
     target.write_text(
         "<!-- spaex-bootstrap:end -->\nbody\n"
-        '<!-- spaex-bootstrap:start version="1" -->\n',
+        '<!-- spaex-bootstrap:start version="2" -->\n',
         encoding="utf-8",
     )
     original = target.read_text(encoding="utf-8")

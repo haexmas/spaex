@@ -5,7 +5,7 @@ active fragment set changes. When the Composer flags a cross-molecule
 semantic contradiction (Shape B), the add/remove operation completes without
 aborting: it prints a WARN and writes this `.spaex/.stale` sidecar so the
 next `spaex install` can detect the finding and route it through the
-reconciliation prompt (FR-010a) before `.spaex.md` is rewritten.
+reconciliation prompt (FR-010a) before `.spaex/constitution.md` is rewritten.
 
 The file is gitignored (Spec 023 T006): it is per-checkout state, not a
 tracked artifact.

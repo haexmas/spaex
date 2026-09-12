@@ -26,7 +26,7 @@ import pytest
 
 from spaex.cli import add as add_cli
 from spaex.cli import install as install_cli
-from spaex.migrate.transform import clone_dir
+from spaex.git.cache import clone_dir
 from spaex.model.install_lock import InstallLock
 
 pytestmark = pytest.mark.skipif(
@@ -125,7 +125,8 @@ def _make_consumer(tmp_path: Path) -> Path:
     """Create a minimal consumer repository for idempotency tests."""
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-    (consumer / ".spaex.json").write_text(
+    (consumer / ".spaex").mkdir()
+    (consumer / ".spaex/manifest.json").write_text(
         json.dumps(
             {
                 "spaex_version": "4",

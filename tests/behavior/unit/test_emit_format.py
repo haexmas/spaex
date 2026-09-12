@@ -2,7 +2,7 @@
 
 Covers:
 
-- `.spaex.md` header regex + hash pass-through.
+- `.spaex/constitution.md` header regex + hash pass-through.
 - Section-order/provenance regex from contracts/spaex-md-format.md.
 - Empty-set behavior (FR-017d).
 - Hash-verification rejects composer-produced mismatches.
@@ -250,6 +250,7 @@ def test_build_input_hash_ignores_cosmetic_answer_whitespace() -> None:
 
 def test_remove_if_exists_deletes_and_reports(tmp_path: Path) -> None:
     target = tmp_path / SPAEX_MD_FILENAME
+    target.parent.mkdir(parents=True)
     target.write_text("stale", encoding="utf-8")
     assert remove_if_exists(tmp_path) is True
     assert not target.exists()

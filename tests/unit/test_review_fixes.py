@@ -18,12 +18,6 @@ from spaex.constitution.safety import (
     validate_terminal_safe_display,
 )
 from spaex.io import json_deterministic
-from spaex.migrate import detect
-from spaex.migrate.transform import (
-    _glob_matches,
-    _select_atom_for_path,
-    migrate_v1_to_v2,
-)
 from spaex.model.consumer_manifest import ConsumerManifest
 from spaex.model.install_lock import ConstitutionSource, InstallLock, MoleculeEntry
 from spaex.model.molecule_manifest import InstallHook, MoleculeManifest
@@ -31,10 +25,7 @@ from spaex.model.publisher_manifest import PublisherManifest
 from spaex.schema.validator import _json_pointer
 from spaex.util.errors import (
     HaexError,
-    IdentityMismatchError,
     InstallLockSchemaInvalidError,
-    MissingAtomManifestError,
-    MissingPublisherManifestError,
     PlaintextSecretDetectedError,
     SpaexVersionUnsupportedError,
     TerminalUnsafeContributionError,
@@ -46,103 +37,6 @@ def test_constitution_commands_refuse_without_traceback(
 ) -> None:
     assert main(["--repo-root", str(tmp_path), "constitution", "show"]) == 2
     assert "key=constitution-not-assembled" in capsys.readouterr().err
-
-
-def test_migrate_invalid_manifest_is_typed(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    (tmp_path / ".spaex.json").write_bytes(b"{")
-    assert main(["--repo-root", str(tmp_path), "migrate", "--dry-run"]) == 2
-    assert "key=spaex-json-invalid" in capsys.readouterr().err
-
-
-def test_migrate_invalid_manifest_shape_is_typed(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    (tmp_path / ".spaex.json").write_text(
-        '{"haex_hive_version": "1","identity":"com.example.project",'
-        '"harness_sources":null}'
-    )
-    assert main(["--repo-root", str(tmp_path), "migrate", "--dry-run"]) == 2
-    assert "key=spaex-json-invalid" in capsys.readouterr().err
-
-
-def test_detect_non_object_manifest_is_shape_error() -> None:
-    with pytest.raises(detect.InvalidHaexHiveManifestError):
-        detect.detect_version(b"[]")
-
-
-def test_missing_identity_is_an_identity_refusal() -> None:
-    raw = json.dumps({"haex_hive_version": "1", "harness_sources": []}).encode()
-    with pytest.raises(IdentityMismatchError):
-        migrate_v1_to_v2(raw, Path("."), Path("."))
-
-
-def test_invalid_atom_manifest_is_typed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # _select_atom_for_path reads the raw v2-era publisher shape directly
-    # (research.md D6): the migrate-only v1->v2 path never goes through the
-    # (now v3-only) PublisherManifest runtime model.
-    publisher = json.loads(
-        '{"haex_hive_version": "2","publisher":"com.example", "atoms": {'
-        '"com.example.atom":{"path":"atom","version":"1.0.0"}}}'
-    )
-    monkeypatch.setattr(
-        "spaex.migrate.transform.git_show.show_bytes", lambda *args, **kwargs: b"{"
-    )
-    with pytest.raises(MissingAtomManifestError):
-        _select_atom_for_path(
-            publisher, tmp_path, "0" * 40, "constitution", "atom/constitution.md"
-        )
-
-
-def test_invalid_legacy_publisher_atoms_is_typed(tmp_path: Path) -> None:
-    """Malformed publisher-level atoms are reported as publisher errors."""
-    with pytest.raises(MissingPublisherManifestError):
-        _select_atom_for_path(
-            {"atoms": []}, tmp_path, "0" * 40, "constitution", "atom/constitution.md"
-        )
-
-
-@pytest.mark.parametrize(
-    "publisher",
-    [
-        {"atoms": {"com.example.atom": []}},
-        {"atoms": {"com.example.atom": {"path": 42}}},
-    ],
-)
-def test_invalid_legacy_atom_entry_is_typed(
-    publisher: dict, tmp_path: Path
-) -> None:
-    """Malformed legacy atom entries are reported before field access."""
-    with pytest.raises(MissingAtomManifestError):
-        _select_atom_for_path(
-            publisher, tmp_path, "0" * 40, "constitution", "atom/constitution.md"
-        )
-
-
-def test_invalid_legacy_contributes_value_is_typed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A malformed legacy contributes block does not leak an AttributeError."""
-    monkeypatch.setattr(
-        "spaex.migrate.transform.git_show.show_bytes",
-        lambda *args, **kwargs: b'{"contributes": []}',
-    )
-    publisher = {"atoms": {"com.example.atom": {"path": "atom"}}}
-
-    with pytest.raises(MissingAtomManifestError):
-        _select_atom_for_path(
-            publisher, tmp_path, "0" * 40, "constitution", "atom/constitution.md"
-        )
-
-
-def test_glob_contributions_use_segment_aware_matching() -> None:
-    assert _glob_matches("rules/*.md", "rules/main.md")
-    assert not _glob_matches("rules/*.md", "rules/nested/main.md")
-    assert _glob_matches("rules/**/*.md", "rules/nested/main.md")
-    assert _glob_matches("rules/**/*.md", "rules/main.md")
 
 
 @pytest.mark.parametrize("codepoint", [0x200B, 0x200C, 0x200D, 0x2060, 0xFEFF])
@@ -192,7 +86,8 @@ def test_install_allows_multiple_paths_from_one_molecule(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A multi-file constitution from one molecule is not a multi-source install."""
-    (tmp_path / ".spaex.json").write_text('{"identity":"com.example.project"}')
+    (tmp_path / ".spaex").mkdir()
+    (tmp_path / ".spaex/manifest.json").write_text('{"identity":"com.example.project"}')
     source = ConstitutionSource(
         id="com.example.constitution",
         revision="0" * 40,
@@ -229,7 +124,8 @@ def test_install_runs_hook_only_alongside_constitution_molecule(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Spec 016 US4 lifts the MVP restriction: hook-only molecules run alongside a constitution."""
-    (tmp_path / ".spaex.json").write_text('{"identity":"com.example.project"}')
+    (tmp_path / ".spaex").mkdir()
+    (tmp_path / ".spaex/manifest.json").write_text('{"identity":"com.example.project"}')
     source = ConstitutionSource(
         id="com.example.constitution",
         revision="0" * 40,
@@ -323,9 +219,10 @@ def test_install_stages_same_body_when_constitution_revision_changes(
     """Hooks must see a staged lock when the contributor identity changes."""
     from contextlib import nullcontext
 
-    (tmp_path / ".spaex.json").write_text('{"identity":"com.example.project"}')
+    (tmp_path / ".spaex").mkdir()
+    (tmp_path / ".spaex/manifest.json").write_text('{"identity":"com.example.project"}')
     live_root = tmp_path / ".spaex"
-    live_root.mkdir()
+    live_root.mkdir(exist_ok=True)
     body = b"same constitution body"
     (live_root / "constitution.md").write_bytes(body)
     old_revision = "1" * 40
@@ -437,7 +334,7 @@ def test_consumer_manifest_rejects_legacy_and_unsupported_versions(
         ConsumerManifest.from_json(json.dumps(payload).encode())
 
     assert exc_info.value.diagnostic_key == "spaex-version-unsupported"
-    assert "spaex migrate" in exc_info.value.hint
+    assert ".spaex/manifest.json" in exc_info.value.hint
 
 
 def test_molecule_manifest_rejects_negative_priority() -> None:

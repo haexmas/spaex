@@ -2,8 +2,8 @@
 
 Runs under a caller-held ``ManifestLockContext``:
 
-1. Snapshot the current `.spaex.json` bytes (or record its absence).
-2. Write the new manifest via ``.spaex.json.tmp`` + rename.
+1. Snapshot the active manifest bytes (or record its absence).
+2. Write the new manifest via an in-directory temporary file + rename.
 3. Call ``haex install`` in-process with the same lock context held.
 4. On ANY install failure, restore the previous manifest bytes atomically
    and re-raise as ``InstallTransactionFailedError``.
@@ -21,8 +21,9 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from spaex.install.manifest_lock import MANIFEST_NAME, ManifestLockContext
+from spaex.install.manifest_lock import ManifestLockContext
 from spaex.io import atomic
+from spaex.paths import manifest_path
 from spaex.util.errors import (
     HaexError,
     InstallTransactionFailedError,
@@ -52,13 +53,13 @@ def write_and_reinstall(
     """
     from spaex.cli import install as install_cli
 
-    manifest_path = repo_root / MANIFEST_NAME
+    manifest_target = manifest_path(repo_root)
     previous_bytes: bytes | None = (
-        manifest_path.read_bytes() if manifest_path.exists() else None
+        manifest_target.read_bytes() if manifest_target.exists() else None
     )
 
     try:
-        atomic.write_replace(manifest_path, new_manifest_bytes)
+        atomic.write_replace(manifest_target, new_manifest_bytes)
         return install_cli.run(
             argparse.Namespace(
                 repo_root=str(repo_root),
@@ -70,16 +71,16 @@ def write_and_reinstall(
     except BaseException as exc:
         try:
             if previous_bytes is None:
-                _atomic_delete(manifest_path)
+                _atomic_delete(manifest_target)
             else:
-                atomic.write_replace(manifest_path, previous_bytes)
+                atomic.write_replace(manifest_target, previous_bytes)
         except OSError as rollback_exc:
             raise ManifestRollbackFailedError(
                 message=(
                     "manifest rollback failed after install failure: "
                     f"{rollback_exc}"
                 ),
-                context={"manifest_path": str(manifest_path)},
+                context={"manifest_path": str(manifest_target)},
             ) from rollback_exc
         if not isinstance(exc, HaexError):
             raise

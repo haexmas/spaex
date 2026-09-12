@@ -175,9 +175,9 @@ def project_local_from_config(
     entries: Iterable[Mapping[str, Any]],
     *,
     repo_root: Path | None = None,
-    path: str = ".spaex.json:constitution.local_fragments",
+    path: str = ".spaex/manifest.json:constitution.local_fragments",
 ) -> list[BehaviorFragment]:
-    """Parse `.spaex.json`'s `constitution.local_fragments[]` entries (T044).
+    """Parse `.spaex/manifest.json`'s `constitution.local_fragments[]` entries (T044).
 
     Each entry is either inline (a full fragment: `id`/`body`/... per
     contracts/fragment-format.md, distinguished by a `body` key) or a

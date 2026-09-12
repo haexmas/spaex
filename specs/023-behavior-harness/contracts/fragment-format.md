@@ -36,7 +36,7 @@ tags: [testing, git]
 address the failures before writing the commit. This is enforced at runtime by
 the pre-commit hook shipped by `atoms.hooks.test-runner`.
 
-**Rationale:** mocked test runs have historically masked broken migrations.
+**Rationale:** mocked test runs have historically masked broken setup paths.
 ```
 
 ## Header schema
@@ -106,7 +106,8 @@ Field constraints are identical to standalone fragments.
 | `duplicate-id-body-mismatch` | Two fragments same molecule same id and modality, but different normalized bodies | Reject the conflict; do not discard either body or producer |
 | `reserved-comment` | Body contains `<!-- spaex-...` comment | `<path>: body contains reserved 'spaex-' HTML comment` |
 
-## Backward compatibility
+## Scope boundary
 
-- `.spaex/constitution.d/` did not exist before this spec. No pre-existing files to migrate.
-- Molecules that previously shipped `atoms.constitution` (single monolithic constitution) migrate to `atoms.behavior` publishers as part of `haexmas/atoms` v5 (per research.md §11).
+- `.spaex/constitution.d/` is the canonical materialized fragment tree.
+- Existing `atoms.constitution` contributions are published to the same
+  `.spaex/constitution.md` artifact; no alias or migration path is maintained.

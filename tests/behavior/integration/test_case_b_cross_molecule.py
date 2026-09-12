@@ -33,7 +33,7 @@ from spaex.behavior.composer.invoke import (
     RuntimeDescriptor,
 )
 from spaex.cli import install as install_cli
-from spaex.migrate.transform import clone_dir
+from spaex.git.cache import clone_dir
 from spaex.util import exit_codes
 from spaex.util.errors import HaexError
 
@@ -157,7 +157,8 @@ def _make_consumer_pinning_both(
     """
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-    (consumer / ".spaex.json").write_text(
+    (consumer / ".spaex").mkdir()
+    (consumer / ".spaex/manifest.json").write_text(
         json.dumps(
             {
                 "spaex_version": "4",
@@ -244,4 +245,4 @@ def test_case_b_shape_b_response_aborts_with_exit_21(
     assert len(calls) == 1
     assert calls[0]["fragment_count"] == 2
 
-    assert not (consumer / ".spaex.md").exists()
+    assert not (consumer / ".spaex/constitution.md").exists()

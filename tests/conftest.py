@@ -83,7 +83,7 @@ def self_migration_fixture(tmp_path: Path, git_binary: str) -> dict:
     commit_a = _git(publisher, "rev-parse", "HEAD")
 
     state_root = tmp_path / "state"
-    from spaex.migrate.transform import clone_dir
+    from spaex.git.cache import clone_dir
 
     canonical = "https://github.com/haexmas/haex-hive"
     clone_target = clone_dir(state_root, canonical)
@@ -110,7 +110,7 @@ def haex_add_helpers() -> dict:
     from types import SimpleNamespace
 
     from spaex.cli import add as add_cli
-    from spaex.migrate.transform import clone_dir
+    from spaex.git.cache import clone_dir
 
     def _local_git(cwd: _P, *args: str) -> str:
         proc = subprocess.run(
@@ -182,7 +182,8 @@ def haex_add_helpers() -> dict:
     ) -> _P:
         consumer = tmp_path / "consumer"
         consumer.mkdir()
-        (consumer / ".spaex.json").write_text(
+        (consumer / ".spaex").mkdir()
+        (consumer / ".spaex/manifest.json").write_text(
             json.dumps(
                 {
                     "spaex_version": "4",
@@ -273,7 +274,7 @@ def single_source_constitution_fixture(tmp_path: Path, git_binary: str) -> dict:
     commit_sha = _git(publisher, "rev-parse", "HEAD")
 
     state_root = tmp_path / "state"
-    from spaex.migrate.transform import clone_dir
+    from spaex.git.cache import clone_dir
 
     clone_target = clone_dir(state_root, canonical)
     clone_target.parent.mkdir(parents=True, exist_ok=True)
@@ -281,7 +282,8 @@ def single_source_constitution_fixture(tmp_path: Path, git_binary: str) -> dict:
 
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-    (consumer / ".spaex.json").write_text(
+    (consumer / ".spaex").mkdir()
+    (consumer / ".spaex/manifest.json").write_text(
         json.dumps(
             {
                 "spaex_version": "4",
@@ -358,7 +360,7 @@ def multi_source_constitution_fixture(tmp_path: Path, git_binary: str) -> dict:
     commit_sha = _git(publisher, "rev-parse", "HEAD")
 
     state_root = tmp_path / "state"
-    from spaex.migrate.transform import clone_dir
+    from spaex.git.cache import clone_dir
 
     clone_target = clone_dir(state_root, canonical)
     clone_target.parent.mkdir(parents=True, exist_ok=True)
@@ -366,7 +368,8 @@ def multi_source_constitution_fixture(tmp_path: Path, git_binary: str) -> dict:
 
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-    (consumer / ".spaex.json").write_text(
+    (consumer / ".spaex").mkdir()
+    (consumer / ".spaex/manifest.json").write_text(
         json.dumps(
             {
                 "spaex_version": "4",

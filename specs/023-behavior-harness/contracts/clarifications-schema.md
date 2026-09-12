@@ -1,6 +1,6 @@
 # Contract: `.spaex/clarifications.json` Schema
 
-Storage for operator answers to Composer clarification questions. Version-controlled; committed alongside `.spaex.json` and `.spaex/constitution.d/`.
+Storage for operator answers to Composer clarification questions. Version-controlled; committed alongside `.spaex/manifest.json` and `.spaex/constitution.d/`.
 
 ## File location
 
@@ -92,4 +92,4 @@ Operators MUST NOT edit `key-hex`, `cited_fragments`, or `body_sha256` fields; t
 
 ## Schema evolution
 
-Schema version bumps follow Principle VI's schema-migration clause: a new spaex version reading an old file MUST run through the explicit `spaex migrate` verb (sidecar diff + review), never in-place rewrite.
+The v4 schema is clean-cut: schema changes require an explicit project-owned update to the manifest and its tests; spaex does not rewrite or migrate older layouts in place.

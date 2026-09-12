@@ -19,7 +19,7 @@ from spaex.util.errors import (
 
 def _held_lock(tmp_path: Path) -> ManifestLockContext:
     lock = ManifestLockContext(
-        tmp_path / ".spaex.json.lock", timeout_seconds=1.0
+        tmp_path / ".spaex/manifest.json.lock", timeout_seconds=1.0
     )
     lock.__enter__()
     return lock
@@ -30,7 +30,8 @@ def test_atomic_write_via_tmp_and_rename(
 ) -> None:
     from spaex.cli import install as install_cli
 
-    manifest = tmp_path / ".spaex.json"
+    manifest = tmp_path / ".spaex/manifest.json"
+    manifest.parent.mkdir(parents=True)
     manifest.write_bytes(b'{"old": true}\n')
 
     calls: list[str] = []
@@ -50,7 +51,7 @@ def test_atomic_write_via_tmp_and_rename(
     assert rc == 0
     assert calls == [str(tmp_path)]
     assert manifest.read_bytes() == b'{"new": true}\n'
-    assert not (tmp_path / ".spaex.json.tmp").exists()
+    assert not (tmp_path / ".spaex/manifest.json.tmp").exists()
 
 
 def test_install_failure_rolls_back_manifest_bytes(
@@ -58,7 +59,8 @@ def test_install_failure_rolls_back_manifest_bytes(
 ) -> None:
     from spaex.cli import install as install_cli
 
-    manifest = tmp_path / ".spaex.json"
+    manifest = tmp_path / ".spaex/manifest.json"
+    manifest.parent.mkdir(parents=True)
     manifest.write_bytes(b'{"original": true}\n')
 
     def failing_install(args, *, held_manifest_lock=None):
@@ -82,7 +84,7 @@ def test_install_failure_deletes_manifest_when_no_previous(
 ) -> None:
     from spaex.cli import install as install_cli
 
-    manifest = tmp_path / ".spaex.json"
+    manifest = tmp_path / ".spaex/manifest.json"
     assert not manifest.exists()
 
     def failing_install(args, *, held_manifest_lock=None):
@@ -109,7 +111,8 @@ def test_initial_manifest_write_failure_is_rolled_back(
 ) -> None:
     from spaex.cli import install as install_cli
 
-    manifest = tmp_path / ".spaex.json"
+    manifest = tmp_path / ".spaex/manifest.json"
+    manifest.parent.mkdir(parents=True)
     original_bytes = b'{"original": true}\n'
     manifest.write_bytes(original_bytes)
 
@@ -145,7 +148,8 @@ def test_rollback_failure_surfaces_recovery_path_with_lock_held(
 ) -> None:
     from spaex.cli import install as install_cli
 
-    manifest = tmp_path / ".spaex.json"
+    manifest = tmp_path / ".spaex/manifest.json"
+    manifest.parent.mkdir(parents=True)
     manifest.write_bytes(b'{"original": true}\n')
 
     def failing_install(args, *, held_manifest_lock=None):
@@ -181,7 +185,8 @@ def test_non_haex_install_failure_is_rolled_back_and_reraised(
 ) -> None:
     from spaex.cli import install as install_cli
 
-    manifest = tmp_path / ".spaex.json"
+    manifest = tmp_path / ".spaex/manifest.json"
+    manifest.parent.mkdir(parents=True)
     manifest.write_bytes(b'{"original": true}\n')
 
     def failing_install(args, *, held_manifest_lock=None):
@@ -204,7 +209,8 @@ def test_install_receives_held_lock(
 ) -> None:
     from spaex.cli import install as install_cli
 
-    manifest = tmp_path / ".spaex.json"
+    manifest = tmp_path / ".spaex/manifest.json"
+    manifest.parent.mkdir(parents=True)
     manifest.write_bytes(b'{}\n')
 
     captured: dict[str, ManifestLockContext | None] = {"lock": None}

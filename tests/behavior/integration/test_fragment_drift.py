@@ -1,17 +1,17 @@
 """Fragment drift detection: on-disk edits without a Composer run (T050,
 User Story 6 acceptance scenario 3).
 
-Project-local fragments configured via `.spaex.json`'s
+Project-local fragments configured via `.spaex/manifest.json`'s
 `constitution.local_fragments[].file` are read straight from their
 referenced file on every `spaex install` invocation
 (`materialize.project_local_from_config`, FR-018's file-reference storage
 option) rather than being reconstituted from any spaex-managed cache. That
 makes them the one class of fragment whose content can drift on disk
 between installs with no Composer invocation in between -- exactly
-Acceptance Scenario 3: the fragment set and the committed `.spaex.md` fall
+Acceptance Scenario 3: the fragment set and the committed `.spaex/constitution.md` fall
 out of sync, and the next `spaex install` must detect the drift (via a
 `source_hash` mismatch, FR-009) and invoke the Composer to regenerate
-`.spaex.md`.
+`.spaex/constitution.md`.
 """
 
 from __future__ import annotations
@@ -53,10 +53,11 @@ def _fragment_text(*, retention_days: int) -> str:
 def _make_consumer(tmp_path: Path) -> Path:
     consumer = tmp_path / "consumer"
     consumer.mkdir()
+    (consumer / ".spaex").mkdir()
     fragments_dir = consumer / ".spaex" / "local-fragments"
     fragments_dir.mkdir(parents=True)
     (fragments_dir / "data-retention.md").write_text(_fragment_text(retention_days=30))
-    (consumer / ".spaex.json").write_text(
+    (consumer / ".spaex/manifest.json").write_text(
         json.dumps(
             {
                 "spaex_version": "4",
@@ -126,7 +127,7 @@ def test_fragment_edited_on_disk_without_composer_run_is_detected(
 
     assert _run_install(consumer, state_root, monkeypatch) == 0
     assert stub.calls == 1
-    first = (consumer / ".spaex.md").read_bytes()
+    first = (consumer / ".spaex/constitution.md").read_bytes()
     first_hashes = read_header_hashes(consumer)
     assert first_hashes is not None
     assert b"past 30 days" in first
@@ -135,7 +136,7 @@ def test_fragment_edited_on_disk_without_composer_run_is_detected(
     assert stub.calls == 1, "an unchanged local fragment must skip the Composer"
 
     # Drift: the fragment's source file is edited directly on disk. No
-    # spaex command touches `.spaex.md` or the Composer in between.
+    # spaex command touches `.spaex/constitution.md` or the Composer in between.
     fragment_path = consumer / ".spaex" / "local-fragments" / "data-retention.md"
     fragment_path.write_text(_fragment_text(retention_days=7))
 
@@ -144,7 +145,7 @@ def test_fragment_edited_on_disk_without_composer_run_is_detected(
         "fragment drift on disk must invalidate source_hash and force a "
         "Composer re-invocation (FR-009, User Story 6 acceptance scenario 3)"
     )
-    second = (consumer / ".spaex.md").read_bytes()
+    second = (consumer / ".spaex/constitution.md").read_bytes()
     second_hashes = read_header_hashes(consumer)
     assert second_hashes is not None
     assert second_hashes[0] != first_hashes[0], (

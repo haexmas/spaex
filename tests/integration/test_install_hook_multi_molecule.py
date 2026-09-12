@@ -16,7 +16,7 @@ from types import SimpleNamespace
 import pytest
 
 from spaex.cli import add as add_cli
-from spaex.migrate.transform import clone_dir
+from spaex.git.cache import clone_dir
 from spaex.model.consumer_manifest import ConsumerManifest
 from spaex.model.install_lock import InstallLock
 from spaex.util.errors import HaexError
@@ -125,7 +125,8 @@ def _make_consumer(tmp_path: Path) -> Path:
     """Create a minimal consumer repository."""
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-    (consumer / ".spaex.json").write_text(
+    (consumer / ".spaex").mkdir()
+    (consumer / ".spaex/manifest.json").write_text(
         json.dumps(
             {
                 "spaex_version": "4",
@@ -322,7 +323,7 @@ def test_abort_stops_later_hooks_total_rollback(
         ],
     )
     consumer = _make_consumer(tmp_path)
-    original_spaex_json_bytes = (consumer / ".spaex.json").read_bytes()
+    original_spaex_json_bytes = (consumer / ".spaex/manifest.json").read_bytes()
 
     with pytest.raises(HaexError) as exc_info:
         _run_add(
@@ -361,10 +362,10 @@ def test_abort_stops_later_hooks_total_rollback(
             "install.lock persisted after abort"
         )
 
-    # The .spaex.json compound entries were reverted to the pre-add state.
-    restored_bytes = (consumer / ".spaex.json").read_bytes()
+    # The .spaex/manifest.json compound entries were reverted to the pre-add state.
+    restored_bytes = (consumer / ".spaex/manifest.json").read_bytes()
     assert restored_bytes == original_spaex_json_bytes, (
-        ".spaex.json compound entries not rolled back"
+        ".spaex/manifest.json compound entries not rolled back"
     )
     restored_manifest = ConsumerManifest.from_json(restored_bytes)
     assert restored_manifest.compounds == ()

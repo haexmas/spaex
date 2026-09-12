@@ -30,9 +30,9 @@ Single-project Python layout: `src/spaex/`, `tests/behavior/` at repository root
 - [X] T001 Create the module skeleton at src/spaex/behavior/ with empty __init__.py plus empty stub modules fragment.py, materialize.py, precheck.py, emit.py, bootstrap.py so imports resolve during scaffolding
 - [X] T002 [P] Create the module skeleton at src/spaex/behavior/composer/ with empty __init__.py plus empty stub modules prompt.py, invoke.py, clarifications.py, failure.py
 - [X] T003 [P] Create the test tree at tests/behavior/ with subdirectories unit/, integration/, fault_injection/, fixtures/ and empty __init__.py files where pytest requires them
-- [X] T004 [P] Draft ADR-0012 stub at docs/adr/0012-behavior-harness-reserved-paths.md capturing the reserved-paths update ($<repo-root>/.spaex.md$, .spaex/constitution.d/, .spaex/clarifications.json, .spaex/.stale, .spaex/composer.log) and the "commit-as-review-gate for .spaex.md" framing under Principle VI
+- [X] T004 [P] Draft ADR-0012 stub at docs/adr/0012-behavior-harness-reserved-paths.md capturing the reserved-paths update ($<repo-root>/.spaex/constitution.md$, .spaex/constitution.d/, .spaex/clarifications.json, .spaex/.stale, .spaex/composer.log) and the "commit-as-review-gate for .spaex/constitution.md" framing under Principle VI
 - [X] T005 [P] Draft ADR-0013 stub at docs/adr/0013-global-bootstrap-block-contract.md capturing the paired HTML comment markers with version attribute and the target-paths table per runtime
-- [X] T006 [P] Add .spaex/.stale and .spaex/composer.log to the project template .gitignore for consumer repos and document that .spaex.md and .spaex/constitution.d/ MUST NOT be gitignored
+- [X] T006 [P] Add .spaex/.stale and .spaex/composer.log to the project template .gitignore for consumer repos and document that .spaex/constitution.md and .spaex/constitution.d/ MUST NOT be gitignored
 - [X] T007 Confirm pytest and existing spaex test fixtures work in the fresh worktree by running uv run pytest -q against the current main branch; note baseline pass count as a comparison anchor (baseline: 463 passed, 1 skipped, 9 deselected on 2026-09-11)
 
 **Checkpoint**: module and test scaffolding present, ADR stubs live, imports resolve. Nothing observable to a consumer yet.
@@ -65,9 +65,9 @@ Single-project Python layout: `src/spaex/`, `tests/behavior/` at repository root
 
 ## Phase 3: User Story 1 - Consumer receives a composed behavior harness after install (Priority: P1) 🎯 MVP
 
-**Goal**: `spaex install` produces `.spaex.md` at the repo root; a runtime that has run the global bootstrap discovers it.
+**Goal**: `spaex install` produces `.spaex/constitution.md` at the repo root; a runtime that has run the global bootstrap discovers it.
 
-**Independent test**: fixture project with two pinned molecules each contributing one fragment; `spaex install` writes `.spaex.md` with both directives grouped by modality with visible provenance; a mocked runtime session reading its global instruction file discovers `.spaex.md` and loads its content.
+**Independent test**: fixture project with two pinned molecules each contributing one fragment; `spaex install` writes `.spaex/constitution.md` with both directives grouped by modality with visible provenance; a mocked runtime session reading its global instruction file discovers `.spaex/constitution.md` and loads its content.
 
 - [X] T018 [US1] Author the canonical Composer system prompt as a string constant in src/spaex/behavior/composer/prompt.py per contracts/composer-interface.md §"Canonical system prompt" (FR-008, FR-010, FR-010a)
 - [X] T019 [US1] Implement CLI-only Composer invocation in src/spaex/behavior/composer/invoke.py with stable runtime detection order (claude, codex, gemini); parse Shape A and Shape B responses; enforce SPAEX_COMPOSER_TIMEOUT and retain the `stub_caller` test seam (research.md §1, §2; contracts/composer-interface.md)
@@ -78,18 +78,18 @@ Single-project Python layout: `src/spaex/`, `tests/behavior/` at repository root
 - [X] T024 [P] [US1] Fault-injection test tests/behavior/fault_injection/test_composer_runtime_error.py (SC-011, exit 31)
 - [X] T025 [P] [US1] Fault-injection test tests/behavior/fault_injection/test_composer_quota.py (SC-011, exit 33)
 - [X] T026 [P] [US1] Fault-injection test tests/behavior/fault_injection/test_composer_no_runtime.py (SC-011, exit 34)
-- [X] T027 [US1] Implement emission in src/spaex/behavior/emit.py: build `.spaex.md` content from Composer output (Shape A), write atomically (tmp+rename), include verified `source_hash` and `build_input_hash` in the `<!-- spaex-composed:... version="1" -->` header (FR-013, FR-017a, FR-017b, contracts/spaex-md-format.md)
+- [X] T027 [US1] Implement emission in src/spaex/behavior/emit.py: build `.spaex/constitution.md` content from Composer output (Shape A), write atomically (tmp+rename), include verified `source_hash` and `build_input_hash` in the `<!-- spaex-composed:... version="1" -->` header (FR-013, FR-017a, FR-017b, contracts/spaex-md-format.md)
 - [X] T028 [P] [US1] Unit test for emission format in tests/behavior/unit/test_emit_format.py: section order, provenance regex, source_hash header, empty-set behavior (FR-008, FR-017d, contracts/spaex-md-format.md)
-- [X] T029 [US1] Wire the behavior subsystem into src/spaex/install.py as one transaction: materialize into a staging tree, run precheck against the staged tree, run Composer and clarification staging there, then publish `.spaex/constitution.d/`, `.spaex.md`, and `.spaex/clarifications.json` only after every aborting step succeeds; duplicate producers and all failure paths leave tracked files untouched (FR-004, FR-006, FR-008, FR-017c)
-- [X] T030 [P] [US1] Integration test tests/behavior/integration/test_install_end_to_end.py: fixture project with two pinned molecules each contributing one behavior fragment, `spaex install` produces `.spaex.md` with both directives + provenance (SC-001)
-- [X] T031 [P] [US1] Integration test tests/behavior/integration/test_reproducibility.py: run `spaex install` twice on the same fixture, assert byte-identical `.spaex.md` (SC-003)
+- [X] T029 [US1] Wire the behavior subsystem into src/spaex/install.py as one transaction: materialize into a staging tree, run precheck against the staged tree, run Composer and clarification staging there, then publish `.spaex/constitution.d/`, `.spaex/constitution.md`, and `.spaex/clarifications.json` only after every aborting step succeeds; duplicate producers and all failure paths leave tracked files untouched (FR-004, FR-006, FR-008, FR-017c)
+- [X] T030 [P] [US1] Integration test tests/behavior/integration/test_install_end_to_end.py: fixture project with two pinned molecules each contributing one behavior fragment, `spaex install` produces `.spaex/constitution.md` with both directives + provenance (SC-001)
+- [X] T031 [P] [US1] Integration test tests/behavior/integration/test_reproducibility.py: run `spaex install` twice on the same fixture, assert byte-identical `.spaex/constitution.md` (SC-003)
 - [X] T032 [US1] Implement the Global Bootstrap Block installer in src/spaex/behavior/bootstrap.py: locate target files per research.md §3, install/upgrade/remove within paired HTML comment markers with version attribute (FR-014, FR-015, FR-016, FR-017, contracts/bootstrap-block.md)
 - [X] T033 [P] [US1] Unit test for bootstrap markers in tests/behavior/unit/test_bootstrap_marker.py: parse existing block, version-attribute-driven upgrade, content-outside-block preservation, idempotency (FR-015, FR-016, SC-009)
-- [X] T034 [P] [US1] Integration test tests/behavior/integration/test_bootstrap_discoverability.py: verify a mocked agent session reading its global instruction file after bootstrap loads `.spaex.md` (SC-007 automated portion)
+- [X] T034 [P] [US1] Integration test tests/behavior/integration/test_bootstrap_discoverability.py: verify a mocked agent session reading its global instruction file after bootstrap loads `.spaex/constitution.md` (SC-007 automated portion)
 - [X] T035 [US1] Add the `spaex install --global [runtimes]` CLI subcommand in src/spaex/cli/behavior_commands.py: parse runtime list, invoke bootstrap installer, support --dry-run and --check flags (contracts/cli-surface.md §"spaex install --global")
 - [X] T036 [P] [US1] Add end-of-install hint when a project-level install detects that the global bootstrap has never been run on this machine per FR-017c edge-case documentation (FR-023, edge case "Bootstrap not yet installed")
 
-**Checkpoint**: US1 MVP delivers. A consumer can pin a molecule with fragments, run `spaex install`, get `.spaex.md`, and see any runtime that ran the global bootstrap load it.
+**Checkpoint**: US1 MVP delivers. A consumer can pin a molecule with fragments, run `spaex install`, get `.spaex/constitution.md`, and see any runtime that ran the global bootstrap load it.
 
 ---
 
@@ -116,7 +116,7 @@ Most authoring machinery lands in Phase 2 (fragment schema + materialize). This 
 
 - [X] T039 [P] [US3] Integration test tests/behavior/integration/test_case_a_intra_molecule.py: fixture with one molecule shipping two fragments under the same molecule-scoped id with contradictory modality; `spaex install` exits 20 before Composer runs (FR-005, SC-002 Case A)
 - [X] T040 [P] [US3] Integration test tests/behavior/integration/test_case_b_cross_molecule.py: fixture with two molecules whose fragments the Composer flags as semantically contradictory; declined reconciliation causes exit 21 (FR-005a, FR-010a, SC-002 Case B)
-- [X] T041 [P] [US3] Integration test tests/behavior/integration/test_install_is_non_destructive.py: assert that after each of exit codes 20, 21, 22, 30-34, the fixture repo's tracked files (`.spaex.md`, `.spaex/constitution.d/`, `.spaex/clarifications.json`) are byte-unchanged (FR-006)
+- [X] T041 [P] [US3] Integration test tests/behavior/integration/test_install_is_non_destructive.py: assert that after each of exit codes 20, 21, 22, 30-34, the fixture repo's tracked files (`.spaex/constitution.md`, `.spaex/constitution.d/`, `.spaex/clarifications.json`) are byte-unchanged (FR-006)
 
 **Checkpoint**: US3 conflict paths verified.
 
@@ -137,14 +137,14 @@ Most authoring machinery lands in Phase 2 (fragment schema + materialize). This 
 
 ## Phase 7: User Story 5 - Project adds additive local behavior fragments (Priority: P3)
 
-**Goal**: project can declare local fragments in `.spaex.json` (inline or file-reference); additive-only enforcement rejects any override attempt.
+**Goal**: project can declare local fragments in `.spaex/manifest.json` (inline or file-reference); additive-only enforcement rejects any override attempt.
 
-**Independent test**: fixture with one project-local fragment and zero molecules; `spaex install` produces `.spaex.md` with the project-local fragment. Fixture attempting to override an atom-provided fragment aborts with exit 22.
+**Independent test**: fixture with one project-local fragment and zero molecules; `spaex install` produces `.spaex/constitution.md` with the project-local fragment. Fixture attempting to override an atom-provided fragment aborts with exit 22.
 
-- [X] T044 [US5] Extend `.spaex.json` schema parsing in src/spaex/config.py (existing module) to read `constitution.local_fragments[]` inline entries and file-reference entries (FR-018)
+- [X] T044 [US5] Extend `.spaex/manifest.json` schema parsing in src/spaex/config.py (existing module) to read `constitution.local_fragments[]` inline entries and file-reference entries (FR-018)
 - [X] T045 [US5] Extend src/spaex/behavior/materialize.py to write project-local fragments to `.spaex/constitution.d/_project/<fragment-id>.md` running through identical mechanical pre-check + Composer paths (FR-018, FR-019)
 - [X] T046 [US5] Implement additive-only enforcement in src/spaex/behavior/precheck.py: treat `_project/<fragment-id>` as a distinct emitted identity but reject it when its bare `fragment_id` matches any atom-provided `<molecule-id>/<fragment-id>`, naming every match and the additive-only remedy with exit code 22 (FR-020)
-- [X] T047 [P] [US5] Integration test tests/behavior/integration/test_project_local_fragments.py: local-only fragment appears in `.spaex.md` with `_project` source; override attempt aborts with exit 22 (SC-005, SC-010)
+- [X] T047 [P] [US5] Integration test tests/behavior/integration/test_project_local_fragments.py: local-only fragment appears in `.spaex/constitution.md` with `_project` source; override attempt aborts with exit 22 (SC-005, SC-010)
 
 **Checkpoint**: US5 project-local flow verified.
 
@@ -152,11 +152,11 @@ Most authoring machinery lands in Phase 2 (fragment schema + materialize). This 
 
 ## Phase 8: User Story 6 - Cross-machine reproducibility (Priority: P3)
 
-**Goal**: two clones on the same commit produce identical `.spaex.md` without re-running the Composer.
+**Goal**: two clones on the same commit produce identical `.spaex/constitution.md` without re-running the Composer.
 
 Reproducibility groundwork lands in Phase 3 (T031). This phase adds the fragment-drift-detection test.
 
-- [X] T048 [US6] Implement source/build-input fingerprint comparison in src/spaex/behavior/orchestrate.py: on `spaex install`, if the on-disk `.spaex.md` header's `source_hash` and `build_input_hash` match the locally computed hashes for current fragments, effective prompt, prompt version, and valid clarifications, skip Composer invocation (FR-009)
+- [X] T048 [US6] Implement source/build-input fingerprint comparison in src/spaex/behavior/orchestrate.py: on `spaex install`, if the on-disk `.spaex/constitution.md` header's `source_hash` and `build_input_hash` match the locally computed hashes for current fragments, effective prompt, prompt version, and valid clarifications, skip Composer invocation (FR-009)
 - [X] T049 [P] [US6] Integration test tests/behavior/integration/test_source_hash_skip.py: two runs with identical committed state, second run must not invoke the Composer; changing fragment metadata or the effective prompt must invalidate the matching fingerprint (User Story 6 acceptance scenario 1)
 - [X] T050 [P] [US6] Integration test tests/behavior/integration/test_fragment_drift.py: fragments changed on disk without a Composer run; next `spaex install` detects drift and invokes the Composer (User Story 6 acceptance scenario 3)
 
@@ -168,10 +168,10 @@ Reproducibility groundwork lands in Phase 3 (T031). This phase adds the fragment
 
 **Purpose**: separate phase because it touches `spaex add` and `spaex remove`, not `spaex install`.
 
-- [X] T051 Extend `spaex add` in src/spaex/cli/add.py (existing module) to run the Composer plausibility check after the fragment set changes; on cross-molecule semantic contradiction, print WARN with provenance, write `.spaex/.stale` sidecar summarizing the finding, do NOT abort, do NOT regenerate `.spaex.md` (FR-024a, contracts/cli-surface.md §add/remove)
+- [X] T051 Extend `spaex add` in src/spaex/cli/add.py (existing module) to run the Composer plausibility check after the fragment set changes; on cross-molecule semantic contradiction, print WARN with provenance, write `.spaex/.stale` sidecar summarizing the finding, do NOT abort, do NOT regenerate `.spaex/constitution.md` (FR-024a, contracts/cli-surface.md §add/remove)
 - [X] T052 Extend `spaex remove` in src/spaex/cli/remove.py (existing module) identically per FR-024a
-- [X] T053 [P] Integration test tests/behavior/integration/test_add_time_plausibility.py: `spaex add` of a molecule that semantically contradicts an already-pinned one prints WARN, writes `.spaex/.stale`, exits 0; `.spaex.md` byte-unchanged (FR-024a)
-- [X] T054 Extend src/spaex/install.py to read `.spaex/.stale` on start and route through the reconciliation prompt (FR-010a) before writing `.spaex.md`
+- [X] T053 [P] Integration test tests/behavior/integration/test_add_time_plausibility.py: `spaex add` of a molecule that semantically contradicts an already-pinned one prints WARN, writes `.spaex/.stale`, exits 0; `.spaex/constitution.md` byte-unchanged (FR-024a)
+- [X] T054 Extend src/spaex/install.py to read `.spaex/.stale` on start and route through the reconciliation prompt (FR-010a) before writing `.spaex/constitution.md`
 
 **Checkpoint**: add-time flow verified; stale flag drives install-time reconciliation.
 
@@ -190,14 +190,15 @@ Reproducibility groundwork lands in Phase 3 (T031). This phase adds the fragment
 
 ---
 
-## Phase 11: Polish, docs, migration, release
+## Phase 11: Polish, clean-cut layout, release
 
-**Purpose**: ADR finalization, `.spaex/constitution.md` supersession, version bump, changelog.
+**Purpose**: ADR finalization, canonical `.spaex/` layout, version bump, changelog.
 
-- [ ] T059 [P] Finalize ADR-0012 at docs/adr/0012-behavior-harness-reserved-paths.md with the full decision text, cross-referencing spec 023 and updating the constitution's §"Reserved paths" clause to include `<repo-root>/.spaex.md`
-- [ ] T060 [P] Finalize ADR-0013 at docs/adr/0013-global-bootstrap-block-contract.md with the full decision text, cross-referencing contracts/bootstrap-block.md
+- [X] T059 [P] Finalize ADR-0012 at docs/adr/0012-behavior-harness-reserved-paths.md with the canonical `.spaex/` layout
+- [X] T060 [P] Finalize ADR-0013 at docs/adr/0013-global-bootstrap-block-contract.md with the full global bootstrap contract
+- [X] T060a [P] Record orthogonal Spec-Kit and spaex policy ownership in ADR-0018
 - [ ] T061 Update docs/adr/README.md index with entries for 0012 and 0013
-- [ ] T062 Update .specify/memory/constitution.md §"Reserved paths" to add `<repo-root>/.spaex.md`, `.spaex/constitution.d/`, `.spaex/clarifications.json`, `.spaex/.stale`, `.spaex/composer.log` and align the PATCH-level version bump per Governance §Amendments
+- [ ] T062 Update .specify/memory/constitution.md §"Reserved paths" to add `<repo-root>/.spaex/constitution.md`, `.spaex/constitution.d/`, `.spaex/clarifications.json`, `.spaex/.stale`, `.spaex/composer.log` and align the PATCH-level version bump per Governance §Amendments
 - [ ] T063 Remove or refactor any existing writer of `.spaex/constitution.md` (spec-007 D2/D16) so no orphan path remains; run grep across src/ for `constitution.md` and audit hits (research.md §11)
 - [ ] T064 Update quickstart.md's per-release manual verification block references to point at the current test suite
 - [ ] T065 [P] Bump `spaex.__version__` to 4.2.0 in pyproject.toml and src/spaex/__init__.py
@@ -234,7 +235,7 @@ Phase 1 (Setup)
 **Polish and CLI (after all user-story phases)**:
 
 - Phase 10 (CLI polish)
-- Phase 11 (docs, ADRs, migration, release)
+- Phase 11 (docs, ADRs, clean-cut layout, release)
 
 ## Parallel-execution examples
 
@@ -256,10 +257,10 @@ Run T022, T023, T024, T025, T026 in parallel after T021.
 MVP for 4.2.0 is delivered by completing Phase 1, Phase 2, and Phase 3. That yields:
 
 - Fragment authoring (Phase 2 delivers the schema and materialization)
-- Composed constitution (`.spaex.md`) written by `spaex install`
+- Composed constitution (`.spaex/constitution.md`) written by `spaex install`
 - Global bootstrap installable per runtime
 - End-to-end and reproducibility tests
 
-Phases 4-8 harden the delivery by covering the remaining user stories with tests and edge behaviors. Phase 9 adds the add-time UX polish (FR-024a). Phase 10 rounds out the CLI. Phase 11 handles docs, version, migration, and PR.
+Phases 4-8 harden the delivery by covering the remaining user stories with tests and edge behaviors. Phase 9 adds the add-time UX polish (FR-024a). Phase 10 rounds out the CLI. Phase 11 handles docs, the canonical layout, version, and PR.
 
 The critical path is Phase 1 → Phase 2 → Phase 3 → Phase 11. All other phases can begin as soon as their dependencies from the critical path complete. Where scheduling requires trimming, Phase 4 (US2 test-only) is the safest cut without weakening the MVP because Phase 2 already provides the machinery.

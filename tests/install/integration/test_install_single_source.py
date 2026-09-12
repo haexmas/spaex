@@ -76,7 +76,7 @@ def test_unavailable_pinned_sha_refuses_untouched(single_source_constitution_fix
     consumer = single_source_constitution_fixture["consumer"]
     state_root = single_source_constitution_fixture["state_root"]
 
-    manifest_path = consumer / ".spaex.json"
+    manifest_path = consumer / ".spaex/manifest.json"
     data = json.loads(manifest_path.read_text())
     data["compounds"][0]["revision"] = "deadbeef" * 5
     manifest_path.write_text(json.dumps(data))
@@ -131,7 +131,7 @@ def test_contribution_file_absent_refuses(tmp_path: Path, git_binary: str) -> No
     sha = _git(publisher, "rev-parse", "HEAD")
 
     state_root = tmp_path / "state"
-    from spaex.migrate.transform import clone_dir
+    from spaex.git.cache import clone_dir
 
     clone_target = clone_dir(state_root, canonical)
     clone_target.parent.mkdir(parents=True, exist_ok=True)
@@ -139,7 +139,8 @@ def test_contribution_file_absent_refuses(tmp_path: Path, git_binary: str) -> No
 
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-    (consumer / ".spaex.json").write_text(
+    (consumer / ".spaex").mkdir()
+    (consumer / ".spaex/manifest.json").write_text(
         json.dumps(
             {
                 "spaex_version": "4",
@@ -163,7 +164,8 @@ def test_empty_compounds_publishes_empty_generation(tmp_path: Path) -> None:
     """
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-    (consumer / ".spaex.json").write_text(
+    (consumer / ".spaex").mkdir()
+    (consumer / ".spaex/manifest.json").write_text(
         json.dumps(
             {
                 "spaex_version": "4",
