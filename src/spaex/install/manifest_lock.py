@@ -6,10 +6,10 @@ Bounded-wait exclusive file lock serialising `haex add`, `haex remove`, and
 immediately, per FR-028.
 
 The lock file itself is created once and NEVER renamed or deleted by the
-tool. Its byte content is irrelevant; only the OS advisory lock on the
-descriptor matters. Kernel-level release on process exit is the sole
-automatic recovery path — the tool never force-breaks a lock held by a
-living process.
+tool. Its byte content is irrelevant; POSIX uses the OS advisory lock on the
+descriptor, while Windows uses a named mutex keyed by the canonical path.
+Kernel-level release on process exit is the sole automatic recovery path —
+the tool never force-breaks a lock held by a living process.
 
 Nested acquisition in the same process reuses the held descriptor via a
 per-instance reference count so higher-level flows (e.g. `haex add`
@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import errno
+import hashlib
 import math
 import os
 import sys
@@ -34,9 +35,9 @@ from spaex.paths import (
 from spaex.util.errors import ManifestLockContendedError
 
 _IS_WINDOWS = sys.platform == "win32"
-_ERROR_LOCK_VIOLATION = 33
-_WINDOWS_LOCK_OFFSET = 0x7FFF_FFFF
-_WINDOWS_LOCK_LENGTH = 1
+_WINDOWS_WAIT_OBJECT_0 = 0x00000000
+_WINDOWS_WAIT_ABANDONED_0 = 0x00000080
+_WINDOWS_WAIT_TIMEOUT = 0x00000102
 _POLL_INTERVAL_SECONDS = 0.05
 
 DEFAULT_LOCK_TIMEOUT_SECONDS = 30.0
@@ -159,80 +160,60 @@ class ManifestLockContext:
                 self._fd = None
 
     def _acquire_windows(self, deadline: float) -> None:
+        """Acquire a named mutex keyed by the canonical lock path.
+
+        Windows does not permit the directory containing an open lock-file
+        handle to be renamed reliably, even when the handle allows delete
+        sharing. The visible lock file is still created at the canonical path;
+        the held kernel mutex provides the equivalent process-safe exclusion
+        without pinning a handle inside the directory being swapped.
+        """
         import ctypes
         from ctypes import wintypes
         from typing import Any, cast
 
         ctypes_api = cast(Any, ctypes)
         kernel32 = ctypes_api.windll.kernel32
-        kernel32.CreateFileW.restype = wintypes.HANDLE
-        GENERIC_READ = 0x80000000
-        GENERIC_WRITE = 0x40000000
-        FILE_SHARE_READ = 0x1
-        FILE_SHARE_WRITE = 0x2
-        FILE_SHARE_DELETE = 0x4
-        OPEN_ALWAYS = 4
-        FILE_ATTRIBUTE_NORMAL = 0x80
-
-        handle = kernel32.CreateFileW(
-            ctypes.c_wchar_p(str(self._lock_path)),
-            wintypes.DWORD(GENERIC_READ | GENERIC_WRITE),
-            # The lock file lives inside the `.spaex/` directory, which is
-            # atomically renamed while this handle remains open. Delete
-            # sharing permits that directory swap without releasing the
-            # advisory lock on Windows.
-            wintypes.DWORD(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE),
+        kernel32.CreateMutexW.restype = wintypes.HANDLE
+        kernel32.WaitForSingleObject.restype = wintypes.DWORD
+        lock_key = hashlib.sha256(
+            os.path.normcase(os.path.abspath(str(self._lock_path))).encode("utf-8")
+        ).hexdigest()
+        mutex_name = f"Local\\spaex-manifest-{lock_key}"
+        handle = kernel32.CreateMutexW(
             None,
-            wintypes.DWORD(OPEN_ALWAYS),
-            wintypes.DWORD(FILE_ATTRIBUTE_NORMAL),
-            None,
+            wintypes.BOOL(False),
+            ctypes.c_wchar_p(mutex_name),
         )
-        if handle == wintypes.HANDLE(-1).value:
+        if not handle:
             raise ctypes_api.WinError()
 
-        LOCKFILE_EXCLUSIVE_LOCK = 0x2
-        LOCKFILE_FAIL_IMMEDIATELY = 0x1
-
-        class OVERLAPPED(ctypes.Structure):
-            _fields_ = [
-                ("Internal", ctypes.c_void_p),
-                ("InternalHigh", ctypes.c_void_p),
-                ("Offset", wintypes.DWORD),
-                ("OffsetHigh", wintypes.DWORD),
-                ("hEvent", wintypes.HANDLE),
-            ]
-
-        overlapped = OVERLAPPED()
-        overlapped.Offset = _WINDOWS_LOCK_OFFSET
-        overlapped.OffsetHigh = 0
+        remaining_ms = max(
+            0,
+            min(
+                0xFFFF_FFFE,
+                math.ceil(max(0.0, deadline - time.monotonic()) * 1000),
+            ),
+        )
         try:
-            while True:
-                result = kernel32.LockFileEx(
-                    wintypes.HANDLE(handle),
-                    wintypes.DWORD(LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY),
-                    wintypes.DWORD(0),
-                    wintypes.DWORD(_WINDOWS_LOCK_LENGTH),
-                    wintypes.DWORD(0),
-                    ctypes.byref(overlapped),
-                )
-                if result:
-                    self._handle = handle
-                    return
-                last_error = ctypes_api.GetLastError()
-                if last_error != _ERROR_LOCK_VIOLATION:
-                    raise ctypes_api.WinError(last_error)
-                if time.monotonic() >= deadline:
-                    raise ManifestLockContendedError(
-                        message=(
-                            "manifest lock at "
-                            f"{self._lock_path} is held by another process"
-                        ),
-                        context={
-                            "lock_path": str(self._lock_path),
-                            "timeout_seconds": f"{self._timeout_seconds:g}",
-                        },
-                    )
-                time.sleep(_POLL_INTERVAL_SECONDS)
+            result = kernel32.WaitForSingleObject(
+                wintypes.HANDLE(handle), wintypes.DWORD(remaining_ms)
+            )
+            if result in (_WINDOWS_WAIT_OBJECT_0, _WINDOWS_WAIT_ABANDONED_0):
+                self._handle = handle
+                return
+            if result == _WINDOWS_WAIT_TIMEOUT:
+                raise ManifestLockContendedError(
+                    message=(
+                        "manifest lock at "
+                        f"{self._lock_path} is held by another process"
+                    ),
+                    context={
+                        "lock_path": str(self._lock_path),
+                        "timeout_seconds": f"{self._timeout_seconds:g}",
+                    },
+                ) from None
+            raise ctypes_api.WinError()
         except BaseException:
             kernel32.CloseHandle(wintypes.HANDLE(handle))
             raise
@@ -245,5 +226,8 @@ class ManifestLockContext:
         if self._handle is not None:
             ctypes_api = cast(Any, ctypes)
             kernel32 = ctypes_api.windll.kernel32
-            kernel32.CloseHandle(wintypes.HANDLE(self._handle))
-            self._handle = None
+            try:
+                kernel32.ReleaseMutex(wintypes.HANDLE(self._handle))
+            finally:
+                kernel32.CloseHandle(wintypes.HANDLE(self._handle))
+                self._handle = None
