@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from importlib.resources import files
-from typing import Any
+from typing import Any, cast
 
 _KNOWN_SCHEMAS = frozenset(
     {
@@ -22,4 +22,4 @@ def load(name: str) -> dict[str, Any]:
         raise KeyError(f"unknown schema name: {name!r}")
     resource = files("spaex.schema.data").joinpath(name)
     text = resource.read_text(encoding="utf-8")
-    return json.loads(text)
+    return cast(dict[str, Any], json.loads(text))

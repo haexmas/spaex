@@ -143,8 +143,10 @@ class ManifestLockContext:
     def _acquire_windows(self, deadline: float) -> None:
         import ctypes
         from ctypes import wintypes
+        from typing import Any, cast
 
-        kernel32 = ctypes.windll.kernel32
+        ctypes_api = cast(Any, ctypes)
+        kernel32 = ctypes_api.windll.kernel32
         kernel32.CreateFileW.restype = wintypes.HANDLE
         GENERIC_READ = 0x80000000
         GENERIC_WRITE = 0x40000000
@@ -163,7 +165,7 @@ class ManifestLockContext:
             None,
         )
         if handle == wintypes.HANDLE(-1).value:
-            raise ctypes.WinError()
+            raise ctypes_api.WinError()
 
         LOCKFILE_EXCLUSIVE_LOCK = 0x2
         LOCKFILE_FAIL_IMMEDIATELY = 0x1
@@ -193,9 +195,9 @@ class ManifestLockContext:
                 if result:
                     self._handle = handle
                     return
-                last_error = ctypes.GetLastError()
+                last_error = ctypes_api.GetLastError()
                 if last_error != _ERROR_LOCK_VIOLATION:
-                    raise ctypes.WinError(last_error)
+                    raise ctypes_api.WinError(last_error)
                 if time.monotonic() >= deadline:
                     raise ManifestLockContendedError(
                         message=(
@@ -215,8 +217,10 @@ class ManifestLockContext:
     def _release_windows(self) -> None:
         import ctypes
         from ctypes import wintypes
+        from typing import Any, cast
 
         if self._handle is not None:
-            kernel32 = ctypes.windll.kernel32
+            ctypes_api = cast(Any, ctypes)
+            kernel32 = ctypes_api.windll.kernel32
             kernel32.CloseHandle(wintypes.HANDLE(self._handle))
             self._handle = None

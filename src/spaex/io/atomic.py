@@ -57,6 +57,10 @@ def _write_replace_windows(target: Path, data: bytes) -> None:
     import ctypes
     import msvcrt
     from ctypes import wintypes
+    from typing import Any, cast
+
+    ctypes_api = cast(Any, ctypes)
+    msvcrt_api = cast(Any, msvcrt)
 
     parent = target.parent
     parent.mkdir(parents=True, exist_ok=True)
@@ -72,20 +76,20 @@ def _write_replace_windows(target: Path, data: bytes) -> None:
             fh.flush()
             # Python's msvcrt wrapper calls the CRT selected for this Python
             # build and returns the pointer-sized native handle as an int.
-            handle = msvcrt.get_osfhandle(fh.fileno())
+            handle = msvcrt_api.get_osfhandle(fh.fileno())
 
-            flush_file_buffers = ctypes.windll.kernel32.FlushFileBuffers
+            flush_file_buffers = ctypes_api.windll.kernel32.FlushFileBuffers
             flush_file_buffers.argtypes = [wintypes.HANDLE]
             flush_file_buffers.restype = wintypes.BOOL
             try:
                 native_handle = wintypes.HANDLE(handle)
             except (OverflowError, TypeError, ValueError):
-                raise ctypes.WinError() from None
+                raise ctypes_api.WinError() from None
             if not flush_file_buffers(native_handle):
-                raise ctypes.WinError()
+                raise ctypes_api.WinError()
         MOVEFILE_REPLACE_EXISTING = 0x1
         MOVEFILE_WRITE_THROUGH = 0x8
-        move_file_ex = ctypes.windll.kernel32.MoveFileExW
+        move_file_ex = ctypes_api.windll.kernel32.MoveFileExW
         move_file_ex.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD]
         move_file_ex.restype = wintypes.BOOL
         result = move_file_ex(
@@ -94,7 +98,7 @@ def _write_replace_windows(target: Path, data: bytes) -> None:
             MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
         )
         if not result:
-            raise ctypes.WinError()
+            raise ctypes_api.WinError()
     except BaseException:
         with suppress(FileNotFoundError):
             tmp.unlink()

@@ -14,8 +14,10 @@ import shutil
 import sys
 import tempfile
 from collections.abc import Mapping, Sequence
-from contextlib import nullcontext
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
+from types import TracebackType
+from typing import Literal
 
 from spaex.behavior import orchestrate as behavior_orchestrate
 from spaex.behavior.fragment import BehaviorFragment
@@ -395,7 +397,7 @@ def _preserve_generation_for_behavior(
     repo_root: Path,
     resolved: Sequence[ResolvedMolecule],
     project_local: Sequence[BehaviorFragment] = (),
-):
+) -> AbstractContextManager[None]:
     """Keep a copy of the live generation until behavior orchestration passes."""
     live = repo_root / transaction.SPAEX_DIR
     if not project_local and not _has_behavior_fragments(resolved):
@@ -409,11 +411,16 @@ def _preserve_generation_for_behavior(
     if had_live:
         shutil.copytree(live, backup_live, symlinks=True)
 
-    class _GenerationRollback:
-        def __enter__(self):
-            return self
+    class _GenerationRollback(AbstractContextManager[None]):
+        def __enter__(self) -> None:
+            return None
 
-        def __exit__(self, exc_type, exc_value, traceback):
+        def __exit__(
+            self,
+            exc_type: type[BaseException] | None,
+            exc_value: BaseException | None,
+            traceback: TracebackType | None,
+        ) -> Literal[False]:
             try:
                 if exc_type is not None:
                     if live.exists():
