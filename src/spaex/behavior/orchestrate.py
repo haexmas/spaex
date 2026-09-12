@@ -235,6 +235,7 @@ def run(
             removed_keys or _is_clarifications_content_changed(clarifications_path, store)
         ),
     )
+    assert emit_outcome is not None
 
     return BehaviorOutcome(
         fragment_count=len(canonical_fragments),
@@ -417,10 +418,10 @@ def _commit_behavior_artifacts(
     for path in (spaex_md, clarifications_path):
         if path is None or path in backups:
             continue
-        backup = backup_dir / path.name
+        backup_path = backup_dir / path.name
         if path.exists():
-            shutil.copy2(path, backup)
-            backups[path] = backup
+            shutil.copy2(path, backup_path)
+            backups[path] = backup_path
         else:
             backups[path] = None
 
@@ -441,6 +442,7 @@ def _commit_behavior_artifacts(
                 expected_source_hash=expected_source_hash,
                 expected_build_input_hash=expected_build_input_hash,
             )
+            assert emit_outcome is not None
 
         if save_clarifications:
             if clarifications_path is None or clarifications is None:

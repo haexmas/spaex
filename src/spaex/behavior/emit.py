@@ -23,6 +23,7 @@ import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypedDict
 
 from spaex.behavior.composer.clarifications import Clarification
 from spaex.behavior.composer.failure import (
@@ -50,6 +51,15 @@ class EmitOutcome:
     path: Path
     source_hash: str
     build_input_hash: str
+
+
+class _SourceRecord(TypedDict):
+    molecule_id: str
+    fragment_id: str
+    atom_source: str
+    modality: str | None
+    tags: list[str]
+    body_sha256: str
 
 
 def compute_source_hash(fragments: Sequence[BehaviorFragment]) -> str:
@@ -188,7 +198,7 @@ def read_header_hashes(repo_root: Path) -> tuple[str, str] | None:
     return header["source_hash"], header["build_input_hash"]
 
 
-def _source_record(fragment: BehaviorFragment) -> dict[str, object]:
+def _source_record(fragment: BehaviorFragment) -> _SourceRecord:
     return {
         "molecule_id": fragment.molecule_id,
         "fragment_id": fragment.id,

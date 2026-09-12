@@ -81,8 +81,10 @@ def _fsync_dir(path: Path) -> None:
     if _IS_WINDOWS:
         import ctypes
         from ctypes import wintypes
+        from typing import Any, cast
 
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        ctypes_api = cast(Any, ctypes)
+        kernel32 = ctypes_api.WinDLL("kernel32", use_last_error=True)
         create_file = kernel32.CreateFileW
         create_file.argtypes = [
             wintypes.LPCWSTR,
@@ -111,10 +113,10 @@ def _fsync_dir(path: Path) -> None:
         )
         invalid_handle = ctypes.c_void_p(-1).value
         if handle == invalid_handle:
-            raise ctypes.WinError(ctypes.get_last_error())
+            raise ctypes_api.WinError(ctypes_api.get_last_error())
         try:
             if not flush_buffers(handle):
-                raise ctypes.WinError(ctypes.get_last_error())
+                raise ctypes_api.WinError(ctypes_api.get_last_error())
         finally:
             close_handle(handle)
         return
