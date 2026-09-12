@@ -33,6 +33,7 @@ from spaex.behavior.composer.invoke import (
     RuntimeDescriptor,
 )
 from spaex.cli import add as add_cli
+from spaex.cli import install as install_cli
 from spaex.migrate.transform import clone_dir
 
 pytestmark = pytest.mark.skipif(
@@ -165,6 +166,14 @@ def _run_add(
     return add_cli.run(ns)
 
 
+def _run_install(
+    consumer: Path, state_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> int:
+    monkeypatch.setenv("SPAEX_STATE", str(state_root))
+    ns = SimpleNamespace(repo_root=str(consumer), lock_timeout=5.0)
+    return install_cli.run(ns)
+
+
 def _shape_a_from_payload(payload: str) -> str:
     data = json.loads(payload)
     src = data["expected_source_hash"]
@@ -232,6 +241,7 @@ def test_fragment_less_molecule_does_not_alter_composed_constitution(
         )
         == 0
     )
+    assert _run_install(baseline, state_root, monkeypatch) == 0
 
     with_extra = _make_consumer(tmp_path, "with-extra")
     assert (
@@ -245,6 +255,7 @@ def test_fragment_less_molecule_does_not_alter_composed_constitution(
         )
         == 0
     )
+    assert _run_install(with_extra, state_root, monkeypatch) == 0
 
     baseline_md = (baseline / ".spaex.md").read_text(encoding="utf-8")
     with_extra_md = (with_extra / ".spaex.md").read_text(encoding="utf-8")
