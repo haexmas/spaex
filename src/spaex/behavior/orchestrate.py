@@ -362,17 +362,14 @@ def compute_fingerprints(
     if not project_local and not _any_declares_behavior(resolved):
         return ComputedFingerprints(None, None, 0)
 
-    staging = spaex_dir / STAGING_DIRNAME
-    _reset_scratch(staging)
-    try:
+    with tempfile.TemporaryDirectory(prefix=".spaex-check-", dir=repo_root) as temp_dir:
+        staging = Path(temp_dir)
         molecule_inputs = _build_molecule_inputs(resolved, state_root=state_root)
         materialized = materialize(
             molecule_inputs,
             staging_root=staging,
             project_local=tuple(project_local),
         )
-    finally:
-        _reset_scratch(staging)
     fragments = tuple(m.fragment for m in materialized)
     if not fragments:
         return ComputedFingerprints(None, None, 0)

@@ -154,6 +154,55 @@ def _bump_consumer_revision(consumer: Path, revision: str) -> None:
     manifest_path.write_text(json.dumps(data, indent=2))
 
 
+def _seed_check_artifacts(consumer: Path) -> None:
+    """Plant every mutable behavior artifact with sentinel content."""
+    spaex_dir = consumer / ".spaex"
+    (spaex_dir / "constitution.d").mkdir(parents=True, exist_ok=True)
+    (spaex_dir / "constitution.d" / "legacy.md").write_text(
+        "legacy constitution fragment\n", encoding="utf-8"
+    )
+    (spaex_dir / ".constitution.d.staging").mkdir(parents=True, exist_ok=True)
+    (spaex_dir / ".constitution.d.staging" / "sentinel").write_text(
+        "staging sentinel\n", encoding="utf-8"
+    )
+    (spaex_dir / ".constitution.d.prev").mkdir(parents=True, exist_ok=True)
+    (spaex_dir / ".constitution.d.prev" / "sentinel").write_text(
+        "previous sentinel\n", encoding="utf-8"
+    )
+    (spaex_dir / "clarifications.json").write_text(
+        '{"schema_version": 1, "clarifications": {}}\n', encoding="utf-8"
+    )
+    (spaex_dir / ".stale").write_text("stale sentinel\n", encoding="utf-8")
+    (spaex_dir / "composer.log").write_text("composer sentinel\n", encoding="utf-8")
+
+
+def _snapshot_check_artifacts(consumer: Path) -> dict[str, object]:
+    """Read check-managed files and directory contents for byte comparison."""
+    roots = (
+        ".spaex.md",
+        ".spaex/constitution.d",
+        ".spaex/clarifications.json",
+        ".spaex/.stale",
+        ".spaex/.constitution.d.staging",
+        ".spaex/.constitution.d.prev",
+        ".spaex/composer.log",
+    )
+    snapshot: dict[str, object] = {}
+    for relative in roots:
+        path = consumer / relative
+        if not path.exists():
+            snapshot[relative] = None
+        elif path.is_dir():
+            snapshot[relative] = {
+                str(child.relative_to(path)): child.read_bytes()
+                for child in sorted(path.rglob("*"))
+                if child.is_file()
+            }
+        else:
+            snapshot[relative] = path.read_bytes()
+    return snapshot
+
+
 def _run_add(
     consumer: Path,
     state_root: Path,
@@ -245,9 +294,14 @@ def test_check_reports_current_and_never_invokes_composer(
     )
     assert stub.calls == 1
 
+    scratch = consumer / ".spaex" / ".constitution.d.staging" / "sentinel"
+    scratch.parent.mkdir(parents=True, exist_ok=True)
+    scratch.write_text("persistent scratch\n", encoding="utf-8")
+
     rc = _run_constitution_build(consumer, state_root, monkeypatch, "--check")
     assert rc == 0
     assert stub.calls == 1, "--check must never invoke the Composer"
+    assert scratch.read_text(encoding="utf-8") == "persistent scratch\n"
 
 
 def test_check_reports_stale_without_invoking_composer(
@@ -355,6 +409,8 @@ def test_force_check_matches_when_rebuild_is_reproducible(
     )
     assert stub.calls == 1
     before = (consumer / ".spaex.md").read_bytes()
+    _seed_check_artifacts(consumer)
+    artifacts_before = _snapshot_check_artifacts(consumer)
 
     rc = _run_constitution_build(
         consumer, state_root, monkeypatch, "--force", "--check"
@@ -362,6 +418,7 @@ def test_force_check_matches_when_rebuild_is_reproducible(
     assert rc == 0, "a reproducible rebuild must report a match"
     assert stub.calls == 2, "--force --check must invoke the Composer for real"
     assert (consumer / ".spaex.md").read_bytes() == before
+    assert _snapshot_check_artifacts(consumer) == artifacts_before
 
 
 def test_force_check_reports_drift_when_rebuild_differs(
@@ -381,6 +438,8 @@ def test_force_check_reports_drift_when_rebuild_differs(
     )
     assert stub.calls == 1
     before = (consumer / ".spaex.md").read_bytes()
+    _seed_check_artifacts(consumer)
+    artifacts_before = _snapshot_check_artifacts(consumer)
 
     rc = _run_constitution_build(
         consumer, state_root, monkeypatch, "--force", "--check"
@@ -390,3 +449,4 @@ def test_force_check_reports_drift_when_rebuild_differs(
     assert (consumer / ".spaex.md").read_bytes() == before, (
         "--check must never persist a rebuild, even combined with --force"
     )
+    assert _snapshot_check_artifacts(consumer) == artifacts_before
