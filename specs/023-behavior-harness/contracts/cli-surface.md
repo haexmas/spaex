@@ -106,7 +106,7 @@ Existing commands. Extended per Clarification Q2:
 
 **No new exit codes**. Warnings do not change exit code semantics.
 
-**No `.spaex.md` regeneration at add/remove time** (per FR-024a). The plausibility check produces WARN output and writes/updates a `.spaex/.stale` sidecar file summarizing the finding. `.spaex.md` regeneration happens at the next `spaex install`, which reads `.spaex/.stale` and requires reconciliation before writing.
+**No `.spaex.md` regeneration from a detected contradiction** (per FR-024a). When the plausibility check finds a cross-molecule semantic contradiction, it produces WARN output and writes/updates a `.spaex/.stale` sidecar file summarizing the finding, and `.spaex.md` is left as-is; regeneration happens at the next `spaex install`, which reads `.spaex/.stale` and requires reconciliation before writing. This applies only to the contradiction case — `spaex add`/`spaex remove` otherwise complete a full install exactly like `spaex install` would, including a clean `.spaex.md` regeneration (line above).
 
 ## Environment variables
 

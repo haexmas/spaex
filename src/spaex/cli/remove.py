@@ -179,8 +179,6 @@ def run(args: argparse.Namespace) -> int:
             # FR-024a: add-time plausibility check, identical treatment to
             # `spaex add` (contracts/cli-surface.md §add/remove).
             abort_on_behavior_contradiction=False,
-            publish_behavior_artifacts=False,
-            force_behavior_check=True,
         )
 
         sys.stdout.write(f"retracted {len(remove_ids)} molecule(s):\n")

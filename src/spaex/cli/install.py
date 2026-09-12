@@ -186,10 +186,6 @@ def run(
     abort_on_contradiction = bool(
         getattr(args, "abort_on_behavior_contradiction", True)
     )
-    publish_behavior_artifacts = bool(
-        getattr(args, "publish_behavior_artifacts", True)
-    )
-    force_behavior_check = bool(getattr(args, "force_behavior_check", False))
     # T054/FR-010a: a real `spaex install` invocation (never an internal
     # add/remove-triggered one, which runs with abort_on_contradiction=False)
     # announces a pending FR-024a stale marker before the behavior pipeline
@@ -264,8 +260,6 @@ def run(
                         resolved=resolved,
                         project_local=project_local,
                         abort_on_contradiction=abort_on_contradiction,
-                        publish_behavior_artifacts=publish_behavior_artifacts,
-                        force_behavior_check=force_behavior_check,
                     )
                     return exit_codes.SUCCESS
                 with _preserve_generation_for_behavior(
@@ -293,8 +287,6 @@ def run(
                         resolved=resolved,
                         project_local=project_local,
                         abort_on_contradiction=abort_on_contradiction,
-                        publish_behavior_artifacts=publish_behavior_artifacts,
-                        force_behavior_check=force_behavior_check,
                     )
                 return exit_codes.SUCCESS
 
@@ -384,8 +376,6 @@ def run(
                     resolved=resolved,
                     project_local=project_local,
                     abort_on_contradiction=abort_on_contradiction,
-                    publish_behavior_artifacts=publish_behavior_artifacts,
-                    force_behavior_check=force_behavior_check,
                 )
                 return exit_codes.SUCCESS
 
@@ -408,8 +398,6 @@ def run(
                     resolved=resolved,
                     project_local=project_local,
                     abort_on_contradiction=abort_on_contradiction,
-                    publish_behavior_artifacts=publish_behavior_artifacts,
-                    force_behavior_check=force_behavior_check,
                 )
             return exit_codes.SUCCESS
     except HaexError:
@@ -598,8 +586,6 @@ def _run_behavior_pipeline(
     resolved: list[ResolvedMolecule],
     project_local: Sequence[BehaviorFragment] = (),
     abort_on_contradiction: bool = True,
-    publish_behavior_artifacts: bool = True,
-    force_behavior_check: bool = False,
 ) -> None:
     """Spec 023 behavior-harness pass.
 
@@ -621,8 +607,6 @@ def _run_behavior_pipeline(
         resolved=resolved,
         project_local=project_local,
         abort_on_contradiction=abort_on_contradiction,
-        publish_artifacts=publish_behavior_artifacts,
-        force_composer=force_behavior_check,
     )
     if outcome.published and not outcome.skipped_composer:
         sys.stdout.write(

@@ -201,8 +201,10 @@ def test_add_of_contradicting_molecule_warns_marks_stale_and_exits_zero(
     stub, calls = _make_composer_stub()
     monkeypatch.setattr(behavior_orchestrate, "invoke_composer", stub)
 
-    # Add only changes the manifest and runs the plausibility check; it must
-    # not publish `.spaex.md` even when the Composer returns Shape A.
+    # A clean add runs the plausibility check and, finding no contradiction,
+    # publishes `.spaex.md` immediately -- `spaex add` always finishes with a
+    # full `spaex install` (contracts/cli-surface.md §add/remove: "On no
+    # contradiction, `.spaex.md` regenerates cleanly").
     rc = haex_add_helpers["run_add"](
         consumer,
         state_root,
@@ -214,12 +216,6 @@ def test_add_of_contradicting_molecule_warns_marks_stale_and_exits_zero(
     assert rc == 0
     assert calls == [1]
     spaex_md_path = consumer / ".spaex.md"
-    assert not spaex_md_path.exists()
-
-    # A normal install is the first operation allowed to publish the
-    # composed constitution. This gives the second add a byte baseline.
-    assert install_cli.run(SimpleNamespace(repo_root=str(consumer))) == 0
-    assert calls == [1, 1]
     assert spaex_md_path.exists()
     baseline_bytes = spaex_md_path.read_bytes()
     assert not (consumer / ".spaex" / ".stale").exists()
@@ -236,7 +232,7 @@ def test_add_of_contradicting_molecule_warns_marks_stale_and_exits_zero(
         revision=head,
     )
     assert rc == 0
-    assert calls == [1, 1, 2]
+    assert calls == [1, 2]
 
     captured = capsys.readouterr()
     assert "WARN" in captured.err
@@ -282,7 +278,6 @@ def test_remove_rechecks_without_regenerating_and_clears_resolved_stale(
         )
         == 0
     )
-    assert install_cli.run(SimpleNamespace(repo_root=str(consumer))) == 0
     baseline_bytes = (consumer / ".spaex.md").read_bytes()
 
     assert (
@@ -299,8 +294,9 @@ def test_remove_rechecks_without_regenerating_and_clears_resolved_stale(
     assert (consumer / ".spaex" / ".stale").exists()
     capsys.readouterr()
 
-    # Removing the contradicting molecule runs the check again even though
-    # the remaining fragment set matches the existing composed artifact.
+    # Removing the contradicting molecule runs the check again; the
+    # remaining fragment set matches the previously-published artifact, so
+    # the reproducibility skip applies -- no fresh Composer call needed.
     assert (
         haex_add_helpers["run_remove"](
             consumer,
@@ -310,14 +306,13 @@ def test_remove_rechecks_without_regenerating_and_clears_resolved_stale(
         )
         == 0
     )
-    assert calls == [1, 1, 2, 1]
+    assert calls == [1, 2]
     assert (consumer / ".spaex.md").read_bytes() == baseline_bytes
     assert not (consumer / ".spaex" / ".stale").exists()
     capsys.readouterr()
 
-    # Retraction of the final behavior molecule still defers artifact
-    # cleanup until the next normal install; that install may remove the
-    # now-empty behavior constitution.
+    # Retraction of the final behavior molecule immediately cleans up the
+    # now-empty composed constitution, same as a normal install would.
     assert (
         haex_add_helpers["run_remove"](
             consumer,
@@ -327,8 +322,6 @@ def test_remove_rechecks_without_regenerating_and_clears_resolved_stale(
         )
         == 0
     )
-    assert (consumer / ".spaex.md").read_bytes() == baseline_bytes
-    assert install_cli.run(SimpleNamespace(repo_root=str(consumer))) == 0
     assert not (consumer / ".spaex.md").exists()
 
 
@@ -341,24 +334,38 @@ def test_overlap_shape_b_does_not_mark_add_as_contradiction(
     stub, calls = _make_composer_stub(question_kind="overlap")
     monkeypatch.setattr(behavior_orchestrate, "invoke_composer", stub)
 
-    for molecule_id in (_MOL_A, _MOL_B):
-        assert (
-            haex_add_helpers["run_add"](
-                consumer,
-                state_root,
-                monkeypatch,
-                source_url=canonical,
-                molecule_ids=molecule_id,
-                revision=head,
-            )
-            == 0
+    assert (
+        haex_add_helpers["run_add"](
+            consumer,
+            state_root,
+            monkeypatch,
+            source_url=canonical,
+            molecule_ids=_MOL_A,
+            revision=head,
         )
+        == 0
+    )
+    baseline_bytes = (consumer / ".spaex.md").read_bytes()
+
+    assert (
+        haex_add_helpers["run_add"](
+            consumer,
+            state_root,
+            monkeypatch,
+            source_url=canonical,
+            molecule_ids=_MOL_B,
+            revision=head,
+        )
+        == 0
+    )
 
     captured = capsys.readouterr()
     assert calls == [1, 2]
     assert "WARN" not in captured.err
     assert not (consumer / ".spaex" / ".stale").exists()
-    assert not (consumer / ".spaex.md").exists()
+    # An overlap-kind Shape B carries no composed body to publish; the
+    # previously-published artifact (MOL_A alone) is left untouched.
+    assert (consumer / ".spaex.md").read_bytes() == baseline_bytes
 
 
 def test_install_reconciles_pending_stale_marker_before_publishing(
@@ -383,7 +390,7 @@ def test_install_reconciles_pending_stale_marker_before_publishing(
             == 0
         )
 
-    assert not (consumer / ".spaex.md").exists()
+    baseline_bytes = (consumer / ".spaex.md").read_bytes()
     assert (consumer / ".spaex" / ".stale").exists()
     capsys.readouterr()
 
@@ -398,4 +405,5 @@ def test_install_reconciles_pending_stale_marker_before_publishing(
     assert "stale, unresolved" in captured.out
     assert calls == [1, 2, 2, 2]
     assert (consumer / ".spaex.md").exists()
+    assert (consumer / ".spaex.md").read_bytes() != baseline_bytes
     assert not (consumer / ".spaex" / ".stale").exists()
