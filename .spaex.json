@@ -1,15 +1,13 @@
 {
-  "active_feature": null,
   "compounds": [
     {
       "molecules": [
-        "com.github.haexmas.spaex.constitution"
+        "com.github.haexmas.atoms.spaex-constitution"
       ],
-      "revision": "53cc448934c5b9be6f1b540ccb1e8e24b1f559ec",
-      "source": "https://github.com/haexmas/haex-hive"
+      "revision": "22b887128703b2572248eb40cf72aff1f99ba458",
+      "source": "https://github.com/haexmas/atoms"
     }
   ],
-  "groups": [],
   "identity": "com.github.haexmas.spaex",
   "spaex_min_version": ">=4.0.0",
   "spaex_version": "4"

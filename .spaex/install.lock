@@ -1,14 +1,5 @@
 {
-  "generation_id": "g_20260907T170037Z_f880",
-  "molecules": [
-    {
-      "id": "com.github.haexmas.spaex.constitution",
-      "paths": [
-        ".spaex/constitution.md"
-      ],
-      "revision": "53cc448934c5b9be6f1b540ccb1e8e24b1f559ec",
-      "source": "https://github.com/haexmas/haex-hive"
-    }
-  ],
+  "generation_id": "g_20260912T054433Z_e3b0",
+  "molecules": [],
   "spaex_version": "4"
 }
