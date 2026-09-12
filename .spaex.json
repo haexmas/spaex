@@ -2,9 +2,12 @@
   "compounds": [
     {
       "molecules": [
+        "com.github.haexmas.atoms.general-coding",
+        "com.github.haexmas.atoms.ponytail",
+        "com.github.haexmas.atoms.python",
         "com.github.haexmas.atoms.spaex-constitution"
       ],
-      "revision": "d7da32ba8043a9372cd039850c58e948af9bef1f",
+      "revision": "cdb5c7845e3baac5fcd24e4f2aaea47ea2a6c952",
       "source": "https://github.com/haexmas/atoms"
     }
   ],

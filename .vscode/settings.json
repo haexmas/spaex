@@ -1,8 +1,8 @@
 {
   "json.schemas": [
     {
-      "fileMatch": [".haex-hive.json"],
-      "url": "./.specify/schemas/haex-hive.schema.json"
+      "fileMatch": [".spaex.json"],
+      "url": "./src/spaex/schema/data/consumer-manifest.v4.schema.json"
     }
   ]
 }

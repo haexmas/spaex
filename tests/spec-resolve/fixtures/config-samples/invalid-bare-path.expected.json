@@ -1,1 +1,0 @@
-{"expected_result": "reject", "expected_error_substring": "repository must be 'self' or a URL"}

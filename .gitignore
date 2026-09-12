@@ -1,6 +1,4 @@
 *.local.log
-tests/spec-resolve/fixtures/.tmp/
-tests/haex-init/fixtures/.tmp/
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -24,7 +22,7 @@ graphify-out/
 .worktrees/
 
 # Manifest lock is per-checkout advisory-lock state (Spec 013), never committed.
-.haex-hive.json.lock
+.spaex.json.lock
 
 # Spec 023 behavior-harness sidecars (per-checkout state, not versioned).
 # NOTE: .spaex.md and .spaex/constitution.d/ are versioned content and MUST NOT
