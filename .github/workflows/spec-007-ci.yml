@@ -37,3 +37,5 @@ jobs:
           sys.exit(0 if code == pytest.ExitCode.NO_TESTS_COLLECTED else code)"
       - name: Run ruff
         run: ruff check .
+      - name: Run mypy
+        run: mypy src

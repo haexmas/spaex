@@ -169,6 +169,19 @@ def test_from_inline_uses_enclosing_atom_id_when_atom_source_absent() -> None:
     assert frag.modality is Modality.MUST
 
 
+def test_from_inline_adds_terminal_lf_for_composer_equivalence() -> None:
+    frag = BehaviorFragment.from_inline(
+        {
+            "id": "spec-first",
+            "body": "**MUST** run /speckit-specify first.",
+        },
+        molecule_id=MOL,
+        enclosing_atom_id="speckit-strict",
+    )
+
+    assert frag.body == "**MUST** run /speckit-specify first.\n"
+
+
 def test_from_inline_missing_body_raises_missing_field() -> None:
     with pytest.raises(MissingFieldError):
         BehaviorFragment.from_inline(
