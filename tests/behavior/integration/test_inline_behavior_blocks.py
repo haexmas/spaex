@@ -40,6 +40,7 @@ from spaex.behavior.composer.invoke import (
     RuntimeDescriptor,
 )
 from spaex.cli import add as add_cli
+from spaex.cli import install as install_cli
 from spaex.migrate.transform import clone_dir
 
 pytestmark = pytest.mark.skipif(
@@ -190,6 +191,14 @@ def _run_add(
     return add_cli.run(ns)
 
 
+def _run_install(
+    consumer: Path, state_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> int:
+    monkeypatch.setenv("SPAEX_STATE", str(state_root))
+    ns = SimpleNamespace(repo_root=str(consumer), lock_timeout=5.0)
+    return install_cli.run(ns)
+
+
 def _shape_a_from_payload(payload: str) -> str:
     data = json.loads(payload)
     src = data["expected_source_hash"]
@@ -271,6 +280,7 @@ def test_inline_block_materializes_identically_to_standalone_atom(
         )
         == 0
     )
+    assert _run_install(consumer, state_root, monkeypatch) == 0
 
     standalone_path = (
         consumer / ".spaex" / "constitution.d" / _MOL_STANDALONE / "spec-first.md"
@@ -285,7 +295,7 @@ def test_inline_block_materializes_identically_to_standalone_atom(
     # the rendered fragment files must be byte-identical (FR-003).
     assert standalone_path.read_bytes() == inline_path.read_bytes()
 
-    assert len(composer_payloads) == 1
+    assert len(composer_payloads) == 2
     records = {
         fragment["molecule_id"]: fragment
         for fragment in composer_payloads[0]["fragments"]
