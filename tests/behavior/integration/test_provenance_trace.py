@@ -8,11 +8,11 @@ constitution trace`:
 
 ...plus the explicit exit-1 cases: a bare (unscoped) fragment id is
 rejected as ambiguous rather than silently treated as a substring query,
-and a missing `.spaex.md` or genuinely-absent clause both report "no
+and a missing `.spaex/constitution.md` or genuinely-absent clause both report "no
 match". Both `--format text` and `--format json` are exercised.
 
 No git/molecule resolution is needed here: `constitution trace` reads
-`.spaex.md`, `.spaex/constitution.d/`, and `.spaex.json` directly off
+`.spaex/constitution.md`, `.spaex/constitution.d/`, and `.spaex/manifest.json` directly off
 disk, so fixtures are hand-written rather than resolved through a real
 publisher clone.
 """
@@ -31,7 +31,7 @@ _HEADER = (
 
 
 def _spaex_md(sections: dict[str, list[str]]) -> str:
-    """Render a minimal `.spaex.md` body per contracts/spaex-md-format.md."""
+    """Render a minimal `.spaex/constitution.md` body per contracts/spaex-md-format.md."""
     parts = [
         _HEADER,
         "# spaex Behavior Harness",
@@ -80,7 +80,8 @@ def _write_fragment(
 
 
 def _write_manifest(repo: Path, *, compounds: list[dict[str, object]]) -> None:
-    (repo / ".spaex.json").write_text(
+    (repo / ".spaex").mkdir(parents=True, exist_ok=True)
+    (repo / ".spaex/manifest.json").write_text(
         json.dumps(
             {
                 "spaex_version": "4",
@@ -97,7 +98,8 @@ def _make_fixture(tmp_path: Path) -> Path:
     """One molecule, one clause, one fragment: `com.example.strict-testing/tests-before-commit`."""
     repo = tmp_path / "consumer"
     repo.mkdir()
-    (repo / ".spaex.md").write_text(
+    (repo / ".spaex").mkdir()
+    (repo / ".spaex/constitution.md").write_text(
         _spaex_md(
             {
                 "MUST": [
@@ -151,7 +153,7 @@ def test_trace_exact_scoped_id_text_format(tmp_path: Path, capsys) -> None:
     assert "Atom:    hooks.test-runner" in out
     assert (
         f"Molecule: https://github.com/haexmas/atoms@{'a' * 40} "
-        "(pinned in .spaex.json)" in out
+        "(pinned in .spaex/manifest.json)" in out
     )
 
 
@@ -223,7 +225,7 @@ def test_trace_missing_spaex_md(tmp_path: Path, capsys) -> None:
     rc = main(["--repo-root", str(repo), "constitution", "trace", "anything"])
     out = capsys.readouterr().out
     assert rc == 1
-    assert ".spaex.md" in out
+    assert ".spaex/constitution.md" in out
 
 
 def test_trace_json_format(tmp_path: Path, capsys) -> None:
@@ -251,7 +253,7 @@ def test_trace_json_format(tmp_path: Path, capsys) -> None:
     assert source["atom_source"] == "hooks.test-runner"
     assert source["molecule_source"] == "https://github.com/haexmas/atoms"
     assert source["molecule_revision"] == "a" * 40
-    assert source["pinned_in"] == ".spaex.json"
+    assert source["pinned_in"] == ".spaex/manifest.json"
 
 
 def test_trace_json_no_match_reports_error(tmp_path: Path, capsys) -> None:
@@ -280,7 +282,8 @@ def test_trace_merged_clause_with_two_provenances(tmp_path: Path, capsys) -> Non
     by both molecules) is rejected as ambiguous."""
     repo = tmp_path / "consumer"
     repo.mkdir()
-    (repo / ".spaex.md").write_text(
+    (repo / ".spaex").mkdir()
+    (repo / ".spaex/constitution.md").write_text(
         _spaex_md(
             {
                 "MUST": [
@@ -359,7 +362,8 @@ def test_trace_project_local_source(tmp_path: Path, capsys) -> None:
     Molecule line names it as project-local instead of a source@revision."""
     repo = tmp_path / "consumer"
     repo.mkdir()
-    (repo / ".spaex.md").write_text(
+    (repo / ".spaex").mkdir()
+    (repo / ".spaex/constitution.md").write_text(
         _spaex_md(
             {
                 "SHOULD": [
@@ -380,7 +384,7 @@ def test_trace_project_local_source(tmp_path: Path, capsys) -> None:
         modality="SHOULD",
         body="**SHOULD** prefer small commits.",
     )
-    (repo / ".spaex.json").write_text(
+    (repo / ".spaex/manifest.json").write_text(
         json.dumps(
             {
                 "spaex_version": "4",

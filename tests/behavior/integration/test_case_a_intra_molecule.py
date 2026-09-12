@@ -3,7 +3,7 @@
 A single molecule ships two fragments under the same molecule-scoped id but
 with contradictory modalities (MUST vs SHOULD). The mechanical pre-check must
 reject the pin set BEFORE the Composer is invoked (FR-005), so `spaex install`
-exits 20 with a typed diagnostic naming both producers, and `.spaex.md` is
+exits 20 with a typed diagnostic naming both producers, and `.spaex/constitution.md` is
 never written (FR-006, SC-002 Case A).
 """
 
@@ -19,7 +19,7 @@ import pytest
 
 from spaex.behavior import orchestrate as behavior_orchestrate
 from spaex.cli import install as install_cli
-from spaex.migrate.transform import clone_dir
+from spaex.git.cache import clone_dir
 from spaex.util import exit_codes
 from spaex.util.errors import HaexError
 
@@ -122,7 +122,8 @@ def _make_consumer_pinning(
     """
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-    (consumer / ".spaex.json").write_text(
+    (consumer / ".spaex").mkdir()
+    (consumer / ".spaex/manifest.json").write_text(
         json.dumps(
             {
                 "spaex_version": "4",
@@ -179,4 +180,4 @@ def test_case_a_aborts_with_exit_20_before_composer_runs(
     assert "SHOULD" in message
 
     assert composer_calls == []
-    assert not (consumer / ".spaex.md").exists()
+    assert not (consumer / ".spaex/constitution.md").exists()

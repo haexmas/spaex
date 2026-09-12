@@ -1,4 +1,4 @@
-"""`haex remove` — retract one or more molecules from `.spaex.json`.
+"""`spaex remove` — retract one or more molecules from `.spaex/manifest.json`.
 
 Spec 013 T085. See ``specs/013-add-cli-and-molecule-rename/contracts/
 haex-remove.cli.md`` for the full contract.
@@ -20,6 +20,7 @@ from pathlib import Path
 from spaex.install.manifest_lock import (
     DEFAULT_LOCK_TIMEOUT_SECONDS,
     ManifestLockContext,
+    active_manifest_lock_path,
     parse_lock_timeout,
 )
 from spaex.install.write_and_reinstall import write_and_reinstall
@@ -28,6 +29,7 @@ from spaex.model.consumer_manifest import (
     ConsumerManifest,
 )
 from spaex.model.install_lock import InstallLock
+from spaex.paths import MANIFEST_RELATIVE_PATH, manifest_path
 from spaex.util import exit_codes
 from spaex.util.errors import HaexError, UnknownMoleculeIdError
 
@@ -137,11 +139,11 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 def run(args: argparse.Namespace) -> int:
     """Retract requested molecules and reinstall the resulting manifest."""
     repo_root = Path(args.repo_root).resolve()
-    manifest_path = repo_root / ".spaex.json"
-    if not manifest_path.exists():
+    path = manifest_path(repo_root)
+    if not path.exists():
         raise HaexError(
-            message=f"{manifest_path} is missing",
-            context={"path": str(manifest_path)},
+            message=f"{path} is missing",
+            context={"path": str(path)},
             diagnostic_key="spaex-json-missing",
             exit_code=exit_codes.INCOMPLETE_TRANSACTION,
             hint="Nothing to retract; there is no consumer manifest here.",
@@ -151,19 +153,19 @@ def run(args: argparse.Namespace) -> int:
     remove_ids = tuple(dict.fromkeys(_parse_ids(args.molecule_ids)))
 
     lock = ManifestLockContext(
-        repo_root / ".spaex.json.lock",
+        active_manifest_lock_path(repo_root),
         timeout_seconds=args.lock_timeout,
     )
     with lock:
         try:
-            current = ConsumerManifest.from_json(manifest_path.read_bytes())
+            current = ConsumerManifest.from_json(path.read_bytes())
         except (ValueError, KeyError) as exc:
             raise HaexError(
-                message=f".spaex.json is not a valid v4 manifest: {exc}",
-                context={"path": str(manifest_path)},
-                diagnostic_key="spaex-json-invalid",
+                message=f"{MANIFEST_RELATIVE_PATH} is not a valid v4 manifest: {exc}",
+                context={"path": str(path)},
+                diagnostic_key="spaex-manifest-invalid",
                 exit_code=exit_codes.INCOMPLETE_TRANSACTION,
-                hint="Repair `.spaex.json` before retracting molecules.",
+                hint=f"Repair `{MANIFEST_RELATIVE_PATH}` before retracting molecules.",
             ) from exc
         _preflight_ids_present(current, remove_ids)
 

@@ -44,7 +44,7 @@ def test_orphan_paths_are_deleted_after_remove(
         consumer, state_root, monkeypatch, molecule_ids=_CONST_ID
     )
     assert rc == 0
-    written = json.loads((consumer / ".spaex.json").read_text())
+    written = json.loads((consumer / ".spaex/manifest.json").read_text())
     assert written["compounds"] == []
     for rel in published_paths:
         assert not (consumer / rel).exists(), (

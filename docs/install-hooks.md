@@ -41,7 +41,7 @@ Hook-only molecules (declaring `install_hook` with no `atoms.constitution`) are 
 - **Working directory**: the consumer repo root.
 - **Environment**: spaex passes its complete environment to the subprocess, no filtering.
 - **stdio**: inherited from the spaex process. In a TTY, hooks can prompt the user via `input()`; when stdin is unavailable or reaches EOF, `input()` raises `EOFError`, so molecule authors must supply a non-interactive fallback (e.g. `os.environ` toggle, `--yes` flag, `default_yes` behavior).
-- **Ordering**: hooks run in the resolver's canonical order, which is ascending `(effective_priority, molecule_id.encode("utf-8"))`. The consumer's `.spaex.json` `compounds[].config[<molecule-id>].priority` overrides the publisher's default `priority`.
+- **Ordering**: hooks run in the resolver's canonical order, which is ascending `(effective_priority, molecule_id.encode("utf-8"))`. The consumer's `.spaex/manifest.json` `compounds[].config[<molecule-id>].priority` overrides the publisher's default `priority`.
 
 ## Failure policy
 
@@ -54,7 +54,7 @@ spaex distinguishes four hook failure kinds:
 
 Each failure is subject to the molecule's `on_failure` policy:
 
-- `on_failure: "abort"` (default): halts execution, triggers Spec-008 install-transaction rollback (atoms discarded, install.lock not written, delegated `.spaex.json` update from `spaex add` reverted), raises `install-failed` with `molecule_id` and `hook_failure` in context. Exit code non-zero.
+- `on_failure: "abort"` (default): halts execution, triggers Spec-008 install-transaction rollback (atoms discarded, install.lock not written, delegated `.spaex/manifest.json` update from `spaex add` reverted), raises `install-failed` with `molecule_id` and `hook_failure` in context. Exit code non-zero.
 - `on_failure: "warn"`: records `hook_status: "failed"` for the molecule, emits ONE post-exit line on stderr (`WARN: molecule <id> install_hook failed (<reason>)`), continues with the next molecule, publishes install.lock as normal. Exit code 0. The hook's own stderr is never prefixed.
 
 ## Idempotency contract

@@ -1,10 +1,10 @@
-# Contract: `.spaex.md` (Composed Constitution) Format
+# Contract: `.spaex/constitution.md` (Composed Constitution) Format
 
-The single spaex-owned artifact at `<repo-root>/.spaex.md`. Produced by the Composer, committed by the developer, read by any agent runtime that has run the global bootstrap.
+The single spaex-owned artifact at `<repo-root>/.spaex/constitution.md`. Produced by the Composer, committed by the developer, read by any agent runtime that has run the global bootstrap.
 
 ## File location
 
-`<repo-root>/.spaex.md`
+`<repo-root>/.spaex/constitution.md`
 
 Where `<repo-root>` is determined by walking up from the current working directory until a `.git` directory or the filesystem root is reached (matches existing spaex convention for locating project roots).
 
@@ -59,7 +59,7 @@ Each clause is a top-level bullet, followed by an italicized provenance suffix.
 
 ## Empty-state behavior
 
-- If the project has zero active fragments, `.spaex.md` is either absent from the repo (preferred) or a minimal file containing only the header comment and a note "No behavior harness declared for this project.". Both forms are valid per FR-017d.
+- If the project has zero active fragments, `.spaex/constitution.md` is either absent from the repo (preferred) or a minimal file containing only the header comment and a note "No behavior harness declared for this project.". Both forms are valid per FR-017d.
 
 ## Provenance regex
 
@@ -89,7 +89,7 @@ reviewable artifact diff.
 
 ## What agents do with this file
 
-Agents that have run the global bootstrap read `.spaex.md` and treat its content as project-level instructions:
+Agents that have run the global bootstrap read `.spaex/constitution.md` and treat its content as project-level instructions:
 - `MUST` clauses are treated as inviolable constraints.
 - `SHOULD` clauses are treated as strong defaults, overridable only with operator justification.
 - `MAY` clauses are treated as permissive guidance.

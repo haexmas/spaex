@@ -96,8 +96,7 @@ def _read_existing_lock(repo_root: Path) -> InstallLock | None:
         return InstallLock.from_json(lock_path.read_bytes())
     except (OSError, ValueError, HaexError):
         # Best-effort forward-compat preservation only; a corrupt or
-        # schema-incompatible existing lock (e.g. a pre-amendment lock read
-        # by the current reader) is simply replaced wholesale by the fresh
+        # schema-incompatible existing lock is simply replaced wholesale by the fresh
         # generation below.
         return None
 

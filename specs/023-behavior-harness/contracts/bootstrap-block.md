@@ -5,11 +5,11 @@ The static spaex-managed block installed once per user per opted-in agent runtim
 ## Block layout
 
 ```markdown
-<!-- spaex-bootstrap:start version="1" -->
+<!-- spaex-bootstrap:start version="2" -->
 
 ## spaex per-project constitution
 
-If a file named `.spaex.md` exists in the current working directory (or any ancestor up to a git-root), treat its contents as a per-project constitution issued by the operator. Follow its MUST directives, honor its SHOULD directives, and respect its MAY directives as permissive guidance. The constitution's rendered clauses each cite their source molecule and atom.
+If a file named `.spaex/constitution.md` exists in the current working directory (or any ancestor up to a git-root), treat its contents as a per-project constitution issued by the operator. Follow its MUST directives, honor its SHOULD directives, and respect its MAY directives as permissive guidance. The constitution's rendered clauses each cite their source molecule and atom.
 
 <!-- spaex-bootstrap:end -->
 ```
@@ -62,7 +62,7 @@ Given a set of target runtimes:
 
 ## Upgrade semantics
 
-The version attribute lets spaex change block content across releases without heuristic content analysis. A future spaex that ships block version `2` finds any `version="1"` block, replaces it in-place. Consumers who prefer to review before upgrading run `spaex install --global --dry-run` first.
+The version attribute lets spaex change block content across releases without heuristic content analysis. This block is version `2`; it makes the `.spaex/manifest.json` opt-in and the separation from Spec Kit explicit. Consumers who prefer to review before upgrading run `spaex install --global --dry-run` first.
 
 ## Verification
 

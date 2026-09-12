@@ -14,9 +14,9 @@ import pytest
 
 from spaex.constitution.resolve import ResolvedMolecule
 from spaex.git import molecule_store
+from spaex.git.cache import clone_dir
 from spaex.install import hook_runner
 from spaex.install.hook_runner import HookOutcome, HookOutcomeKind, run_install_hook
-from spaex.migrate.transform import clone_dir
 from spaex.model.molecule_manifest import InstallHook
 from spaex.util.errors import MoleculeTreeExtractionError, MoleculeTreePathNotFoundError
 
@@ -147,6 +147,7 @@ def test_argv_uses_canonical_target_cwd_and_no_env_override(
 
     consumer = tmp_path / "consumer"
     consumer.mkdir()
+    (consumer / ".spaex").mkdir()
     state = tmp_path / "state"
     run_install_hook(resolved, consumer, state)
 
@@ -392,7 +393,7 @@ def test_real_store_sibling_escape_refused_fresh_and_cached(
     repo_dir = _clone(state_root, canonical, publisher)
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-
+    (consumer / ".spaex").mkdir()
     resolved = ResolvedMolecule(
         molecule_id="com.example.publisher.mol",
         source_url=canonical,

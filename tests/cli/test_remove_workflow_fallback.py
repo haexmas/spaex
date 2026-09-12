@@ -42,7 +42,7 @@ def test_workflow_molecule_can_be_retracted(
         revision=head,
         all=True,
     )
-    before = json.loads((consumer / ".spaex.json").read_text())
+    before = json.loads((consumer / ".spaex/manifest.json").read_text())
     assert _WORKFLOW_ID in before["compounds"][0]["molecules"]
 
     rc = haex_add_helpers["run_remove"](
@@ -52,6 +52,6 @@ def test_workflow_molecule_can_be_retracted(
     # publishes without the workflow molecule. Spec 011 FR-008's bundled
     # speckit fallback landing separately does not affect this outcome.
     assert rc == 0
-    after = json.loads((consumer / ".spaex.json").read_text())
+    after = json.loads((consumer / ".spaex/manifest.json").read_text())
     assert _WORKFLOW_ID not in after["compounds"][0]["molecules"]
     assert _CONST_ID in after["compounds"][0]["molecules"]

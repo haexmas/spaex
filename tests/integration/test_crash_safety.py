@@ -107,7 +107,7 @@ def test_crash_at_boundary_converges_on_retry(
 
     if crash_point == "rename_a" and preexisting:
         previous_generation = (prev_dir / "constitution.md").read_bytes()
-        manifest_path = consumer / ".spaex.json"
+        manifest_path = consumer / ".spaex/manifest.json"
         manifest_bytes = manifest_path.read_bytes()
         manifest = json.loads(manifest_bytes)
         manifest["compounds"][0]["revision"] = "deadbeef" * 5
@@ -162,7 +162,7 @@ def test_rename_a_crash_restores_previous_before_retry_resolution(
     candidate_lock = json.loads((next_dir / "install.lock").read_bytes())
     assert prior_lock["generation_id"] != candidate_lock["generation_id"]
 
-    manifest_path = consumer / ".spaex.json"
+    manifest_path = consumer / ".spaex/manifest.json"
     manifest_bytes = manifest_path.read_bytes()
     manifest = json.loads(manifest_bytes)
     manifest["compounds"][0]["revision"] = "deadbeef" * 5

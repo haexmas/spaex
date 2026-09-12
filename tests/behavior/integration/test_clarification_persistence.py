@@ -5,7 +5,7 @@ fragment pair across two molecules:
 
 1. First install: the Composer stub returns Shape B once; the scripted
    operator answers once; the answer persists to `.spaex/clarifications.json`
-   and the Composer is re-invoked with it staged, producing `.spaex.md`.
+   and the Composer is re-invoked with it staged, producing `.spaex/constitution.md`.
 2. Second install, fragment set unchanged: the reproducibility skip (FR-009)
    must reuse the persisted clarification without invoking the Composer or
    the operator at all.
@@ -37,7 +37,7 @@ from spaex.behavior.composer.invoke import (
     RuntimeDescriptor,
 )
 from spaex.cli import install as install_cli
-from spaex.migrate.transform import clone_dir
+from spaex.git.cache import clone_dir
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None, reason="git binary required"
@@ -170,7 +170,8 @@ def _make_consumer_pinning_both(
 ) -> Path:
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-    (consumer / ".spaex.json").write_text(
+    (consumer / ".spaex").mkdir()
+    (consumer / ".spaex/manifest.json").write_text(
         json.dumps(
             {
                 "spaex_version": "4",
@@ -189,7 +190,7 @@ def _make_consumer_pinning_both(
 
 
 def _bump_consumer_revision(consumer: Path, revision: str) -> None:
-    manifest_path = consumer / ".spaex.json"
+    manifest_path = consumer / ".spaex/manifest.json"
     data = json.loads(manifest_path.read_text())
     data["compounds"][0]["revision"] = revision
     manifest_path.write_text(json.dumps(data, indent=2))
@@ -314,7 +315,7 @@ def test_clarification_answered_once_reused_then_reasked_on_body_change(
     assert _run_install(consumer, state_root, monkeypatch) == 0
     assert len(composer.calls) == 2
     assert len(answer_calls) == 1
-    first_bytes = (consumer / ".spaex.md").read_bytes()
+    first_bytes = (consumer / ".spaex/constitution.md").read_bytes()
 
     stored = json.loads((consumer / ".spaex" / "clarifications.json").read_text())
     assert len(stored["clarifications"]) == 1
@@ -333,7 +334,7 @@ def test_clarification_answered_once_reused_then_reasked_on_body_change(
     assert _run_install(consumer, state_root, monkeypatch) == 0
     assert composer.calls == []
     assert answer_calls == []
-    assert (consumer / ".spaex.md").read_bytes() == first_bytes
+    assert (consumer / ".spaex/constitution.md").read_bytes() == first_bytes
 
     # Phase 3: edit focus-a's body via a new publisher revision and bump the
     # consumer's pin. The stale clarification is invalidated, so the
@@ -355,7 +356,7 @@ def test_clarification_answered_once_reused_then_reasked_on_body_change(
     assert len(composer.calls) == 2
     assert len(answer_calls) == 1
 
-    second_bytes = (consumer / ".spaex.md").read_bytes()
+    second_bytes = (consumer / ".spaex/constitution.md").read_bytes()
     assert second_bytes != first_bytes
 
     stored_after = json.loads(

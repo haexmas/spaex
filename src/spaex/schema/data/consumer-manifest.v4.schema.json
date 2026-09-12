@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/haexmas/spaex/schemas/consumer-manifest.v4.schema.json",
   "title": "spaex Consumer Manifest v4",
-  "description": "Schema for a consumer repository's `.spaex.json` v4 file. Structurally identical to v3; only the version-field name (`haex_hive_version` -> `spaex_version`) and value (`3` -> `4`), and the min-version-field name (`haex_hive_min_version` -> `spaex_min_version`), change. See Spec 014.",
+  "description": "Schema for a consumer repository's `.spaex/manifest.json` v4 file.",
   "type": "object",
   "additionalProperties": false,
   "required": ["spaex_version", "identity", "compounds"],

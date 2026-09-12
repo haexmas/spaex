@@ -38,7 +38,7 @@ def _await_ready(ready_file: Path, child: multiprocessing.Process) -> None:
 
 
 def test_lock_file_created_if_absent(tmp_path: Path) -> None:
-    lock_path = tmp_path / ".spaex.json.lock"
+    lock_path = tmp_path / ".spaex/manifest.json.lock"
     assert not lock_path.exists()
     with ManifestLockContext(lock_path, timeout_seconds=1.0):
         assert lock_path.exists()
@@ -46,7 +46,8 @@ def test_lock_file_created_if_absent(tmp_path: Path) -> None:
 
 
 def test_lock_file_not_renamed_or_deleted_on_exit(tmp_path: Path) -> None:
-    lock_path = tmp_path / ".spaex.json.lock"
+    lock_path = tmp_path / ".spaex/manifest.json.lock"
+    lock_path.parent.mkdir(parents=True)
     lock_path.write_bytes(b"pre-existing")
     with ManifestLockContext(lock_path, timeout_seconds=1.0):
         pass
@@ -66,7 +67,7 @@ def test_lock_timeout_parser_accepts_finite_values() -> None:
 
 
 def test_bounded_wait_succeeds_when_lock_frees_in_time(tmp_path: Path) -> None:
-    lock_path = tmp_path / ".spaex.json.lock"
+    lock_path = tmp_path / ".spaex/manifest.json.lock"
     ready = tmp_path / "ready"
 
     ctx = multiprocessing.get_context("spawn")
@@ -81,7 +82,7 @@ def test_bounded_wait_succeeds_when_lock_frees_in_time(tmp_path: Path) -> None:
 
 
 def test_contention_after_timeout_refuses(tmp_path: Path) -> None:
-    lock_path = tmp_path / ".spaex.json.lock"
+    lock_path = tmp_path / ".spaex/manifest.json.lock"
     ready = tmp_path / "ready"
 
     ctx = multiprocessing.get_context("spawn")
@@ -100,7 +101,7 @@ def test_contention_after_timeout_refuses(tmp_path: Path) -> None:
 
 
 def test_fail_fast_with_zero_timeout(tmp_path: Path) -> None:
-    lock_path = tmp_path / ".spaex.json.lock"
+    lock_path = tmp_path / ".spaex/manifest.json.lock"
     ready = tmp_path / "ready"
 
     ctx = multiprocessing.get_context("spawn")
@@ -121,7 +122,7 @@ def test_fail_fast_with_zero_timeout(tmp_path: Path) -> None:
 
 
 def test_nested_acquisition_reuses_context(tmp_path: Path) -> None:
-    lock_path = tmp_path / ".spaex.json.lock"
+    lock_path = tmp_path / ".spaex/manifest.json.lock"
     lock = ManifestLockContext(lock_path, timeout_seconds=1.0)
     with lock:
         # Re-entering the SAME context object must not try to re-acquire.

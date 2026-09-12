@@ -33,7 +33,7 @@ def test_install_produces_byte_identical_v4_lock_across_runs(
     consumer: Path = single_source_constitution_fixture["consumer"]
     state_root: Path = single_source_constitution_fixture["state_root"]
 
-    manifest = json.loads((consumer / ".spaex.json").read_text())
+    manifest = json.loads((consumer / ".spaex/manifest.json").read_text())
     assert manifest["spaex_version"] == "4"
     assert "compounds" in manifest
 

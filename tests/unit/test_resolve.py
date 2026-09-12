@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from spaex.constitution.resolve import resolve_constitution_contributions
-from spaex.migrate.transform import clone_dir
+from spaex.git.cache import clone_dir
 from spaex.model.consumer_manifest import CompoundEntry, ConfigEntry, ConsumerManifest
 from spaex.util.errors import (
     AtomIdCollisionError,

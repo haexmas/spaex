@@ -1,4 +1,4 @@
-"""ConsumerManifest — parsed `.spaex.json` v3.
+"""ConsumerManifest — parsed `.spaex/manifest.json` v4.
 
 Renamed from v2 by Spec 013: top-level `atoms[]` -> `compounds[]`,
 per-entry `includes[]` -> `molecules[]`, `AtomEntry` -> `CompoundEntry`.
@@ -56,7 +56,7 @@ class ConsumerManifest:
         if isinstance(data, dict):
             if "haex_hive_version" in data:
                 raise SpaexVersionUnsupportedError(
-                    message="legacy haex_hive_version is not supported by the v4 read gate",
+                    message="haex_hive_version is not a supported spaex manifest field",
                     context={"version": str(data["haex_hive_version"])},
                 )
             if "spaex_version" in data and data["spaex_version"] != "4":

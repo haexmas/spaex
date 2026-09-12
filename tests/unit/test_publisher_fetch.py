@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from spaex.git import publisher_fetch
-from spaex.migrate.transform import clone_dir
+from spaex.git.cache import clone_dir
 from spaex.util.errors import RevisionNotFoundError, SourceUrlInvalidError
 
 

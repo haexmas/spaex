@@ -54,11 +54,6 @@ def show(
 
     lock = InstallLock.from_json(lock_path.read_bytes())
     constitution_molecules = _constitution_molecules(lock)
-    if not constitution_molecules:
-        raise InstallLockMissingError(
-            message="install.lock has no constitution-contributing molecule",
-        )
-
     body = constitution_path.read_bytes()
 
     stream = out if out is not None else sys.stdout.buffer

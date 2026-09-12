@@ -2,11 +2,11 @@
 
 Unlike Phase 5's T041 (which exercised `_project`-scope routing by calling
 `orchestrate.run()` directly, before the CLI wiring existed), these tests
-drive `.spaex.json`'s `constitution.local_fragments[]` end-to-end through
+drive `.spaex/manifest.json`'s `constitution.local_fragments[]` end-to-end through
 `spaex install`:
 
 - A project with zero pinned molecules and one inline local fragment gets
-  a `.spaex.md` carrying the `_project/<id>` directive (SC-005).
+  a `.spaex/constitution.md` carrying the `_project/<id>` directive (SC-005).
 - A project with zero pinned molecules and one file-reference local
   fragment materializes identically (FR-018's second storage option).
 - A project-local fragment whose bare id matches an atom-provided fragment
@@ -32,7 +32,7 @@ from spaex.behavior.composer.invoke import (
     RuntimeDescriptor,
 )
 from spaex.cli import install as install_cli
-from spaex.migrate.transform import clone_dir
+from spaex.git.cache import clone_dir
 from spaex.util import exit_codes
 from spaex.util.errors import HaexError
 
@@ -102,7 +102,8 @@ def _stub_invoke_composer(
 def _make_consumer(tmp_path: Path, *, local_fragments: list[dict]) -> Path:
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-    (consumer / ".spaex.json").write_text(
+    (consumer / ".spaex").mkdir()
+    (consumer / ".spaex/manifest.json").write_text(
         json.dumps(
             {
                 "spaex_version": "4",
@@ -143,7 +144,7 @@ def test_inline_local_only_fragment_appears_with_project_source(
 
     assert _run_install(consumer, state_root, monkeypatch) == 0
 
-    spaex_md = consumer / ".spaex.md"
+    spaex_md = consumer / ".spaex/constitution.md"
     assert spaex_md.exists()
     content = spaex_md.read_text(encoding="utf-8")
     assert "_project/shared-client" in content
@@ -157,6 +158,7 @@ def test_file_reference_local_fragment_materializes(
 ) -> None:
     consumer = tmp_path / "consumer"
     consumer.mkdir()
+    (consumer / ".spaex").mkdir()
     fragments_dir = consumer / ".spaex" / "local-fragments"
     fragments_dir.mkdir(parents=True)
     (fragments_dir / "no-secrets.md").write_text(
@@ -168,7 +170,7 @@ def test_file_reference_local_fragment_materializes(
         "---\n"
         "**MUST NOT** commit secrets to git.\n"
     )
-    (consumer / ".spaex.json").write_text(
+    (consumer / ".spaex/manifest.json").write_text(
         json.dumps(
             {
                 "spaex_version": "4",
@@ -189,7 +191,7 @@ def test_file_reference_local_fragment_materializes(
 
     assert _run_install(consumer, state_root, monkeypatch) == 0
 
-    content = (consumer / ".spaex.md").read_text(encoding="utf-8")
+    content = (consumer / ".spaex/constitution.md").read_text(encoding="utf-8")
     assert "_project/no-secrets" in content
 
     frag = consumer / ".spaex" / "constitution.d" / "_project" / "no-secrets.md"
@@ -266,7 +268,8 @@ def test_project_local_override_aborts_with_exit_22(
     canonical, head, state_root = _publish_shared_id_molecule(tmp_path)
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-    (consumer / ".spaex.json").write_text(
+    (consumer / ".spaex").mkdir()
+    (consumer / ".spaex/manifest.json").write_text(
         json.dumps(
             {
                 "spaex_version": "4",
@@ -307,4 +310,4 @@ def test_project_local_override_aborts_with_exit_22(
     assert err.exit_code == exit_codes.BEHAVIOR_PROJECT_LOCAL_REFUSE == 22
     assert "shared-client" in str(err)
     assert composer_calls == []
-    assert not (consumer / ".spaex.md").exists()
+    assert not (consumer / ".spaex/constitution.md").exists()

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/haexmas/spaex/schemas/install-lock.v4.schema.json",
   "title": "spaex Install Lockfile v4 (npm/pip-shape simplification)",
-  "description": "Schema for `.spaex/install.lock`. Structurally identical to the v3 npm/pip-shape (Spec 008 2026-09-03 amendment); only the version-field name (`haex_hive_version` -> `spaex_version`) and value (`3` -> `4`) change. Legacy generated_by, constitution, atoms, contributed_paths, generation_inputs, participating_roots, and visibility_marker fields remain rejected by the schema/migration gate.",
+  "description": "Schema for `.spaex/install.lock`. Retired generated_by, constitution, atoms, contributed_paths, generation_inputs, participating_roots, and visibility_marker fields remain rejected by the schema.",
   "type": "object",
   "additionalProperties": false,
   "required": ["spaex_version", "generation_id", "molecules"],

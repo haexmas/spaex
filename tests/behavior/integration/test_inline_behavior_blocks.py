@@ -17,7 +17,7 @@ identical. Verifies:
   `.spaex/constitution.d/<molecule-id>/<fragment-id>.md`.
 - The two materialized files are byte-identical (the only difference
   between the two molecules is *how* the fragment was authored).
-- `spaex install` composes both into `.spaex.md` under the same provenance
+- `spaex install` composes both into `.spaex/constitution.md` under the same provenance
   scheme as any other fragment (SC-001-style directive + provenance check).
 """
 
@@ -40,7 +40,7 @@ from spaex.behavior.composer.invoke import (
     RuntimeDescriptor,
 )
 from spaex.cli import add as add_cli
-from spaex.migrate.transform import clone_dir
+from spaex.git.cache import clone_dir
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None, reason="git binary required"
@@ -157,7 +157,8 @@ def _publish_standalone_and_inline_molecules(tmp_path: Path) -> tuple[str, str, 
 def _make_consumer(tmp_path: Path) -> Path:
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-    (consumer / ".spaex.json").write_text(
+    (consumer / ".spaex").mkdir()
+    (consumer / ".spaex/manifest.json").write_text(
         json.dumps(
             {
                 "spaex_version": "4",
@@ -300,6 +301,6 @@ def test_inline_block_materializes_identically_to_standalone_atom(
     ):
         assert records[_MOL_STANDALONE][field] == records[_MOL_INLINE][field]
 
-    content = (consumer / ".spaex.md").read_text(encoding="utf-8")
+    content = (consumer / ".spaex/constitution.md").read_text(encoding="utf-8")
     assert f"{_MOL_STANDALONE}/spec-first" in content
     assert f"{_MOL_INLINE}/spec-first" in content

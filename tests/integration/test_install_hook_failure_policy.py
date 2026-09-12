@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 from spaex.cli import add as add_cli
-from spaex.migrate.transform import clone_dir
+from spaex.git.cache import clone_dir
 from spaex.model.install_lock import InstallLock
 from spaex.util.errors import HaexError, InstallTransactionFailedError
 
@@ -115,9 +115,10 @@ def _publish_hook_molecule(
 
 
 def _make_consumer(tmp_path: Path) -> tuple[Path, bytes]:
-    """Create a minimal consumer repository and snapshot its .spaex.json bytes."""
+    """Create a minimal consumer repository and snapshot its .spaex/manifest.json bytes."""
     consumer = tmp_path / "consumer"
     consumer.mkdir()
+    (consumer / ".spaex").mkdir()
     manifest_bytes = json.dumps(
         {
             "spaex_version": "4",
@@ -125,7 +126,7 @@ def _make_consumer(tmp_path: Path) -> tuple[Path, bytes]:
             "compounds": [],
         }
     ).encode("utf-8")
-    (consumer / ".spaex.json").write_bytes(manifest_bytes)
+    (consumer / ".spaex/manifest.json").write_bytes(manifest_bytes)
     (consumer / ".harness-id").write_text("com.example.project-consumer")
     return consumer, manifest_bytes
 
@@ -164,12 +165,15 @@ def _read_lock(consumer: Path) -> InstallLock:
 def test_abort_rolls_back_transaction(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """AS1: on_failure=abort with exit 1 rolls back .spaex/ and .spaex.json."""
+    """AS1: on_failure=abort with exit 1 rolls back .spaex/ and .spaex/manifest.json."""
     canonical, head, state_root = _publish_hook_molecule(tmp_path, on_failure="abort")
     consumer, manifest_before = _make_consumer(tmp_path)
     spaex_dir = consumer / ".spaex"
 
-    assert not spaex_dir.exists()
+    assert spaex_dir.exists()
+    assert (spaex_dir / "manifest.json").read_bytes() == manifest_before
+    assert not (spaex_dir / "install.lock").exists()
+    assert not (spaex_dir / "constitution.md").exists()
 
     with pytest.raises(InstallTransactionFailedError) as exc_info:
         _run_add(consumer, state_root, monkeypatch, source_url=canonical, revision=head)
@@ -181,8 +185,10 @@ def test_abort_rolls_back_transaction(
     assert cause.context.get("molecule_id") == _MOLECULE_ID
     assert cause.context.get("hook_failure") == "exit_1"
 
-    assert (consumer / ".spaex.json").read_bytes() == manifest_before
-    assert not spaex_dir.exists()
+    assert (consumer / ".spaex/manifest.json").read_bytes() == manifest_before
+    assert spaex_dir.exists()
+    assert not (spaex_dir / "install.lock").exists()
+    assert not (spaex_dir / "constitution.md").exists()
 
 
 def test_abort_preserves_prior_generation(
@@ -205,7 +211,7 @@ sys.exit(0)
     )
     lock_before = (consumer / ".spaex" / "install.lock").read_bytes()
     constitution_before = (consumer / ".spaex" / "constitution.md").read_bytes()
-    manifest_before = (consumer / ".spaex.json").read_bytes()
+    manifest_before = (consumer / ".spaex/manifest.json").read_bytes()
 
     # Add a new failing commit on top and repin to it.
     working = tmp_path / "publisher-working"
@@ -221,7 +227,7 @@ sys.exit(0)
     with pytest.raises(InstallTransactionFailedError):
         _run_add(consumer, state_root, monkeypatch, source_url=canonical, revision=head_fail)
 
-    assert (consumer / ".spaex.json").read_bytes() == manifest_before
+    assert (consumer / ".spaex/manifest.json").read_bytes() == manifest_before
     assert (consumer / ".spaex" / "install.lock").read_bytes() == lock_before
     assert (consumer / ".spaex" / "constitution.md").read_bytes() == constitution_before
 
@@ -277,8 +283,9 @@ def test_missing_interpreter_abort_rolls_back(
     assert isinstance(cause, HaexError)
     assert cause.context.get("hook_failure") == "interpreter_not_on_path"
 
-    assert (consumer / ".spaex.json").read_bytes() == manifest_before
-    assert not (consumer / ".spaex").exists()
+    assert (consumer / ".spaex/manifest.json").read_bytes() == manifest_before
+    assert (consumer / ".spaex" / "manifest.json").exists()
+    assert not (consumer / ".spaex" / "install.lock").exists()
 
 
 def test_missing_interpreter_warn_records_failed(

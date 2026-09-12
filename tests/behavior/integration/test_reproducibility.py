@@ -1,7 +1,7 @@
-"""Reproducibility: byte-identical `.spaex.md` across two installs (T031, SC-003).
+"""Reproducibility: byte-identical `.spaex/constitution.md` across two installs (T031, SC-003).
 
 Two invocations of `spaex install` on the same fixture must produce the
-same `.spaex.md` bytes. The second run uses the fingerprint short-circuit
+same `.spaex/constitution.md` bytes. The second run uses the fingerprint short-circuit
 in `orchestrate.run` and does not re-invoke the Composer at all; the file
 is reused unchanged.
 """
@@ -26,7 +26,7 @@ from spaex.behavior.composer.invoke import (
 )
 from spaex.cli import add as add_cli
 from spaex.cli import install as install_cli
-from spaex.migrate.transform import clone_dir
+from spaex.git.cache import clone_dir
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None, reason="git binary required"
@@ -104,7 +104,8 @@ def _publish_repro_molecule(tmp_path: Path) -> tuple[str, str, Path]:
 def _make_consumer(tmp_path: Path) -> Path:
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-    (consumer / ".spaex.json").write_text(
+    (consumer / ".spaex").mkdir()
+    (consumer / ".spaex/manifest.json").write_text(
         json.dumps(
             {
                 "spaex_version": "4",
@@ -208,13 +209,13 @@ def test_two_installs_yield_byte_identical_spaex_md(
         _run_add(consumer, state_root, monkeypatch, source_url=canonical, revision=head)
         == 0
     )
-    first = (consumer / ".spaex.md").read_bytes()
+    first = (consumer / ".spaex/constitution.md").read_bytes()
     assert stub.calls == 1
 
     assert _run_install(consumer, state_root, monkeypatch) == 0
-    second = (consumer / ".spaex.md").read_bytes()
+    second = (consumer / ".spaex/constitution.md").read_bytes()
 
-    assert first == second, ".spaex.md must be byte-identical across two installs"
+    assert first == second, ".spaex/constitution.md must be byte-identical across two installs"
     assert stub.calls == 1, (
         "reproducibility skip must reuse the committed artifact without "
         "re-invoking the Composer when fragment set + prompt are unchanged"
@@ -239,7 +240,7 @@ def test_prompt_override_invalidates_reproducibility_skip(
         _run_add(consumer, state_root, monkeypatch, source_url=canonical, revision=head)
         == 0
     )
-    first = (consumer / ".spaex.md").read_bytes()
+    first = (consumer / ".spaex/constitution.md").read_bytes()
     assert stub.calls == 1
 
     (consumer / ".spaex" / "composer-prompt.md").write_text(
@@ -247,7 +248,7 @@ def test_prompt_override_invalidates_reproducibility_skip(
     )
 
     assert _run_install(consumer, state_root, monkeypatch) == 0
-    second = (consumer / ".spaex.md").read_bytes()
+    second = (consumer / ".spaex/constitution.md").read_bytes()
 
     assert first != second
     assert stub.calls == 2

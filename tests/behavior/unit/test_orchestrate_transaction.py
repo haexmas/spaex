@@ -25,7 +25,7 @@ def _prepare_publication(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
     target = spaex_dir / "constitution.d"
     target.mkdir(parents=True)
     (target / "old.md").write_text("old fragment", encoding="utf-8")
-    (repo / ".spaex.md").write_text("old composed", encoding="utf-8")
+    (repo / ".spaex/constitution.md").write_text("old composed", encoding="utf-8")
     clarifications = spaex_dir / "clarifications.json"
     clarifications.write_text("old clarifications", encoding="utf-8")
     staging = spaex_dir / orchestrate.STAGING_DIRNAME
@@ -58,7 +58,7 @@ def test_composed_publication_restores_all_artifacts_on_save_failure(
         )
 
     assert (target / "old.md").read_text(encoding="utf-8") == "old fragment"
-    assert (repo / ".spaex.md").read_text(encoding="utf-8") == "old composed"
+    assert (repo / ".spaex/constitution.md").read_text(encoding="utf-8") == "old composed"
     assert clarifications.read_text(encoding="utf-8") == "old clarifications"
 
 
@@ -81,4 +81,4 @@ def test_empty_publication_restores_files_when_target_cleanup_fails(
         )
 
     assert (target / "old.md").read_text(encoding="utf-8") == "old fragment"
-    assert (repo / ".spaex.md").read_text(encoding="utf-8") == "old composed"
+    assert (repo / ".spaex/constitution.md").read_text(encoding="utf-8") == "old composed"

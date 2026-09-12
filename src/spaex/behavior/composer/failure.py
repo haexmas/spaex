@@ -94,7 +94,7 @@ class ComposerNoRuntimeError(HaexError):
     exit_code: int = exit_codes.BEHAVIOR_COMPOSER_NO_RUNTIME
     hint: str = (
         "No LLM runtime available. Install `claude`, `codex`, or `gemini` "
-        "on PATH so `spaex install` can shell out to compose `.spaex.md`."
+        "on PATH so `spaex install` can shell out to compose `.spaex/constitution.md`."
     )
 
 

@@ -37,7 +37,7 @@ Verified against `.specify/memory/constitution.md` v1.4.1 (all eight NON-NEGOTIA
 | Principle | Status | Notes |
 |---|---|---|
 | I. No Secrets in Git | PASS | Feature does not touch git history. Full env inheritance (FR-013) may expose the operator's environment secrets to the hook subprocess, but reading is not committing; principle I forbids commit only. Documented as an inherent property of the pin-based trust model. |
-| II. No Local Absolute Paths in Versioned Config | PASS | Consumer-facing artifacts (`.spaex.json`, molecule manifest, install.lock) contain no local paths. Molecule-cache absolute paths are computed internally at runtime, never committed. |
+| II. No Local Absolute Paths in Versioned Config | PASS | Consumer-facing artifacts (`.spaex/manifest.json`, molecule manifest, install.lock) contain no local paths. Molecule-cache absolute paths are computed internally at runtime, never committed. |
 | III. Project Identity Is Device-Independent | N/A | Feature does not touch project-identity resolution. |
 | IV. Cross-Repo References Pin Immutable Revisions | PASS | `install_hook.script` is molecule-directory-relative, resolved against the pinned publisher-cache tree (immutable per 40-hex SHA). FR-014 canonicalises the resolved path and enforces cache-containment. |
 | V. External Sources Are Opt-in Per Project | PASS | Hook execution is opt-in via `spaex add --revision <sha>` (adoption is the opt-in). Consumer can globally opt out of hook execution via `--no-install-hooks` (FR-026). |

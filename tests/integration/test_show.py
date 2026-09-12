@@ -72,7 +72,7 @@ def test_no_preface_prints_only_body(single_source_constitution_fixture: dict) -
 def test_missing_constitution_refuses(tmp_path: Path) -> None:
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-
+    (consumer / ".spaex").mkdir()
     proc = _show(consumer, state_root=tmp_path / "state")
     assert proc.returncode == 2
     assert b"key=constitution-not-assembled" in proc.stderr

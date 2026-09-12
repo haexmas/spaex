@@ -69,7 +69,7 @@ from a successful archive that produces an empty directory.
 ## Relationships
 
 ```text
-ConsumerManifest (.spaex.json)
+ConsumerManifest (.spaex/manifest.json)
   └── compounds[] (source, revision, molecules[])
         └── PublisherManifest (fetched via git_show.show_bytes — UNCHANGED)
               └── molecules[molecule_id] { path, version }

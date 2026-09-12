@@ -39,7 +39,7 @@ from spaex.behavior.composer.invoke import (
 )
 from spaex.cli import add as add_cli
 from spaex.cli.main import main
-from spaex.migrate.transform import clone_dir
+from spaex.git.cache import clone_dir
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None, reason="git binary required"
@@ -135,7 +135,8 @@ def _commit_modality_change(
 def _make_consumer(tmp_path: Path) -> Path:
     consumer = tmp_path / "consumer"
     consumer.mkdir()
-    (consumer / ".spaex.json").write_text(
+    (consumer / ".spaex").mkdir()
+    (consumer / ".spaex/manifest.json").write_text(
         json.dumps(
             {
                 "spaex_version": "4",
@@ -148,7 +149,7 @@ def _make_consumer(tmp_path: Path) -> Path:
 
 
 def _bump_consumer_revision(consumer: Path, revision: str) -> None:
-    manifest_path = consumer / ".spaex.json"
+    manifest_path = consumer / ".spaex/manifest.json"
     data = json.loads(manifest_path.read_text())
     data["compounds"][0]["revision"] = revision
     manifest_path.write_text(json.dumps(data, indent=2))
@@ -179,7 +180,7 @@ def _seed_check_artifacts(consumer: Path) -> None:
 def _snapshot_check_artifacts(consumer: Path) -> dict[str, object]:
     """Read check-managed files and directory contents for byte comparison."""
     roots = (
-        ".spaex.md",
+        ".spaex/constitution.md",
         ".spaex/constitution.d",
         ".spaex/clarifications.json",
         ".spaex/.stale",
@@ -317,7 +318,7 @@ def test_check_reports_stale_without_invoking_composer(
         == 0
     )
     assert stub.calls == 1
-    before = (consumer / ".spaex.md").read_bytes()
+    before = (consumer / ".spaex/constitution.md").read_bytes()
 
     new_head = _commit_modality_change(working, state_root, new_modality="SHOULD")
     _bump_consumer_revision(consumer, new_head)
@@ -325,8 +326,8 @@ def test_check_reports_stale_without_invoking_composer(
     rc = _run_constitution_build(consumer, state_root, monkeypatch, "--check")
     assert rc == 1, "a changed fragment set must report stale under --check"
     assert stub.calls == 1, "--check must never invoke the Composer, even when stale"
-    assert (consumer / ".spaex.md").read_bytes() == before, (
-        "--check must not write .spaex.md"
+    assert (consumer / ".spaex/constitution.md").read_bytes() == before, (
+        "--check must not write .spaex/constitution.md"
     )
 
 
@@ -369,7 +370,7 @@ def test_plain_build_recomposes_when_stale(
     rc = _run_constitution_build(consumer, state_root, monkeypatch)
     assert rc == 0
     assert stub.calls == 2
-    assert b"## SHOULD" in (consumer / ".spaex.md").read_bytes()
+    assert b"## SHOULD" in (consumer / ".spaex/constitution.md").read_bytes()
 
     rc = _run_constitution_build(consumer, state_root, monkeypatch, "--check")
     assert rc == 0
@@ -408,7 +409,7 @@ def test_force_check_matches_when_rebuild_is_reproducible(
         == 0
     )
     assert stub.calls == 1
-    before = (consumer / ".spaex.md").read_bytes()
+    before = (consumer / ".spaex/constitution.md").read_bytes()
     _seed_check_artifacts(consumer)
     artifacts_before = _snapshot_check_artifacts(consumer)
 
@@ -417,7 +418,7 @@ def test_force_check_matches_when_rebuild_is_reproducible(
     )
     assert rc == 0, "a reproducible rebuild must report a match"
     assert stub.calls == 2, "--force --check must invoke the Composer for real"
-    assert (consumer / ".spaex.md").read_bytes() == before
+    assert (consumer / ".spaex/constitution.md").read_bytes() == before
     assert _snapshot_check_artifacts(consumer) == artifacts_before
 
 
@@ -437,7 +438,7 @@ def test_force_check_reports_drift_when_rebuild_differs(
         == 0
     )
     assert stub.calls == 1
-    before = (consumer / ".spaex.md").read_bytes()
+    before = (consumer / ".spaex/constitution.md").read_bytes()
     _seed_check_artifacts(consumer)
     artifacts_before = _snapshot_check_artifacts(consumer)
 
@@ -446,7 +447,7 @@ def test_force_check_reports_drift_when_rebuild_differs(
     )
     assert rc == 1, "drift between the fresh rebuild and the committed file is reported"
     assert stub.calls == 2
-    assert (consumer / ".spaex.md").read_bytes() == before, (
+    assert (consumer / ".spaex/constitution.md").read_bytes() == before, (
         "--check must never persist a rebuild, even combined with --force"
     )
     assert _snapshot_check_artifacts(consumer) == artifacts_before

@@ -32,7 +32,7 @@ def test_multi_source_install_refuses_without_deleting_existing_outputs(
     consumer: Path = multi_source_constitution_fixture["consumer"]
     state_root: Path = multi_source_constitution_fixture["state_root"]
     live = consumer / ".spaex"
-    live.mkdir()
+    live.mkdir(exist_ok=True)
     constitution = live / "constitution.md"
     constitution.write_bytes(b"existing\n")
 

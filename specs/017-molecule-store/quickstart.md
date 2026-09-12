@@ -22,7 +22,7 @@ import pytest
 
 from spaex.git.molecule_store import get_or_extract
 from spaex.git import revparse
-from spaex.migrate.transform import clone_dir
+from spaex.git.cache import clone_dir
 from spaex.util.errors import MoleculeTreeExtractionError, MoleculeTreePathNotFoundError
 
 # --- Set up a tiny publisher repo with one molecule ---

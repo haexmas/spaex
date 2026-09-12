@@ -1,9 +1,9 @@
 """Bootstrap discoverability integration test (Spec 023 T034, SC-007 automated portion).
 
 Simulates the "mocked agent session reads its global instruction file, then
-loads `.spaex.md`" flow. Real runtime processes are not launched; the test
+loads `.spaex/constitution.md`" flow. Real runtime processes are not launched; the test
 verifies the bootstrap block's instruction survives round-trip and the
-`.spaex.md` referenced from the working directory is discovered along the
+`.spaex/constitution.md` referenced from the working directory is discovered along the
 git-root walk documented in contracts/bootstrap-block.md.
 """
 
@@ -19,12 +19,12 @@ from spaex.behavior import bootstrap
 def _find_spaex_md(cwd: Path) -> Path | None:
     """Mimic what an agent runtime does after reading the bootstrap block.
 
-    Walks from `cwd` upward until it finds `.spaex.md` or a `.git` directory
+    Walks from `cwd` upward until it finds `.spaex/constitution.md` or a `.git` directory
     (whichever comes first).
     """
     current = cwd.resolve()
     while True:
-        candidate = current / ".spaex.md"
+        candidate = current / ".spaex/constitution.md"
         if candidate.exists():
             return candidate
         if (current / ".git").exists():
@@ -41,7 +41,8 @@ def test_mocked_runtime_finds_spaex_md_after_bootstrap(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()
     (project / ".git").mkdir()
-    (project / ".spaex.md").write_text(
+    (project / ".spaex").mkdir()
+    (project / ".spaex/constitution.md").write_text(
         '<!-- spaex-composed:source_hash="' + "a" * 64 + '" '
         'build_input_hash="' + "b" * 64 + '" version="1" -->\n'
         "# spaex Behavior Harness\n\n## MUST\n- Do a thing. _[from `mol/rule`]_\n",
@@ -51,13 +52,13 @@ def test_mocked_runtime_finds_spaex_md_after_bootstrap(tmp_path: Path) -> None:
     outcomes = bootstrap.install([bootstrap.Runtime.CLAUDE], home=home, env={})
     assert outcomes[0].action == "created"
     global_instructions = (home / ".claude" / "CLAUDE.md").read_text(encoding="utf-8")
-    assert ".spaex.md" in global_instructions
+    assert ".spaex/constitution.md" in global_instructions
 
     subdir = project / "src" / "sub"
     subdir.mkdir(parents=True)
     discovered = _find_spaex_md(subdir)
     assert discovered is not None
-    assert discovered == project / ".spaex.md"
+    assert discovered == project / ".spaex/constitution.md"
     body = discovered.read_text(encoding="utf-8")
     assert "## MUST" in body
     assert "- Do a thing." in body

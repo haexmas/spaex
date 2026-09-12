@@ -17,7 +17,7 @@ from pathlib import Path
 from spaex.git import molecule_store
 from spaex.git import revparse as git_revparse
 from spaex.git import show as git_show
-from spaex.migrate.transform import clone_dir
+from spaex.git.cache import clone_dir
 from spaex.model.consumer_manifest import ConsumerManifest
 from spaex.model.install_lock import ConstitutionSource
 from spaex.model.molecule_manifest import InstallHook, MoleculeManifest

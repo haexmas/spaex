@@ -18,7 +18,7 @@ This walkthrough exercises the P1 story: a molecule author declares `install_hoo
 ```bash
 export SPAEX_STATE=/tmp/spaex-016-quickstart/state
 export CANONICAL=https://example.invalid/demo/publisher
-# spaex.migrate.transform.clone_dir shape: <state>/repos/<sha256-first-16>
+# spaex.git.cache.clone_dir shape: <state>/repos/<sha256-first-16>
 DIGEST=$(python3 -c "import hashlib,sys; print(hashlib.sha256(sys.argv[1].encode()).hexdigest()[:16])" "$CANONICAL")
 export CACHE_DIR="$SPAEX_STATE/repos/$DIGEST"
 mkdir -p "$SPAEX_STATE/repos"
@@ -150,10 +150,10 @@ git add README.md
 git commit -qm "seed"
 ```
 
-Seed the consumer manifest at `.spaex.json`:
+Seed the consumer manifest at `.spaex/manifest.json`:
 
 ```bash
-cat > .spaex.json <<'JSON'
+cat > .spaex/manifest.json <<'JSON'
 {
   "spaex_version": "4",
   "identity": "com.example.demo-consumer",
@@ -289,7 +289,7 @@ cd /tmp/spaex-016-quickstart/consumer
 spaex --repo-root . add "$CANONICAL" com.example.demo.hello-hook \
   --revision "$PUBLISHER_SHA_ABORT"
 # Expected: install fails with install-failed, managed .spaex state rolls back,
-# and the delegated .spaex.json compound update is reverted.
+# and the delegated .spaex/manifest.json compound update is reverted.
 ```
 
 ## 6. Cleanup
@@ -306,7 +306,7 @@ rm -rf /tmp/spaex-016-quickstart
 - **User Story 2 (P2)**: `on_failure: "warn"` produces a non-fatal failure with `hook_status: "failed"` in install.lock and CLI exit 0. Switching to `on_failure: "abort"` demonstrates the rollback path.
 
 Consumer artefacts observed (all locations relative to the consumer repo root):
-- `.spaex.json` (compound entry with pinned SHA, unchanged shape from Spec 013/014)
+- `.spaex/manifest.json` (compound entry with pinned SHA, unchanged shape from Spec 013/014)
 - `.spaex/constitution.md` (assembled from the molecule's constitution atom)
 - `.spaex/install.lock` (new `hook_status` field on the per-molecule record)
 - `.gitignore` (line appended by the hook)

@@ -113,7 +113,7 @@ _Change fragments in `.spaex/constitution.d/` and re-run install._
 - ...
 ```
 
-The sentinel-wrapped JSON at the top is parsed and stripped; what follows is the raw `.spaex.md` content.
+The sentinel-wrapped JSON at the top is parsed and stripped; what follows is the raw `.spaex/constitution.md` content.
 
 ### Shape B: clarification questions (composed constitution NOT yet written)
 

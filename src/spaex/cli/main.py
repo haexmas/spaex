@@ -15,6 +15,7 @@ from spaex.install.manifest_lock import (
     parse_lock_timeout,
 )
 from spaex.model.version_constraint import VersionConstraint
+from spaex.paths import MANIFEST_RELATIVE_PATH, manifest_path
 from spaex.util import exit_codes
 from spaex.util.errors import HaexError, VersionBelowMinError
 
@@ -39,11 +40,11 @@ INSTALLED_VERSION_STRING = ".".join(str(n) for n in INSTALLED_VERSION)
 
 def _check_min_version(repo_root: Path) -> None:
     """Refuse execution when the repository requires a newer spaex version."""
-    manifest_path = repo_root / ".spaex.json"
-    if not manifest_path.exists():
+    path = manifest_path(repo_root)
+    if not path.exists():
         return
     try:
-        raw = manifest_path.read_bytes()
+        raw = path.read_bytes()
         data = json.loads(raw.decode("utf-8"))
     except (OSError, ValueError):
         return
@@ -72,15 +73,6 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    migrate_help = "rewrite v1, v2, or v3 manifests into their v4 shape (Spec 014)"
-    migrate = subparsers.add_parser(
-        "migrate",
-        help=migrate_help,
-        description=migrate_help,
-    )
-    migrate.add_argument("--dry-run", action="store_true")
-    migrate.add_argument("--check", action="store_true")
-
     constitution = subparsers.add_parser("constitution", help="constitution commands")
     constitution_sub = constitution.add_subparsers(dest="constitution_command", required=True)
 
@@ -90,7 +82,7 @@ def _build_parser() -> argparse.ArgumentParser:
     build = constitution_sub.add_parser(
         "build",
         help=(
-            "build .spaex.md; reuse matching output unless --force, which "
+            "build .spaex/constitution.md; reuse matching output unless --force, which "
             "guarantees Composer invocation (Spec 023)"
         ),
     )
@@ -104,7 +96,7 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="check_only",
         action="store_true",
         help=(
-            "exit 0 if .spaex.md matches the current fingerprints, "
+            "exit 0 if .spaex/constitution.md matches the current fingerprints, "
             "non-zero otherwise; never invokes the Composer unless "
             "combined with --force"
         ),
@@ -112,7 +104,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     trace = constitution_sub.add_parser(
         "trace",
-        help="print provenance for a composed .spaex.md clause (Spec 023)",
+        help="print provenance for a composed .spaex/constitution.md clause (Spec 023)",
     )
     trace.add_argument(
         "query",
@@ -130,7 +122,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
     install = subparsers.add_parser(
         "install",
-        help="resolve `.spaex.json` molecules and publish a new generation (Spec 008)",
+        help=(
+            f"resolve `{MANIFEST_RELATIVE_PATH}` molecules and publish "
+            "a new generation (Spec 008)"
+        ),
     )
     install.add_argument(
         "--lock-timeout",
@@ -200,7 +195,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     remove_parser = subparsers.add_parser(
         "remove",
-        help="retract one or more molecules from .spaex.json (Spec 013)",
+        help=f"retract one or more molecules from {MANIFEST_RELATIVE_PATH} (Spec 013)",
     )
     remove_cli.add_arguments(remove_parser)
 
@@ -238,10 +233,6 @@ def main(argv: Sequence[str] | None = None) -> int:
                     exit_code=exit_codes.USAGE,
                     hint="Choose either --dry-run or --check.",
                 )
-        if args.command == "migrate":
-            from spaex.cli import migrate as migrate_cli
-
-            return migrate_cli.run(args)
         if args.command == "constitution":
             from spaex.cli import constitution as constitution_cli
 

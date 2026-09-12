@@ -34,8 +34,8 @@ import tarfile
 import tempfile
 from pathlib import Path
 
+from spaex.git.cache import clone_dir
 from spaex.install.manifest_lock import DEFAULT_LOCK_TIMEOUT_SECONDS, ManifestLockContext
-from spaex.migrate.transform import clone_dir
 from spaex.model.repo_relative_path import RepoRelativePath
 from spaex.util.errors import MoleculeTreeExtractionError, MoleculeTreePathNotFoundError
 
