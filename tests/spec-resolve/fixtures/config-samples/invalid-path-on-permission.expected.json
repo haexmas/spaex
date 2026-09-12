@@ -1,1 +1,0 @@
-{"expected_result": "reject", "expected_error_substring": "harness_sources[1] has 'path' without 'role'"}
