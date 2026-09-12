@@ -208,14 +208,15 @@ def test_two_installs_yield_byte_identical_spaex_md(
         _run_add(consumer, state_root, monkeypatch, source_url=canonical, revision=head)
         == 0
     )
+    assert _run_install(consumer, state_root, monkeypatch) == 0
     first = (consumer / ".spaex.md").read_bytes()
-    assert stub.calls == 1
+    assert stub.calls == 2
 
     assert _run_install(consumer, state_root, monkeypatch) == 0
     second = (consumer / ".spaex.md").read_bytes()
 
     assert first == second, ".spaex.md must be byte-identical across two installs"
-    assert stub.calls == 1, (
+    assert stub.calls == 2, (
         "reproducibility skip must reuse the committed artifact without "
         "re-invoking the Composer when fragment set + prompt are unchanged"
     )
@@ -239,8 +240,9 @@ def test_prompt_override_invalidates_reproducibility_skip(
         _run_add(consumer, state_root, monkeypatch, source_url=canonical, revision=head)
         == 0
     )
+    assert _run_install(consumer, state_root, monkeypatch) == 0
     first = (consumer / ".spaex.md").read_bytes()
-    assert stub.calls == 1
+    assert stub.calls == 2
 
     (consumer / ".spaex" / "composer-prompt.md").write_text(
         "custom prompt override for this project\n", encoding="utf-8"
@@ -250,4 +252,4 @@ def test_prompt_override_invalidates_reproducibility_skip(
     second = (consumer / ".spaex.md").read_bytes()
 
     assert first != second
-    assert stub.calls == 2
+    assert stub.calls == 3

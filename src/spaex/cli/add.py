@@ -434,6 +434,8 @@ def run(args: argparse.Namespace) -> int:
             # aborting this `spaex add`; reconciliation is deferred to the
             # next `spaex install` (contracts/cli-surface.md §add/remove).
             abort_on_behavior_contradiction=False,
+            publish_behavior_artifacts=False,
+            force_behavior_check=True,
         )
 
         sys.stdout.write(

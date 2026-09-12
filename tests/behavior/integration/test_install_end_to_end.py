@@ -264,6 +264,7 @@ def test_install_composes_both_fragments_into_spaex_md(
         )
         == 0
     )
+    assert _run_install(consumer, state_root, monkeypatch) == 0
 
     spaex_md = consumer / ".spaex.md"
     assert spaex_md.exists()
@@ -299,8 +300,8 @@ def _add_and_prepare_for_reinstall(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[Path, Path]:
-    """Add both molecules with a working Shape A stub, then delete `.spaex.md`
-    so the next install cannot short-circuit via the reproducibility skip.
+    """Add both molecules, install once, then delete `.spaex.md` so the next
+    install cannot short-circuit via the reproducibility skip.
     """
     canonical, head, state_root = _publish_two_molecules_with_fragments(tmp_path)
     consumer = _make_consumer(tmp_path)
@@ -321,6 +322,7 @@ def _add_and_prepare_for_reinstall(
         )
         == 0
     )
+    assert _run_install(consumer, state_root, monkeypatch) == 0
     (consumer / ".spaex.md").unlink()
     return consumer, state_root
 
