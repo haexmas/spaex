@@ -156,9 +156,9 @@ Most authoring machinery lands in Phase 2 (fragment schema + materialize). This 
 
 Reproducibility groundwork lands in Phase 3 (T031). This phase adds the fragment-drift-detection test.
 
-- [ ] T048 [US6] Implement source/build-input fingerprint comparison in src/spaex/behavior/emit.py: on `spaex install`, if the on-disk `.spaex.md` header's `source_hash` and `build_input_hash` match the locally computed hashes for current fragments, effective prompt, prompt version, and valid clarifications, skip Composer invocation (FR-009)
-- [ ] T049 [P] [US6] Integration test tests/behavior/integration/test_source_hash_skip.py: two runs with identical committed state, second run must not invoke the Composer; changing fragment metadata or the effective prompt must invalidate the matching fingerprint (User Story 6 acceptance scenario 1)
-- [ ] T050 [P] [US6] Integration test tests/behavior/integration/test_fragment_drift.py: fragments changed on disk without a Composer run; next `spaex install` detects drift and invokes the Composer (User Story 6 acceptance scenario 3)
+- [X] T048 [US6] Implement source/build-input fingerprint comparison in src/spaex/behavior/emit.py: on `spaex install`, if the on-disk `.spaex.md` header's `source_hash` and `build_input_hash` match the locally computed hashes for current fragments, effective prompt, prompt version, and valid clarifications, skip Composer invocation (FR-009)
+- [X] T049 [P] [US6] Integration test tests/behavior/integration/test_source_hash_skip.py: two runs with identical committed state, second run must not invoke the Composer; changing fragment metadata or the effective prompt must invalidate the matching fingerprint (User Story 6 acceptance scenario 1)
+- [X] T050 [P] [US6] Integration test tests/behavior/integration/test_fragment_drift.py: fragments changed on disk without a Composer run; next `spaex install` detects drift and invokes the Composer (User Story 6 acceptance scenario 3)
 
 **Checkpoint**: US6 reproducibility guarantees verified.
 
