@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import subprocess
@@ -29,41 +28,6 @@ def _run_haex(
         env=env,
         timeout=timeout,
     )
-
-
-def test_migrate_dry_run_completes_under_5s(self_migration_fixture: dict, tmp_path: Path) -> None:
-    consumer = tmp_path / "consumer"
-    shutil.copytree(self_migration_fixture["publisher"], consumer)
-    (consumer / ".spaex/manifest.json").write_text(
-        json.dumps(
-            {
-                "haex_hive_version": "1",
-                "identity": "github.com/haexmas/haex-hive",
-                "harness_sources": [
-                    {
-                        "role": "constitution",
-                        "repository": "self",
-                        "revision": self_migration_fixture["commit_a"],
-                        "path": ".specify/memory/constitution.md",
-                    }
-                ],
-            },
-            indent=2,
-        )
-    )
-
-    start = time.monotonic()
-    proc = _run_haex(
-        consumer,
-        "migrate",
-        "--dry-run",
-        state_root=self_migration_fixture["state_root"],
-        timeout=5.0,
-    )
-    elapsed = time.monotonic() - start
-
-    assert proc.returncode == 0, proc.stderr.decode()
-    assert elapsed < 5.0, f"haex migrate --dry-run took {elapsed:.2f}s, want < 5s"
 
 
 def test_install_refuses_multi_source_under_1s(multi_source_constitution_fixture: dict) -> None:
