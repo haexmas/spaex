@@ -87,6 +87,44 @@ def _build_parser() -> argparse.ArgumentParser:
     show = constitution_sub.add_parser("show", help="print effective constitution")
     show.add_argument("--no-preface", action="store_true")
 
+    build = constitution_sub.add_parser(
+        "build",
+        help="explicitly invoke the Composer and write .spaex.md (Spec 023)",
+    )
+    build.add_argument(
+        "--force",
+        action="store_true",
+        help="rerun the Composer even when fingerprints already match",
+    )
+    build.add_argument(
+        "--check",
+        dest="check_only",
+        action="store_true",
+        help=(
+            "exit 0 if .spaex.md matches the current fingerprints, "
+            "non-zero otherwise; never invokes the Composer unless "
+            "combined with --force"
+        ),
+    )
+
+    trace = constitution_sub.add_parser(
+        "trace",
+        help="print provenance for a composed .spaex.md clause (Spec 023)",
+    )
+    trace.add_argument(
+        "query",
+        help=(
+            "exact scoped fragment id <molecule-id>/<fragment-id>, or a "
+            "substring of a clause's text"
+        ),
+    )
+    trace.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="output format (default: text)",
+    )
+
     install = subparsers.add_parser(
         "install",
         help="resolve `.spaex.json` molecules and publish a new generation (Spec 008)",
@@ -206,6 +244,14 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             if args.constitution_command == "show":
                 return constitution_cli.run_show(args)
+            if args.constitution_command == "build":
+                from spaex.cli import behavior_commands
+
+                return behavior_commands.run_constitution_build(args)
+            if args.constitution_command == "trace":
+                from spaex.cli import behavior_commands
+
+                return behavior_commands.run_constitution_trace(args)
         if args.command == "install":
             if getattr(args, "global_mode", False):
                 from spaex.cli import behavior_commands
