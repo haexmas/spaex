@@ -22,6 +22,7 @@ from typing import Literal
 from spaex.behavior import orchestrate as behavior_orchestrate
 from spaex.behavior.fragment import BehaviorFragment
 from spaex.behavior.materialize import project_local_from_config
+from spaex.behavior.stale import STALE_FILENAME, StaleMarker, read_stale
 from spaex.constitution.publish import (
     CONSTITUTION_PATH,
     publish_constitution,
@@ -182,6 +183,18 @@ def run(
     repo_root = Path(args.repo_root).resolve()
     state_root = default_state_root()
     skip_hooks = bool(getattr(args, "skip_hooks", False))
+    abort_on_contradiction = bool(
+        getattr(args, "abort_on_behavior_contradiction", True)
+    )
+    # T054/FR-010a: a real `spaex install` invocation (never an internal
+    # add/remove-triggered one, which runs with abort_on_contradiction=False)
+    # announces a pending FR-024a stale marker before the behavior pipeline
+    # re-invokes the Composer and routes it through the reconciliation
+    # prompt.
+    if abort_on_contradiction:
+        stale_marker = read_stale(repo_root / ".spaex" / STALE_FILENAME)
+        if stale_marker is not None:
+            _announce_stale_contradiction(stale_marker)
     timeout_seconds = getattr(args, "lock_timeout", DEFAULT_LOCK_TIMEOUT_SECONDS)
     if timeout_seconds is None:
         timeout_seconds = DEFAULT_LOCK_TIMEOUT_SECONDS
@@ -246,6 +259,7 @@ def run(
                         state_root=state_root,
                         resolved=resolved,
                         project_local=project_local,
+                        abort_on_contradiction=abort_on_contradiction,
                     )
                     return exit_codes.SUCCESS
                 with _preserve_generation_for_behavior(
@@ -272,6 +286,7 @@ def run(
                         state_root=state_root,
                         resolved=resolved,
                         project_local=project_local,
+                        abort_on_contradiction=abort_on_contradiction,
                     )
                 return exit_codes.SUCCESS
 
@@ -360,6 +375,7 @@ def run(
                     state_root=state_root,
                     resolved=resolved,
                     project_local=project_local,
+                    abort_on_contradiction=abort_on_contradiction,
                 )
                 return exit_codes.SUCCESS
 
@@ -381,6 +397,7 @@ def run(
                     state_root=state_root,
                     resolved=resolved,
                     project_local=project_local,
+                    abort_on_contradiction=abort_on_contradiction,
                 )
             return exit_codes.SUCCESS
     except HaexError:
@@ -538,12 +555,37 @@ def _run_hooks(
     return statuses
 
 
+def _announce_stale_contradiction(marker: StaleMarker) -> None:
+    """T054/FR-010a: surface a pending FR-024a stale marker at install start.
+
+    The behavior pipeline below always re-invokes the Composer in this case
+    (the fragment set changed since the marker was written, so the
+    reproducibility fast-path in `orchestrate.run` cannot match), routing the
+    same contradiction through the interactive reconciliation prompt (or an
+    immediate refusal on a non-interactive terminal) before `.spaex.md` is
+    rewritten.
+    """
+    sys.stdout.write(
+        "NOTE: a previous `spaex add`/`spaex remove` left the composed "
+        f"constitution stale, unresolved (recorded {marker.detected_at}); "
+        "re-running the Composer now to reconcile it:\n"
+    )
+    for question in marker.questions:
+        provenance = ", ".join(
+            f"{cited.get('molecule_id')}/{cited.get('fragment_id')}"
+            for cited in question.cited_fragments
+        )
+        sys.stdout.write(f"  [{question.kind}] {question.question} ({provenance})\n")
+    sys.stdout.flush()
+
+
 def _run_behavior_pipeline(
     *,
     repo_root: Path,
     state_root: Path,
     resolved: list[ResolvedMolecule],
     project_local: Sequence[BehaviorFragment] = (),
+    abort_on_contradiction: bool = True,
 ) -> None:
     """Spec 023 behavior-harness pass.
 
@@ -553,12 +595,18 @@ def _run_behavior_pipeline(
     fragments and no project-local fragment is configured (plan.md
     §Backward compatibility). Composer + emit failures surface as typed
     HaexError with exit codes 20-22 / 30-34.
+
+    `abort_on_contradiction=False` (set only by the internal install that
+    `spaex add`/`spaex remove` trigger via `write_and_reinstall`) requests
+    the FR-024a add-time plausibility check: a Composer Shape B response
+    prints a WARN and writes `.spaex/.stale` instead of aborting.
     """
     outcome = behavior_orchestrate.run(
         repo_root=repo_root,
         state_root=state_root,
         resolved=resolved,
         project_local=project_local,
+        abort_on_contradiction=abort_on_contradiction,
     )
     if outcome.published and not outcome.skipped_composer:
         sys.stdout.write(
@@ -571,6 +619,12 @@ def _run_behavior_pipeline(
         )
     elif outcome.removed_spaex_md:
         sys.stdout.write("removed .spaex.md (no active fragments)\n")
+    elif outcome.stale:
+        sys.stdout.write(
+            f"add-time plausibility check found a cross-molecule "
+            f"contradiction ({outcome.fragment_count} fragment(s)); "
+            ".spaex.md left unchanged, marked stale (see .spaex/.stale)\n"
+        )
     if outcome.published or outcome.skipped_composer:
         # T036: nudge the operator to run `spaex install --global` when no
         # runtime has the bootstrap block yet, so `.spaex.md` gets picked up.
