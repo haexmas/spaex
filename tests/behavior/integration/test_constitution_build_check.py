@@ -387,6 +387,6 @@ def test_force_check_reports_drift_when_rebuild_differs(
     )
     assert rc == 1, "drift between the fresh rebuild and the committed file is reported"
     assert stub.calls == 2
-    after = (consumer / ".spaex.md").read_bytes()
-    assert after != before
-    assert b"nondeterministic" in after
+    assert (consumer / ".spaex.md").read_bytes() == before, (
+        "--check must never persist a rebuild, even combined with --force"
+    )

@@ -166,7 +166,14 @@ def _force_check_build(
     (contracts/cli-surface.md). Forces a real Composer invocation via
     `force_composer=True`, then reports whether the freshly composed
     `.spaex.md` matches what was already on disk (the regenerate-then-diff
-    pattern SC-003 reproducibility verification calls for)."""
+    pattern SC-003 reproducibility verification calls for).
+
+    `--check` never mutates the repository, even combined with `--force`:
+    a CI-verification flag that silently rewrites a committed file on
+    drift would be a footgun (the classic lockfile-drift-check pattern is
+    always read-only). Any change from the fresh rebuild is reverted
+    before returning; only the exit code reports drift.
+    """
     spaex_md_path = repo_root / SPAEX_MD_FILENAME
     before = spaex_md_path.read_bytes() if spaex_md_path.exists() else None
     behavior_orchestrate.run(
@@ -183,9 +190,14 @@ def _force_check_build(
             "rebuild matches the committed .spaex.md\n"
         )
         return exit_codes.SUCCESS
+    if before is None:
+        spaex_md_path.unlink(missing_ok=True)
+    else:
+        spaex_md_path.write_bytes(before)
     sys.stdout.write(
         "spaex constitution build --force --check: a fresh Composer "
-        "rebuild produced different output; .spaex.md has been updated\n"
+        "rebuild produced different output; .spaex.md left unchanged "
+        "(rerun `spaex constitution build --force` to persist it)\n"
     )
     return 1
 
