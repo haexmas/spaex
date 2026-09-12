@@ -172,7 +172,14 @@ def run(args: argparse.Namespace) -> int:
 
         _warn_hook_carriers(repo_root, remove_ids)
 
-        exit_code = write_and_reinstall(repo_root, new_bytes, lock)
+        exit_code = write_and_reinstall(
+            repo_root,
+            new_bytes,
+            lock,
+            # FR-024a: add-time plausibility check, identical treatment to
+            # `spaex add` (contracts/cli-surface.md §add/remove).
+            abort_on_behavior_contradiction=False,
+        )
 
         sys.stdout.write(f"retracted {len(remove_ids)} molecule(s):\n")
         for mid in remove_ids:

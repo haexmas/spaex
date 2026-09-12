@@ -71,6 +71,7 @@ from spaex.behavior.emit import (
 from spaex.behavior.fragment import BehaviorFragment
 from spaex.behavior.materialize import MoleculeInput, materialize
 from spaex.behavior.precheck import PrecheckOutcome
+from spaex.behavior.stale import STALE_FILENAME, clear_stale, write_stale
 from spaex.constitution.resolve import ResolvedMolecule
 from spaex.git import molecule_store
 from spaex.model.molecule_manifest import MoleculeManifest
@@ -91,6 +92,7 @@ class BehaviorOutcome:
     published: bool = False
     skipped_composer: bool = False
     removed_spaex_md: bool = False
+    stale: bool = False
     source_hash: str | None = None
     build_input_hash: str | None = None
     dedup_provenance: dict[str, tuple[BehaviorFragment, ...]] = field(
@@ -106,6 +108,7 @@ def run(
     project_local: Sequence[BehaviorFragment] = (),
     invoke_options: InvokeOptions | None = None,
     operator_answer: Callable[[ClarificationQuestion], str] | None = None,
+    abort_on_contradiction: bool = True,
 ) -> BehaviorOutcome:
     """Execute the behavior-harness transaction for one install.
 
@@ -122,6 +125,15 @@ def run(
     round-trip loop lives here, not in the composer subprocess wrapper).
     Defaults to a real stdin prompt that refuses on a non-interactive
     terminal (Phase 6, T042).
+
+    `abort_on_contradiction` (default `True`, `spaex install`'s behavior):
+    a Composer Shape B response is resolved via the interactive
+    clarification round, aborting with exit 21 on a declined answer
+    (FR-005a, FR-010a). Passing `False` (the add-time plausibility check,
+    FR-024a) instead prints a WARN with provenance, writes `.spaex/.stale`
+    summarizing the finding, and returns without committing `.spaex.md` or
+    `.spaex/constitution.d/` — the operation completes without aborting and
+    reconciliation is deferred to the next `spaex install`.
     """
     if not project_local and not _any_declares_behavior(resolved):
         return BehaviorOutcome(fragment_count=0)
@@ -208,6 +220,21 @@ def run(
     )
 
     if isinstance(invoke_result.result, QuestionsShape):
+        if not abort_on_contradiction:
+            _warn_stale_contradiction(invoke_result.result.questions)
+            write_stale(
+                spaex_dir / STALE_FILENAME,
+                invoke_result.result.questions,
+                detected_at=utc_timestamp(),
+            )
+            shutil.rmtree(staging, ignore_errors=True)
+            return BehaviorOutcome(
+                fragment_count=len(canonical_fragments),
+                stale=True,
+                source_hash=source_hash,
+                build_input_hash=build_input_hash,
+                dedup_provenance=dedup_provenance,
+            )
         store, build_input_hash, invoke_result = _resolve_clarifications(
             questions=invoke_result.result.questions,
             canonical_fragments=canonical_fragments,
@@ -381,6 +408,22 @@ def _default_operator_answer(question: ClarificationQuestion) -> str:
     return sys.stdin.readline().strip()
 
 
+def _warn_stale_contradiction(questions: Sequence[ClarificationQuestion]) -> None:
+    """Print the FR-024a WARN naming each contradiction's fragments/molecules."""
+    sys.stderr.write(
+        "WARN: Composer plausibility check found a cross-molecule semantic "
+        "contradiction; `.spaex.md` is left unchanged and marked stale until "
+        "reconciled by the next `spaex install` (see `.spaex/.stale`):\n"
+    )
+    for question in questions:
+        provenance = ", ".join(
+            f"{cited.get('molecule_id')}/{cited.get('fragment_id')}"
+            for cited in question.cited_fragments
+        )
+        sys.stderr.write(f"WARN:   [{question.kind}] {question.question} ({provenance})\n")
+    sys.stderr.flush()
+
+
 def _publish_empty_artifacts(
     *, repo_root: Path, staging: Path, target: Path, prev: Path
 ) -> bool:
@@ -454,6 +497,11 @@ def _commit_behavior_artifacts(
         raise
     else:
         _reset_scratch(prev)
+        # A successful commit means `.spaex.md` (or its absence, for the
+        # empty-fragment-set path) now reflects the current fragment set, so
+        # any FR-024a stale marker left by a prior `spaex add`/`spaex remove`
+        # no longer applies.
+        clear_stale(repo_root / SPAEX_DIR / STALE_FILENAME)
         return emit_outcome
     finally:
         shutil.rmtree(backup_dir, ignore_errors=True)

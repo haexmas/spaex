@@ -168,10 +168,10 @@ Reproducibility groundwork lands in Phase 3 (T031). This phase adds the fragment
 
 **Purpose**: separate phase because it touches `spaex add` and `spaex remove`, not `spaex install`.
 
-- [ ] T051 Extend `spaex add` in src/spaex/cli/add.py (existing module) to run the Composer plausibility check after the fragment set changes; on cross-molecule semantic contradiction, print WARN with provenance, write `.spaex/.stale` sidecar summarizing the finding, do NOT abort, do NOT regenerate `.spaex.md` (FR-024a, contracts/cli-surface.md §add/remove)
-- [ ] T052 Extend `spaex remove` in src/spaex/cli/remove.py (existing module) identically per FR-024a
-- [ ] T053 [P] Integration test tests/behavior/integration/test_add_time_plausibility.py: `spaex add` of a molecule that semantically contradicts an already-pinned one prints WARN, writes `.spaex/.stale`, exits 0; `.spaex.md` byte-unchanged (FR-024a)
-- [ ] T054 Extend src/spaex/install.py to read `.spaex/.stale` on start and route through the reconciliation prompt (FR-010a) before writing `.spaex.md`
+- [X] T051 Extend `spaex add` in src/spaex/cli/add.py (existing module) to run the Composer plausibility check after the fragment set changes; on cross-molecule semantic contradiction, print WARN with provenance, write `.spaex/.stale` sidecar summarizing the finding, do NOT abort, do NOT regenerate `.spaex.md` (FR-024a, contracts/cli-surface.md §add/remove)
+- [X] T052 Extend `spaex remove` in src/spaex/cli/remove.py (existing module) identically per FR-024a
+- [X] T053 [P] Integration test tests/behavior/integration/test_add_time_plausibility.py: `spaex add` of a molecule that semantically contradicts an already-pinned one prints WARN, writes `.spaex/.stale`, exits 0; `.spaex.md` byte-unchanged (FR-024a)
+- [X] T054 Extend src/spaex/install.py to read `.spaex/.stale` on start and route through the reconciliation prompt (FR-010a) before writing `.spaex.md`
 
 **Checkpoint**: add-time flow verified; stale flag drives install-time reconciliation.
 

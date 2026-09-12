@@ -429,6 +429,11 @@ def run(args: argparse.Namespace) -> int:
             new_bytes,
             lock,
             skip_hooks=bool(getattr(args, "skip_hooks", False)),
+            # FR-024a: add-time plausibility check. A cross-molecule Composer
+            # contradiction warns and marks `.spaex/.stale` instead of
+            # aborting this `spaex add`; reconciliation is deferred to the
+            # next `spaex install` (contracts/cli-surface.md §add/remove).
+            abort_on_behavior_contradiction=False,
         )
 
         sys.stdout.write(
