@@ -176,8 +176,12 @@ class ManifestLockContext:
         kernel32 = ctypes_api.windll.kernel32
         kernel32.CreateMutexW.restype = wintypes.HANDLE
         kernel32.WaitForSingleObject.restype = wintypes.DWORD
+        self._lock_path.touch(exist_ok=True)
+        mutex_path = self._lock_path
+        if mutex_path.parent.name == ".spaex.prev":
+            mutex_path = mutex_path.parent.with_name(".spaex") / mutex_path.name
         lock_key = hashlib.sha256(
-            os.path.normcase(os.path.abspath(str(self._lock_path))).encode("utf-8")
+            os.path.normcase(os.path.abspath(str(mutex_path))).encode("utf-8")
         ).hexdigest()
         mutex_name = f"Local\\spaex-manifest-{lock_key}"
         handle = kernel32.CreateMutexW(
