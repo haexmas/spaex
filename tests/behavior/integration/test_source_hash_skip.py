@@ -36,6 +36,7 @@ from spaex.behavior.composer.invoke import (
     InvokeOutcome,
     RuntimeDescriptor,
 )
+from spaex.behavior.emit import read_header_hashes
 from spaex.cli import add as add_cli
 from spaex.cli import install as install_cli
 from spaex.migrate.transform import clone_dir
@@ -275,6 +276,8 @@ def test_fragment_metadata_change_invalidates_skip(
     )
     assert stub.calls == 1
     first = (consumer / ".spaex.md").read_bytes()
+    first_hashes = read_header_hashes(consumer)
+    assert first_hashes is not None
     assert b"## MUST" in first
 
     new_head = _commit_modality_change(working, state_root, new_modality="SHOULD")
@@ -285,6 +288,14 @@ def test_fragment_metadata_change_invalidates_skip(
         "a metadata-only fragment change must invalidate the fingerprint skip"
     )
     second = (consumer / ".spaex.md").read_bytes()
+    second_hashes = read_header_hashes(consumer)
+    assert second_hashes is not None
+    assert second_hashes[0] != first_hashes[0], (
+        "a metadata-only fragment change must change source_hash"
+    )
+    assert second_hashes[1] == first_hashes[1], (
+        "a metadata-only fragment change must preserve build_input_hash"
+    )
     assert second != first
     assert b"## SHOULD" in second
 
@@ -303,6 +314,8 @@ def test_effective_prompt_change_invalidates_skip(
     )
     assert stub.calls == 1
     first = (consumer / ".spaex.md").read_bytes()
+    first_hashes = read_header_hashes(consumer)
+    assert first_hashes is not None
 
     (consumer / ".spaex" / "composer-prompt.md").write_text(
         "custom project composer prompt override\n", encoding="utf-8"
@@ -313,4 +326,12 @@ def test_effective_prompt_change_invalidates_skip(
         "an effective-prompt change must invalidate build_input_hash"
     )
     second = (consumer / ".spaex.md").read_bytes()
+    second_hashes = read_header_hashes(consumer)
+    assert second_hashes is not None
+    assert second_hashes[0] == first_hashes[0], (
+        "a prompt-only change must preserve source_hash"
+    )
+    assert second_hashes[1] != first_hashes[1], (
+        "a prompt-only change must change build_input_hash"
+    )
     assert second != first
