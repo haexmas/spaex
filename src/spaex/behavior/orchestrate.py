@@ -109,8 +109,6 @@ def run(
     invoke_options: InvokeOptions | None = None,
     operator_answer: Callable[[ClarificationQuestion], str] | None = None,
     abort_on_contradiction: bool = True,
-    publish_artifacts: bool = True,
-    force_composer: bool = False,
 ) -> BehaviorOutcome:
     """Execute the behavior-harness transaction for one install.
 
@@ -132,20 +130,19 @@ def run(
     a Composer Shape B response is resolved via the interactive
     clarification round, aborting with exit 21 on a declined answer
     (FR-005a, FR-010a). Passing `False` (the add-time plausibility check,
-    FR-024a) instead prints a WARN with provenance, writes `.spaex/.stale`
-    summarizing the finding, and returns without committing `.spaex.md` or
-    `.spaex/constitution.d/` — the operation completes without aborting and
-    reconciliation is deferred to the next `spaex install`.
+    FR-024a) only changes handling of a detected cross-molecule
+    *contradiction*: instead of aborting, it prints a WARN with
+    provenance, writes `.spaex/.stale` summarizing the finding, and
+    returns without committing `.spaex.md` or `.spaex/constitution.d/` —
+    the operation completes without aborting and reconciliation is
+    deferred to the next `spaex install`. Every other outcome (no
+    contradiction, empty fragment set, reproducibility skip) publishes
+    normally regardless of `abort_on_contradiction`, exactly as a plain
+    `spaex install` would (contracts/cli-surface.md §add/remove: "On no
+    contradiction, `.spaex.md` regenerates cleanly").
     """
     spaex_dir = repo_root / SPAEX_DIR
     if not project_local and not _any_declares_behavior(resolved):
-        if not publish_artifacts:
-            # Add/remove may retract the final behavior molecule, resolving a
-            # previous contradiction without being allowed to regenerate the
-            # composed artifact at this stage.
-            clear_stale(spaex_dir / STALE_FILENAME)
-            return BehaviorOutcome(fragment_count=0)
-
         target = spaex_dir / CONSTITUTION_D_DIRNAME
         if not any(
             path.exists()
@@ -186,10 +183,6 @@ def run(
     fragments = tuple(m.fragment for m in materialized)
 
     if not fragments:
-        if not publish_artifacts:
-            _reset_scratch(staging)
-            clear_stale(spaex_dir / STALE_FILENAME)
-            return BehaviorOutcome(fragment_count=0)
         removed = _publish_empty_artifacts(
             repo_root=repo_root,
             staging=staging,
@@ -225,18 +218,7 @@ def run(
         existing is not None
         and existing == (source_hash, build_input_hash)
         and not removed_keys
-        and not force_composer
     ):
-        if not publish_artifacts:
-            _reset_scratch(staging)
-            clear_stale(spaex_dir / STALE_FILENAME)
-            return BehaviorOutcome(
-                fragment_count=len(canonical_fragments),
-                skipped_composer=True,
-                source_hash=source_hash,
-                build_input_hash=build_input_hash,
-                dedup_provenance=dedup_provenance,
-            )
         _commit_behavior_artifacts(
             repo_root=repo_root,
             staging=staging,
@@ -303,16 +285,6 @@ def run(
             repo_root=repo_root,
             invoke_options=invoke_options,
             operator_answer=operator_answer or _default_operator_answer,
-        )
-
-    if not publish_artifacts:
-        _reset_scratch(staging)
-        clear_stale(spaex_dir / STALE_FILENAME)
-        return BehaviorOutcome(
-            fragment_count=len(canonical_fragments),
-            source_hash=source_hash,
-            build_input_hash=build_input_hash,
-            dedup_provenance=dedup_provenance,
         )
 
     assert isinstance(invoke_result.result, ComposedShape)

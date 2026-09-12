@@ -42,8 +42,6 @@ def write_and_reinstall(
     *,
     skip_hooks: bool = False,
     abort_on_behavior_contradiction: bool = True,
-    publish_behavior_artifacts: bool = True,
-    force_behavior_check: bool = False,
 ) -> int:
     """Publish the mutated manifest and delegate to ``haex install`` in-process.
 
@@ -66,8 +64,6 @@ def write_and_reinstall(
                 repo_root=str(repo_root),
                 skip_hooks=skip_hooks,
                 abort_on_behavior_contradiction=abort_on_behavior_contradiction,
-                publish_behavior_artifacts=publish_behavior_artifacts,
-                force_behavior_check=force_behavior_check,
             ),
             held_manifest_lock=held_manifest_lock,
         )
