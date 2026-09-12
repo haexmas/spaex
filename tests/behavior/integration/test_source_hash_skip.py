@@ -252,12 +252,10 @@ def test_second_install_skips_composer_when_state_unchanged(
         == 0
     )
     assert stub.calls == 1
-    assert _run_install(consumer, state_root, monkeypatch) == 0
-    assert stub.calls == 2
     first = (consumer / ".spaex.md").read_bytes()
 
     assert _run_install(consumer, state_root, monkeypatch) == 0
-    assert stub.calls == 2, (
+    assert stub.calls == 1, (
         "unchanged fragment set + prompt must skip the Composer entirely (FR-009)"
     )
     assert (consumer / ".spaex.md").read_bytes() == first
@@ -277,8 +275,6 @@ def test_fragment_metadata_change_invalidates_skip(
         == 0
     )
     assert stub.calls == 1
-    assert _run_install(consumer, state_root, monkeypatch) == 0
-    assert stub.calls == 2
     first = (consumer / ".spaex.md").read_bytes()
     first_hashes = read_header_hashes(consumer)
     assert first_hashes is not None
@@ -288,7 +284,7 @@ def test_fragment_metadata_change_invalidates_skip(
     _bump_consumer_revision(consumer, new_head)
 
     assert _run_install(consumer, state_root, monkeypatch) == 0
-    assert stub.calls == 3, (
+    assert stub.calls == 2, (
         "a metadata-only fragment change must invalidate the fingerprint skip"
     )
     second = (consumer / ".spaex.md").read_bytes()
@@ -317,8 +313,6 @@ def test_effective_prompt_change_invalidates_skip(
         == 0
     )
     assert stub.calls == 1
-    assert _run_install(consumer, state_root, monkeypatch) == 0
-    assert stub.calls == 2
     first = (consumer / ".spaex.md").read_bytes()
     first_hashes = read_header_hashes(consumer)
     assert first_hashes is not None
@@ -328,7 +322,7 @@ def test_effective_prompt_change_invalidates_skip(
     )
 
     assert _run_install(consumer, state_root, monkeypatch) == 0
-    assert stub.calls == 3, (
+    assert stub.calls == 2, (
         "an effective-prompt change must invalidate build_input_hash"
     )
     second = (consumer / ".spaex.md").read_bytes()
