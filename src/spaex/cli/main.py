@@ -89,7 +89,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
     build = constitution_sub.add_parser(
         "build",
-        help="explicitly invoke the Composer and write .spaex.md (Spec 023)",
+        help=(
+            "build .spaex.md; reuse matching output unless --force, which "
+            "guarantees Composer invocation (Spec 023)"
+        ),
     )
     build.add_argument(
         "--force",

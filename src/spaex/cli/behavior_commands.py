@@ -9,14 +9,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import shutil
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from spaex.behavior import bootstrap
 from spaex.behavior import orchestrate as behavior_orchestrate
+from spaex.behavior.composer.clarifications import CLARIFICATIONS_FILENAME
+from spaex.behavior.composer.invoke import COMPOSER_LOG_ENV, DEFAULT_COMPOSER_LOG
 from spaex.behavior.emit import SPAEX_MD_FILENAME, read_header_hashes
 from spaex.behavior.fragment import (
     PROJECT_SCOPE,
@@ -24,6 +29,7 @@ from spaex.behavior.fragment import (
     FragmentValidationError,
 )
 from spaex.behavior.materialize import project_local_from_config
+from spaex.behavior.stale import STALE_FILENAME
 from spaex.cli.install import _load_consumer_manifest
 from spaex.constitution.resolve import ResolvedMolecule, resolve_install_inputs
 from spaex.io.state import default_state_root
@@ -175,31 +181,112 @@ def _force_check_build(
     before returning; only the exit code reports drift.
     """
     spaex_md_path = repo_root / SPAEX_MD_FILENAME
-    before = spaex_md_path.read_bytes() if spaex_md_path.exists() else None
-    behavior_orchestrate.run(
-        repo_root=repo_root,
-        state_root=state_root,
-        resolved=resolved,
-        project_local=project_local,
-        force_composer=True,
-    )
-    after = spaex_md_path.read_bytes() if spaex_md_path.exists() else None
-    if before == after:
+    with TemporaryDirectory(prefix=".spaex-force-check-", dir=repo_root) as temp_dir:
+        snapshots = _snapshot_managed_artifacts(repo_root, Path(temp_dir))
+        before = spaex_md_path.read_bytes() if spaex_md_path.exists() else None
+        try:
+            behavior_orchestrate.run(
+                repo_root=repo_root,
+                state_root=state_root,
+                resolved=resolved,
+                project_local=project_local,
+                force_composer=True,
+            )
+            after = spaex_md_path.read_bytes() if spaex_md_path.exists() else None
+            matches = before == after
+        finally:
+            _restore_managed_artifacts(snapshots)
+
+    if matches:
         sys.stdout.write(
             "spaex constitution build --force --check: a fresh Composer "
             "rebuild matches the committed .spaex.md\n"
         )
         return exit_codes.SUCCESS
-    if before is None:
-        spaex_md_path.unlink(missing_ok=True)
-    else:
-        spaex_md_path.write_bytes(before)
     sys.stdout.write(
         "spaex constitution build --force --check: a fresh Composer "
         "rebuild produced different output; .spaex.md left unchanged "
         "(rerun `spaex constitution build --force` to persist it)\n"
     )
     return 1
+
+
+@dataclass(frozen=True)
+class _ManagedArtifactSnapshot:
+    """One managed path and its copy captured before a check-only rebuild."""
+
+    path: Path
+    backup: Path | None
+    is_directory: bool = False
+
+
+def _snapshot_managed_artifacts(
+    repo_root: Path, snapshot_root: Path
+) -> tuple[_ManagedArtifactSnapshot, ...]:
+    """Capture all behavior artifacts, including paths that are absent."""
+    snapshots: list[_ManagedArtifactSnapshot] = []
+    for index, path in enumerate(_managed_artifact_paths(repo_root)):
+        if not os.path.lexists(path):
+            snapshots.append(_ManagedArtifactSnapshot(path=path, backup=None))
+            continue
+        backup = snapshot_root / str(index)
+        if path.is_dir() and not path.is_symlink():
+            shutil.copytree(path, backup)
+            snapshots.append(
+                _ManagedArtifactSnapshot(path=path, backup=backup, is_directory=True)
+            )
+        else:
+            shutil.copy2(path, backup, follow_symlinks=False)
+            snapshots.append(_ManagedArtifactSnapshot(path=path, backup=backup))
+    return tuple(snapshots)
+
+
+def _restore_managed_artifacts(
+    snapshots: Sequence[_ManagedArtifactSnapshot],
+) -> None:
+    """Restore every captured path after a check-only rebuild."""
+    for snapshot in snapshots:
+        _remove_artifact(snapshot.path)
+        if snapshot.backup is None:
+            continue
+        snapshot.path.parent.mkdir(parents=True, exist_ok=True)
+        if snapshot.is_directory:
+            shutil.copytree(snapshot.backup, snapshot.path)
+        else:
+            shutil.copy2(snapshot.backup, snapshot.path, follow_symlinks=False)
+
+
+def _remove_artifact(path: Path) -> None:
+    """Remove a file, symlink, or directory before restoring its snapshot."""
+    if not os.path.lexists(path):
+        return
+    if path.is_dir() and not path.is_symlink():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
+
+
+def _managed_artifact_paths(repo_root: Path) -> tuple[Path, ...]:
+    """Return every repository artifact that a Composer build can mutate."""
+    spaex_dir = repo_root / behavior_orchestrate.SPAEX_DIR
+    paths = [
+        repo_root / SPAEX_MD_FILENAME,
+        spaex_dir / behavior_orchestrate.CONSTITUTION_D_DIRNAME,
+        spaex_dir / CLARIFICATIONS_FILENAME,
+        spaex_dir / STALE_FILENAME,
+        spaex_dir / behavior_orchestrate.STAGING_DIRNAME,
+        spaex_dir / behavior_orchestrate.PREV_DIRNAME,
+    ]
+    raw_log_path = os.environ.get(COMPOSER_LOG_ENV)
+    if raw_log_path:
+        log_path = Path(raw_log_path)
+        if not log_path.is_absolute():
+            log_path = Path.cwd() / log_path
+    else:
+        log_path = repo_root / DEFAULT_COMPOSER_LOG
+    if log_path not in paths:
+        paths.append(log_path)
+    return tuple(paths)
 
 
 def _report_constitution_build(outcome: behavior_orchestrate.BehaviorOutcome) -> None:
