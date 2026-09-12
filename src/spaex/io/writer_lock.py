@@ -201,10 +201,13 @@ class ConstitutionWriterLock:
     def _acquire_posix(self) -> None:
         """Open the mutex and acquire a non-blocking POSIX advisory lock."""
         import fcntl
+        from typing import Any, cast
+
+        fcntl_api = cast(Any, fcntl)
 
         fd = os.open(str(self._lock_path), os.O_RDWR | os.O_CREAT, 0o644)
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl_api.flock(fd, fcntl_api.LOCK_EX | fcntl_api.LOCK_NB)
         except OSError as e:
             os.close(fd)
             if e.errno in (errno.EWOULDBLOCK, errno.EAGAIN):
@@ -217,10 +220,13 @@ class ConstitutionWriterLock:
     def _release_posix(self) -> None:
         """Release and close the POSIX mutex descriptor, if acquired."""
         import fcntl
+        from typing import Any, cast
+
+        fcntl_api = cast(Any, fcntl)
 
         if self._fd is not None:
             try:
-                fcntl.flock(self._fd, fcntl.LOCK_UN)
+                fcntl_api.flock(self._fd, fcntl_api.LOCK_UN)
             finally:
                 os.close(self._fd)
                 self._fd = None

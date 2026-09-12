@@ -103,12 +103,15 @@ class ManifestLockContext:
 
     def _acquire_posix(self, deadline: float) -> None:
         import fcntl
+        from typing import Any, cast
+
+        fcntl_api = cast(Any, fcntl)
 
         fd = os.open(str(self._lock_path), os.O_RDWR | os.O_CREAT, 0o644)
         try:
             while True:
                 try:
-                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    fcntl_api.flock(fd, fcntl_api.LOCK_EX | fcntl_api.LOCK_NB)
                     self._fd = fd
                     return
                 except OSError as e:
@@ -132,10 +135,13 @@ class ManifestLockContext:
 
     def _release_posix(self) -> None:
         import fcntl
+        from typing import Any, cast
+
+        fcntl_api = cast(Any, fcntl)
 
         if self._fd is not None:
             try:
-                fcntl.flock(self._fd, fcntl.LOCK_UN)
+                fcntl_api.flock(self._fd, fcntl_api.LOCK_UN)
             finally:
                 os.close(self._fd)
                 self._fd = None

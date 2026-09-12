@@ -32,6 +32,7 @@ from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
 from spaex.io.state import transaction_paths, write_identity_record
 
@@ -55,7 +56,8 @@ def _crash_after(point: str) -> None:
     """Test seam — abruptly terminate the process at a named boundary."""
     if os.environ.get("SPAEX_CRASH_AFTER") != point:
         return
-    os.kill(os.getpid(), signal.SIGTERM if _IS_WINDOWS else signal.SIGKILL)
+    signal_api = cast(Any, signal)
+    os.kill(os.getpid(), signal_api.SIGTERM if _IS_WINDOWS else signal_api.SIGKILL)
 
 
 def _fsync_dir(path: Path) -> None:
