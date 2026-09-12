@@ -170,13 +170,18 @@ class ManifestLockContext:
         GENERIC_WRITE = 0x40000000
         FILE_SHARE_READ = 0x1
         FILE_SHARE_WRITE = 0x2
+        FILE_SHARE_DELETE = 0x4
         OPEN_ALWAYS = 4
         FILE_ATTRIBUTE_NORMAL = 0x80
 
         handle = kernel32.CreateFileW(
             ctypes.c_wchar_p(str(self._lock_path)),
             wintypes.DWORD(GENERIC_READ | GENERIC_WRITE),
-            wintypes.DWORD(FILE_SHARE_READ | FILE_SHARE_WRITE),
+            # The lock file lives inside the `.spaex/` directory, which is
+            # atomically renamed while this handle remains open. Delete
+            # sharing permits that directory swap without releasing the
+            # advisory lock on Windows.
+            wintypes.DWORD(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE),
             None,
             wintypes.DWORD(OPEN_ALWAYS),
             wintypes.DWORD(FILE_ATTRIBUTE_NORMAL),
