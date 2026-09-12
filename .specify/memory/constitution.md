@@ -1,4 +1,39 @@
 <!--
+Sync Impact Report (2026-09-12 amendment, de-hivification)
+Version change: 1.4.4 -> 2.0.0 (MAJOR: a principle removed)
+Modified sections:
+- REMOVED Principle VII (Relay Unavailability Never Blocks Local Work):
+  entirely about the Nostr relay / liveness plane, a `holzi` project
+  concept (per ADR 0011's own scope-realignment context) with zero
+  corresponding implementation in this repo (`grep -rl "nostr\|relay"
+  src/` returns nothing). Old Principle VIII renumbered to VII
+  (No Concealment Instructions in Agent Output; body unchanged).
+- Principles I, II, III, IV: trimmed multi-device/satellite/relay framing
+  that no longer describes this repo (`OS keychain`/`NIP-44`/`the relay`
+  in I; `per-device`/`satellites` in II; `device-pubkey`/`over the relay`
+  in III; `satellite A`/`satellite B` in IV's rationale), while keeping
+  every still-enforced normative claim unchanged (e.g. Principle III's
+  `.harness-id` mechanism is real, confirmed live in
+  `src/spaex/io/state.py`). No principle's actual requirement was
+  relaxed; only inapplicable delivery-mechanism prose was cut.
+- Development Workflow: "8 principles" -> "7" (count fix after the
+  removal). Governance Enforcement bullet: dropped its stale "once
+  introduced under Phase 7" citation (same retired haex-hive-design.md
+  phasing model already flagged and delinked from the phasing-discipline
+  bullet in the 1.4.2 amendment); kept the same honest "not yet
+  mechanically enforced" framing, just without naming a dead phase.
+- Governance Amendments rule simplified: dropped the unconditional
+  "every amendment needs an ADR" requirement (this doc's own
+  `amendment-procedure-requires-single-commit` fragment/bullet
+  duplicated, more strictly than, the ADR rule already carried by the
+  Development Workflow's "materially affects a principle" bullet).
+  An ADR is now required exactly when a change materially affects a
+  Core Principle, cross-referencing that one rule instead of repeating
+  it. Operator's own critique: three ADRs (0014/0015/0016) for what
+  was mostly delivery-mechanism churn was disproportionate to what most
+  of those changes actually decided.
+See ADR 0017 for the full decision and rationale.
+
 Sync Impact Report (2026-09-12 amendment)
 Version change: 1.4.3 -> 1.4.4 (PATCH: delivery-repo relocation, no principle content change)
 Modified sections:
@@ -85,10 +120,7 @@ same logical change (Governance, below).
 The harness repo and any repo consuming its harness carry only **references** to
 identities — aliases like `identity: work-github`. Key material (SSH private
 keys, OAuth tokens, API keys, passwords, encrypted-at-rest secret blobs) MUST
-NEVER be committed, in any form. Secrets live in the OS keychain of each device
-and are transported between devices only through the NIP-44 one-shot
-provisioning path (see Principle VII); the Nostr relay MUST NOT be used as a
-long-lived encrypted secret store.
+NEVER be committed, in any form, anywhere in repository history.
 
 **Rationale**: encrypted secrets in git are permanent — rotation ≠ deletion, and
 harvest-now-decrypt-later remains a live threat. The only safe rule is that the
@@ -99,24 +131,23 @@ plaintext never enters the repository history in any form.
 Anything committed to a harness or consuming repo MUST resolve identically on
 Linux, macOS, and WSL2. No `/home/haex/...`, no `C:\Users\...`, no
 `~/anything`. Cross-repo references use `repository + revision + repo-relative
-path` (see Principle IV). Machine-local mappings from `project-identity → local
-path` are kept per-device, unsynced, outside version control.
+path` (see Principle IV). A developer's own local path mappings stay in their
+own environment, outside version control.
 
-**Rationale**: satellites run on different OSes with different folder layouts.
-Any committed path that assumes one layout will silently break on another —
-usually mid-session, hard to diagnose.
+**Rationale**: development happens on different OSes with different folder
+layouts. Any committed path that assumes one layout will silently break on
+another — usually mid-session, hard to diagnose.
 
 ### III. Project Identity Is Device-Independent (NON-NEGOTIABLE)
 
 A project's identity is its git remote URL, or (for non-git folder projects) an
 opaque id file (`.harness-id`) inside the folder — never a filesystem path.
-When one satellite addresses another over the relay, the unit is
-`(device-pubkey, project-identity)`, never a raw path. Path resolution is
-strictly a local, private concern of the device that owns the copy.
+Path resolution (mapping a project's identity to where it actually lives on
+disk) is strictly a local, private concern of the machine doing the resolving.
 
-**Rationale**: same as II, applied to the runtime addressing scheme rather than
-the versioned config. Raw paths that cross a device boundary are always a
-mistake.
+**Rationale**: same as II, applied to a project's own identity rather than the
+versioned config it carries. A project's identity must not depend on where it
+happens to live on one particular machine.
 
 ### IV. Cross-Repo References Pin Immutable Revisions (NON-NEGOTIABLE)
 
@@ -129,9 +160,9 @@ document" cases, never for anything a spec, plan, or task consumes. The
 directory whose canonical descriptor is `<path>/manifest.json` (a spec-007
 atom); in both shapes the SHA and immutability rules are unchanged.
 
-**Rationale**: satellite A resolving on Monday and satellite B resolving on
-Wednesday MUST see byte-identical spec content. Anything else creates silent
-cross-device drift that only surfaces as inconsistent agent behavior later.
+**Rationale**: resolving the same reference on Monday and again on Wednesday
+MUST produce byte-identical content. Anything else creates silent drift that
+only surfaces later as inconsistent agent behavior.
 
 ### V. External Sources Are Opt-in Per Project (NON-NEGOTIABLE)
 
@@ -201,19 +232,7 @@ one-off incidents, accumulate contradictions, and quietly change how agents
 behave in ways nobody chose. The review gate is what keeps the signal from
 turning into noise.
 
-### VII. Relay Unavailability Never Blocks Local Work (NON-NEGOTIABLE)
-
-The Nostr relay is used only for the **liveness plane**: status, commands,
-session refs, one-shot secret provisioning. Its unreachability MUST NOT prevent
-an agent CLI on a satellite from doing local work against local disk — only
-mobile visibility/control pauses. All spec content, harness content, and
-project state resolve from git and local files, not from the relay.
-
-**Rationale**: the whole point of autonomous satellites is that they keep
-working when the network doesn't. A design that quietly makes the relay a
-critical dependency for anything real defeats that.
-
-### VIII. No Concealment Instructions in Agent Output (NON-NEGOTIABLE)
+### VII. No Concealment Instructions in Agent Output (NON-NEGOTIABLE)
 
 An agent operating under this harness MUST NOT emit output that instructs a
 downstream reader — human or agent — to conceal information from the
@@ -291,7 +310,7 @@ agent unfiltered — which is every cross-tool handoff in this system.
   prerequisites are actually in daily use. The current phase sequence is
   tracked in the project's own planning docs, not pinned to a specific
   document name here.
-- Design decisions that materially affect any of the 8 principles above MUST be
+- Design decisions that materially affect any of the 7 principles above MUST be
   captured as ADRs under `docs/adr/`, not left in commit messages or chat
   history.
 - All work on this repo lands on `main` through a pull request. `main` is
@@ -330,17 +349,19 @@ agent unfiltered — which is every cross-tool handoff in this system.
 
 - This constitution supersedes local per-spec preferences. Where a spec, plan,
   or task appears to conflict with a principle, the principle wins by default.
-- **Amendments** require: (a) an ADR in `docs/adr/` stating what changes and
-  why, (b) an update to this file, and (c) explicit version bump per the rules
-  below. All three land in the same commit.
+- **Amendments** require: (a) an update to this file, and (b) explicit version
+  bump per the rules below, landing in the same commit. An ADR in `docs/adr/`
+  is additionally required exactly when the change materially affects a Core
+  Principle (see the Development Workflow's ADR rule, above); a pure wording,
+  typo, or non-semantic clarification fix does not need one.
 - **Version bump rules** (semantic versioning):
   - MAJOR: a principle removed, a NON-NEGOTIABLE relaxed, or governance model
     materially changed.
   - MINOR: a new principle added, or an existing one materially expanded.
   - PATCH: wording, clarifications, typo fixes, non-semantic refinements.
 - **Enforcement**: `/speckit-plan` and `/speckit-analyze` MUST check plans and
-  cross-artifact consistency against this document. CI (once introduced under
-  Phase 7) validates that no committed file violates Principles I, II, or IV
-  mechanically.
+  cross-artifact consistency against this document. CI does not yet
+  mechanically enforce this; when introduced, it MUST validate that no
+  committed file violates Principles I, II, or IV.
 
-**Version**: 1.4.4 | **Ratified**: 2026-08-26 | **Last Amended**: 2026-09-12
+**Version**: 2.0.0 | **Ratified**: 2026-08-26 | **Last Amended**: 2026-09-12
