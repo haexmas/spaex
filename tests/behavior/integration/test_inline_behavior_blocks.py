@@ -122,7 +122,7 @@ def _publish_standalone_and_inline_molecules(tmp_path: Path) -> tuple[str, str, 
                 "id": _MOL_INLINE,
                 "version": "1.0.0",
                 "priority": 20,
-                "atoms": {"other": ["README.md"]},
+                "atoms": {"speckit_workflow": ["workflow.md"]},
                 "constitution_fragments": {
                     "speckit-strict": [
                         {
@@ -137,7 +137,9 @@ def _publish_standalone_and_inline_molecules(tmp_path: Path) -> tuple[str, str, 
             indent=2,
         )
     )
-    (dir_inline / "README.md").write_text("speckit-workflow typed atom (test fixture).\n")
+    (dir_inline / "workflow.md").write_text(
+        "speckit-workflow typed atom (test fixture).\n"
+    )
 
     _git(working, "add", ".")
     _git(working, "commit", "-q", "-m", "seed standalone + inline fragment molecules")
@@ -240,8 +242,22 @@ def test_inline_block_materializes_identically_to_standalone_atom(
 ) -> None:
     canonical, head, state_root = _publish_standalone_and_inline_molecules(tmp_path)
     consumer = _make_consumer(tmp_path)
+
+    composer_payloads: list[dict] = []
+
+    def capture_composer_input(
+        composer_input: ComposerInput,
+        *,
+        repo_root: Path,
+        options: InvokeOptions | None = None,
+    ) -> InvokeOutcome:
+        composer_payloads.append(json.loads(composer_input.to_json()))
+        return _stub_invoke_composer(
+            composer_input, repo_root=repo_root, options=options
+        )
+
     monkeypatch.setattr(
-        behavior_orchestrate, "invoke_composer", _stub_invoke_composer
+        behavior_orchestrate, "invoke_composer", capture_composer_input
     )
 
     assert (
@@ -268,6 +284,21 @@ def test_inline_block_materializes_identically_to_standalone_atom(
     # Same id/atom_source/modality/tags/body, authored two different ways:
     # the rendered fragment files must be byte-identical (FR-003).
     assert standalone_path.read_bytes() == inline_path.read_bytes()
+
+    assert len(composer_payloads) == 1
+    records = {
+        fragment["molecule_id"]: fragment
+        for fragment in composer_payloads[0]["fragments"]
+    }
+    for field in (
+        "fragment_id",
+        "atom_source",
+        "modality",
+        "tags",
+        "body",
+        "body_sha256",
+    ):
+        assert records[_MOL_STANDALONE][field] == records[_MOL_INLINE][field]
 
     content = (consumer / ".spaex.md").read_text(encoding="utf-8")
     assert f"{_MOL_STANDALONE}/spec-first" in content
