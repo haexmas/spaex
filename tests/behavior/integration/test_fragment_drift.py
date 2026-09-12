@@ -30,6 +30,7 @@ from spaex.behavior.composer.invoke import (
     InvokeOutcome,
     RuntimeDescriptor,
 )
+from spaex.behavior.emit import read_header_hashes
 from spaex.cli import install as install_cli
 
 _FRAGMENT_HEADER = (
@@ -126,7 +127,12 @@ def test_fragment_edited_on_disk_without_composer_run_is_detected(
     assert _run_install(consumer, state_root, monkeypatch) == 0
     assert stub.calls == 1
     first = (consumer / ".spaex.md").read_bytes()
+    first_hashes = read_header_hashes(consumer)
+    assert first_hashes is not None
     assert b"past 30 days" in first
+
+    assert _run_install(consumer, state_root, monkeypatch) == 0
+    assert stub.calls == 1, "an unchanged local fragment must skip the Composer"
 
     # Drift: the fragment's source file is edited directly on disk. No
     # spaex command touches `.spaex.md` or the Composer in between.
@@ -139,5 +145,13 @@ def test_fragment_edited_on_disk_without_composer_run_is_detected(
         "Composer re-invocation (FR-009, User Story 6 acceptance scenario 3)"
     )
     second = (consumer / ".spaex.md").read_bytes()
+    second_hashes = read_header_hashes(consumer)
+    assert second_hashes is not None
+    assert second_hashes[0] != first_hashes[0], (
+        "editing a local fragment must change source_hash"
+    )
+    assert second_hashes[1] == first_hashes[1], (
+        "editing a local fragment must preserve build_input_hash"
+    )
     assert second != first
     assert b"past 7 days" in second
