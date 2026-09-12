@@ -16,6 +16,7 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -29,6 +30,7 @@ from spaex.behavior.composer.invoke import (
     QuestionsShape,
     RuntimeDescriptor,
 )
+from spaex.cli import install as install_cli
 from spaex.migrate.transform import clone_dir
 
 pytestmark = pytest.mark.skipif(
@@ -151,8 +153,8 @@ def _build_shape_a_body(data: dict[str, object]) -> str:
     return header + f"- Never force-push. _[from `{scoped}`]_\n"
 
 
-def _make_composer_stub():
-    """Shape A for one fragment (MOL_A alone); Shape B once MOL_B joins."""
+def _make_composer_stub(*, question_kind: str = "contradiction"):
+    """Shape A for one fragment; a configurable Shape B once MOL_B joins."""
     calls: list[int] = []
 
     def stub(
@@ -163,7 +165,7 @@ def _make_composer_stub():
     ) -> InvokeOutcome:
         data = json.loads(composer_input.to_json())
         calls.append(len(data["fragments"]))
-        if len(data["fragments"]) < 2:
+        if len(data["fragments"]) < 2 or data["clarifications"]:
             body = _build_shape_a_body(data)
             return InvokeOutcome(
                 result=ComposedShape(body=body),
@@ -171,7 +173,7 @@ def _make_composer_stub():
                 raw_output=body,
             )
         question = ClarificationQuestion(
-            kind="contradiction",
+            kind=question_kind,
             cited_fragments=tuple(
                 {"molecule_id": f["molecule_id"], "fragment_id": f["fragment_id"]}
                 for f in data["fragments"]
@@ -199,7 +201,8 @@ def test_add_of_contradicting_molecule_warns_marks_stale_and_exits_zero(
     stub, calls = _make_composer_stub()
     monkeypatch.setattr(behavior_orchestrate, "invoke_composer", stub)
 
-    # First add: MOL_A alone composes cleanly (Shape A).
+    # Add only changes the manifest and runs the plausibility check; it must
+    # not publish `.spaex.md` even when the Composer returns Shape A.
     rc = haex_add_helpers["run_add"](
         consumer,
         state_root,
@@ -211,6 +214,12 @@ def test_add_of_contradicting_molecule_warns_marks_stale_and_exits_zero(
     assert rc == 0
     assert calls == [1]
     spaex_md_path = consumer / ".spaex.md"
+    assert not spaex_md_path.exists()
+
+    # A normal install is the first operation allowed to publish the
+    # composed constitution. This gives the second add a byte baseline.
+    assert install_cli.run(SimpleNamespace(repo_root=str(consumer))) == 0
+    assert calls == [1, 1]
     assert spaex_md_path.exists()
     baseline_bytes = spaex_md_path.read_bytes()
     assert not (consumer / ".spaex" / ".stale").exists()
@@ -227,7 +236,7 @@ def test_add_of_contradicting_molecule_warns_marks_stale_and_exits_zero(
         revision=head,
     )
     assert rc == 0
-    assert calls == [1, 2]
+    assert calls == [1, 1, 2]
 
     captured = capsys.readouterr()
     assert "WARN" in captured.err
@@ -251,3 +260,142 @@ def test_add_of_contradicting_molecule_warns_marks_stale_and_exits_zero(
     written = json.loads((consumer / ".spaex.json").read_text())
     pinned = {mid for compound in written["compounds"] for mid in compound["molecules"]}
     assert pinned == {_MOL_A, _MOL_B}
+
+
+def test_remove_rechecks_without_regenerating_and_clears_resolved_stale(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, haex_add_helpers, capsys
+) -> None:
+    canonical, head, state_root = _publish_two_molecules(tmp_path)
+    consumer = haex_add_helpers["make_consumer"](tmp_path)
+
+    stub, calls = _make_composer_stub()
+    monkeypatch.setattr(behavior_orchestrate, "invoke_composer", stub)
+
+    assert (
+        haex_add_helpers["run_add"](
+            consumer,
+            state_root,
+            monkeypatch,
+            source_url=canonical,
+            molecule_ids=_MOL_A,
+            revision=head,
+        )
+        == 0
+    )
+    assert install_cli.run(SimpleNamespace(repo_root=str(consumer))) == 0
+    baseline_bytes = (consumer / ".spaex.md").read_bytes()
+
+    assert (
+        haex_add_helpers["run_add"](
+            consumer,
+            state_root,
+            monkeypatch,
+            source_url=canonical,
+            molecule_ids=_MOL_B,
+            revision=head,
+        )
+        == 0
+    )
+    assert (consumer / ".spaex" / ".stale").exists()
+    capsys.readouterr()
+
+    # Removing the contradicting molecule runs the check again even though
+    # the remaining fragment set matches the existing composed artifact.
+    assert (
+        haex_add_helpers["run_remove"](
+            consumer,
+            state_root,
+            monkeypatch,
+            molecule_ids=_MOL_B,
+        )
+        == 0
+    )
+    assert calls == [1, 1, 2, 1]
+    assert (consumer / ".spaex.md").read_bytes() == baseline_bytes
+    assert not (consumer / ".spaex" / ".stale").exists()
+    capsys.readouterr()
+
+    # Retraction of the final behavior molecule still defers artifact
+    # cleanup until the next normal install; that install may remove the
+    # now-empty behavior constitution.
+    assert (
+        haex_add_helpers["run_remove"](
+            consumer,
+            state_root,
+            monkeypatch,
+            molecule_ids=_MOL_A,
+        )
+        == 0
+    )
+    assert (consumer / ".spaex.md").read_bytes() == baseline_bytes
+    assert install_cli.run(SimpleNamespace(repo_root=str(consumer))) == 0
+    assert not (consumer / ".spaex.md").exists()
+
+
+def test_overlap_shape_b_does_not_mark_add_as_contradiction(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, haex_add_helpers, capsys
+) -> None:
+    canonical, head, state_root = _publish_two_molecules(tmp_path)
+    consumer = haex_add_helpers["make_consumer"](tmp_path)
+
+    stub, calls = _make_composer_stub(question_kind="overlap")
+    monkeypatch.setattr(behavior_orchestrate, "invoke_composer", stub)
+
+    for molecule_id in (_MOL_A, _MOL_B):
+        assert (
+            haex_add_helpers["run_add"](
+                consumer,
+                state_root,
+                monkeypatch,
+                source_url=canonical,
+                molecule_ids=molecule_id,
+                revision=head,
+            )
+            == 0
+        )
+
+    captured = capsys.readouterr()
+    assert calls == [1, 2]
+    assert "WARN" not in captured.err
+    assert not (consumer / ".spaex" / ".stale").exists()
+    assert not (consumer / ".spaex.md").exists()
+
+
+def test_install_reconciles_pending_stale_marker_before_publishing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, haex_add_helpers, capsys
+) -> None:
+    canonical, head, state_root = _publish_two_molecules(tmp_path)
+    consumer = haex_add_helpers["make_consumer"](tmp_path)
+
+    stub, calls = _make_composer_stub()
+    monkeypatch.setattr(behavior_orchestrate, "invoke_composer", stub)
+
+    for molecule_id in (_MOL_A, _MOL_B):
+        assert (
+            haex_add_helpers["run_add"](
+                consumer,
+                state_root,
+                monkeypatch,
+                source_url=canonical,
+                molecule_ids=molecule_id,
+                revision=head,
+            )
+            == 0
+        )
+
+    assert not (consumer / ".spaex.md").exists()
+    assert (consumer / ".spaex" / ".stale").exists()
+    capsys.readouterr()
+
+    monkeypatch.setattr(
+        behavior_orchestrate,
+        "_default_operator_answer",
+        lambda question: "keep the stricter no-force-push policy",
+    )
+    assert install_cli.run(SimpleNamespace(repo_root=str(consumer))) == 0
+
+    captured = capsys.readouterr()
+    assert "stale, unresolved" in captured.out
+    assert calls == [1, 2, 2, 2]
+    assert (consumer / ".spaex.md").exists()
+    assert not (consumer / ".spaex" / ".stale").exists()

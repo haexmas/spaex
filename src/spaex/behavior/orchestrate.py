@@ -109,6 +109,8 @@ def run(
     invoke_options: InvokeOptions | None = None,
     operator_answer: Callable[[ClarificationQuestion], str] | None = None,
     abort_on_contradiction: bool = True,
+    publish_artifacts: bool = True,
+    force_composer: bool = False,
 ) -> BehaviorOutcome:
     """Execute the behavior-harness transaction for one install.
 
@@ -135,10 +137,38 @@ def run(
     `.spaex/constitution.d/` — the operation completes without aborting and
     reconciliation is deferred to the next `spaex install`.
     """
-    if not project_local and not _any_declares_behavior(resolved):
-        return BehaviorOutcome(fragment_count=0)
-
     spaex_dir = repo_root / SPAEX_DIR
+    if not project_local and not _any_declares_behavior(resolved):
+        if not publish_artifacts:
+            # Add/remove may retract the final behavior molecule, resolving a
+            # previous contradiction without being allowed to regenerate the
+            # composed artifact at this stage.
+            clear_stale(spaex_dir / STALE_FILENAME)
+            return BehaviorOutcome(fragment_count=0)
+
+        target = spaex_dir / CONSTITUTION_D_DIRNAME
+        if not any(
+            path.exists()
+            for path in (
+                repo_root / ".spaex.md",
+                target,
+                spaex_dir / STALE_FILENAME,
+            )
+        ):
+            return BehaviorOutcome(fragment_count=0)
+        staging = spaex_dir / STAGING_DIRNAME
+        prev = spaex_dir / PREV_DIRNAME
+        _reset_scratch(staging)
+        _reset_scratch(prev)
+        staging.mkdir(parents=True, exist_ok=True)
+        removed = _publish_empty_artifacts(
+            repo_root=repo_root,
+            staging=staging,
+            target=target,
+            prev=prev,
+        )
+        return BehaviorOutcome(fragment_count=0, removed_spaex_md=removed)
+
     target = spaex_dir / CONSTITUTION_D_DIRNAME
     staging = spaex_dir / STAGING_DIRNAME
     prev = spaex_dir / PREV_DIRNAME
@@ -156,6 +186,10 @@ def run(
     fragments = tuple(m.fragment for m in materialized)
 
     if not fragments:
+        if not publish_artifacts:
+            _reset_scratch(staging)
+            clear_stale(spaex_dir / STALE_FILENAME)
+            return BehaviorOutcome(fragment_count=0)
         removed = _publish_empty_artifacts(
             repo_root=repo_root,
             staging=staging,
@@ -191,7 +225,18 @@ def run(
         existing is not None
         and existing == (source_hash, build_input_hash)
         and not removed_keys
+        and not force_composer
     ):
+        if not publish_artifacts:
+            _reset_scratch(staging)
+            clear_stale(spaex_dir / STALE_FILENAME)
+            return BehaviorOutcome(
+                fragment_count=len(canonical_fragments),
+                skipped_composer=True,
+                source_hash=source_hash,
+                build_input_hash=build_input_hash,
+                dedup_provenance=dedup_provenance,
+            )
         _commit_behavior_artifacts(
             repo_root=repo_root,
             staging=staging,
@@ -221,16 +266,30 @@ def run(
 
     if isinstance(invoke_result.result, QuestionsShape):
         if not abort_on_contradiction:
-            _warn_stale_contradiction(invoke_result.result.questions)
-            write_stale(
-                spaex_dir / STALE_FILENAME,
-                invoke_result.result.questions,
-                detected_at=utc_timestamp(),
+            contradictions = tuple(
+                question
+                for question in invoke_result.result.questions
+                if question.kind == "contradiction"
             )
-            shutil.rmtree(staging, ignore_errors=True)
+            if contradictions:
+                _warn_stale_contradiction(contradictions)
+                write_stale(
+                    spaex_dir / STALE_FILENAME,
+                    contradictions,
+                    detected_at=utc_timestamp(),
+                )
+                _reset_scratch(staging)
+                return BehaviorOutcome(
+                    fragment_count=len(canonical_fragments),
+                    stale=True,
+                    source_hash=source_hash,
+                    build_input_hash=build_input_hash,
+                    dedup_provenance=dedup_provenance,
+                )
+            _reset_scratch(staging)
+            clear_stale(spaex_dir / STALE_FILENAME)
             return BehaviorOutcome(
                 fragment_count=len(canonical_fragments),
-                stale=True,
                 source_hash=source_hash,
                 build_input_hash=build_input_hash,
                 dedup_provenance=dedup_provenance,
@@ -244,6 +303,16 @@ def run(
             repo_root=repo_root,
             invoke_options=invoke_options,
             operator_answer=operator_answer or _default_operator_answer,
+        )
+
+    if not publish_artifacts:
+        _reset_scratch(staging)
+        clear_stale(spaex_dir / STALE_FILENAME)
+        return BehaviorOutcome(
+            fragment_count=len(canonical_fragments),
+            source_hash=source_hash,
+            build_input_hash=build_input_hash,
+            dedup_provenance=dedup_provenance,
         )
 
     assert isinstance(invoke_result.result, ComposedShape)
