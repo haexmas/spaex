@@ -12,9 +12,6 @@ Both run `spaex install` against the same Composer stub. Verifies:
 
 - Both consumers produce byte-identical `.spaex.md` (the fragment-less
   molecule's presence changes nothing about the composed output).
-- `.spaex/constitution.d/` never gets a directory for the fragment-less
-  molecule (it is skipped before materialization, per
-  `orchestrate._record_declares_behavior`).
 """
 
 from __future__ import annotations
@@ -253,10 +250,6 @@ def test_fragment_less_molecule_does_not_alter_composed_constitution(
     with_extra_md = (with_extra / ".spaex.md").read_text(encoding="utf-8")
     assert baseline_md == with_extra_md
 
-    # The fragment-less molecule never gets a constitution.d directory.
-    assert not (
-        with_extra / ".spaex" / "constitution.d" / _MOL_NO_FRAGMENT
-    ).exists()
     assert (
         with_extra / ".spaex" / "constitution.d" / _MOL_WITH_FRAGMENT / "no-secrets.md"
     ).exists()

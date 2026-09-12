@@ -163,6 +163,11 @@ class BehaviorFragment:
             raise MissingFieldError(
                 "missing required field 'body' in inline fragment", path=path
             )
+        # Standalone fragment files are parsed with their terminal LF intact.
+        # Keep the inline representation equivalent before it reaches the
+        # Composer, whose input includes the raw body as well as its hash.
+        if not body.endswith("\n"):
+            body += "\n"
         header.setdefault("kind", _KIND_LITERAL)
         header.setdefault("atom_source", enclosing_atom_id)
         return _build(header, body, molecule_id=molecule_id, path=path)
