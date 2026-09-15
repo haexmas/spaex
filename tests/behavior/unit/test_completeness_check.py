@@ -49,6 +49,7 @@ def _clarification(*cited: CitedFragment, key: str = "aa" * 32) -> Clarification
 
 
 def test_uncited_fragment_with_no_clarification_aborts(tmp_path: Path) -> None:
+    """Reject a composed body that omits an unclarified fragment."""
     fragments = [_fragment("alpha", "rule-a"), _fragment("beta", "rule-b")]
     body = "## MUST\n\n- Run tests. _[from `alpha/rule-a`]_\n"
 
@@ -63,6 +64,7 @@ def test_uncited_fragment_with_no_clarification_aborts(tmp_path: Path) -> None:
 
 
 def test_fragment_covered_by_valid_clarification_is_not_flagged(tmp_path: Path) -> None:
+    """Allow an omitted fragment when a valid clarification accounts for it."""
     fragments = [_fragment("alpha", "rule-a"), _fragment("beta", "rule-b")]
     body = "## MUST\n\n- Run tests. _[from `alpha/rule-a`]_\n"
     store = ClarificationsStore().with_entry(
@@ -79,6 +81,7 @@ def test_fragment_covered_by_valid_clarification_is_not_flagged(tmp_path: Path) 
 
 
 def test_every_fragment_cited_passes_with_no_clarifications(tmp_path: Path) -> None:
+    """Accept a body that cites every canonical fragment."""
     fragments = [_fragment("alpha", "rule-a"), _fragment("beta", "rule-b")]
     body = (
         "## MUST\n\n"
@@ -96,6 +99,7 @@ def test_every_fragment_cited_passes_with_no_clarifications(tmp_path: Path) -> N
 
 
 def test_merged_clause_citation_covers_both_contributing_fragments(tmp_path: Path) -> None:
+    """Count all fragments cited by one merged clause."""
     fragments = [_fragment("alpha", "rule-a"), _fragment("beta", "rule-b")]
     body = "## MUST\n\n- Ship signed. _[from `alpha/rule-a`, `beta/rule-b`]_\n"
 
@@ -109,6 +113,7 @@ def test_merged_clause_citation_covers_both_contributing_fragments(tmp_path: Pat
 
 
 def test_inline_code_in_clause_text_is_not_mistaken_for_a_citation(tmp_path: Path) -> None:
+    """Ignore unrelated inline code when collecting provenance citations."""
     fragments = [_fragment("alpha", "rule-a")]
     body = (
         "## MUST\n\n"
@@ -125,6 +130,7 @@ def test_inline_code_in_clause_text_is_not_mistaken_for_a_citation(tmp_path: Pat
 
 
 def test_citation_like_text_outside_a_clause_does_not_count(tmp_path: Path) -> None:
+    """Require provenance citations to occur in a rendered clause."""
     fragments = [_fragment("alpha", "rule-a")]
     body = "The omitted rule is documented here. _[from `alpha/rule-a`]_\n"
 
@@ -139,6 +145,7 @@ def test_citation_like_text_outside_a_clause_does_not_count(tmp_path: Path) -> N
 
 
 def test_reports_every_missing_fragment_sorted(tmp_path: Path) -> None:
+    """Report all omitted fragments in stable scoped-id order."""
     fragments = [
         _fragment("zeta", "rule-z"),
         _fragment("alpha", "rule-a"),
