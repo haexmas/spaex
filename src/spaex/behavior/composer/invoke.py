@@ -24,6 +24,8 @@ import os
 import re
 import shutil
 import subprocess
+import sys
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -251,6 +253,12 @@ def _call_cli(
     """Shell out to a locally installed agent CLI runtime."""
     argv = _cli_argv(name)
     stdin_input = _cli_stdin(system_prompt, payload)
+    sys.stdout.write(
+        f"composer: invoking {name} (payload {len(stdin_input)} chars, "
+        f"timeout {timeout:.0f}s)...\n"
+    )
+    sys.stdout.flush()
+    start = time.monotonic()
     try:
         completed = subprocess.run(  # noqa: S603
             argv,
@@ -263,7 +271,7 @@ def _call_cli(
     except subprocess.TimeoutExpired as exc:
         raise_for(
             ComposerFailureCategory.TIMEOUT,
-            f"{name} timed out after {timeout}s",
+            f"{name} timed out after {timeout}s{_load_avg_suffix()}",
         )
         raise AssertionError("unreachable") from exc
     except (OSError, ValueError) as exc:
@@ -272,6 +280,8 @@ def _call_cli(
             f"could not launch {name}: {exc}",
         )
         raise AssertionError("unreachable") from exc
+    elapsed = time.monotonic() - start
+    sys.stdout.write(f"composer: {name} responded in {elapsed:.1f}s\n")
     if completed.returncode != 0:
         stderr = (completed.stderr or "").strip()
         if _is_quota_failure(stderr):
@@ -284,6 +294,22 @@ def _call_cli(
             f"{name} exited {completed.returncode}: {stderr}",
         )
     return completed.stdout
+
+
+def _load_avg_suffix() -> str:
+    """Append host load averages to a timeout diagnostic, when available.
+
+    A composer timeout on an otherwise-working runtime is frequently host
+    contention (other concurrent CLI sessions/processes), not a genuinely
+    stuck call — `os.getloadavg()` is the cheapest signal that distinguishes
+    the two without a second manual investigation. Unix-only; absent on
+    Windows, where this silently contributes nothing.
+    """
+    try:
+        load1, load5, load15 = os.getloadavg()
+    except OSError:
+        return ""
+    return f" (host load avg 1/5/15m: {load1:.2f}/{load5:.2f}/{load15:.2f})"
 
 
 def _cli_argv(name: str) -> list[str]:
