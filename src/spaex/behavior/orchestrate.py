@@ -55,6 +55,8 @@ from spaex.behavior.composer.invoke import (
     InvokeOutcome,
     QuestionsShape,
     invoke_composer,
+    resolve_composer_log_path,
+    write_composer_log,
 )
 from spaex.behavior.composer.prompt import (
     COMPOSER_PROMPT_VERSION,
@@ -288,6 +290,8 @@ def run(
         canonical_fragments=canonical_fragments,
         composed_body=invoke_result.result.body,
         clarifications=store,
+        repo_root=repo_root,
+        invoke_options=invoke_options,
     )
 
     emit_outcome = _commit_behavior_artifacts(
@@ -749,6 +753,8 @@ def _verify_completeness(
     canonical_fragments: Sequence[BehaviorFragment],
     composed_body: str,
     clarifications: ClarificationsStore,
+    repo_root: Path,
+    invoke_options: InvokeOptions | None,
 ) -> None:
     """Abort as `invalid-output` when the Composer silently dropped a fragment (FR-012b).
 
@@ -759,6 +765,14 @@ def _verify_completeness(
     else is exactly the silent-drop failure mode `emit_composed`'s hash
     checks cannot see, because those hashes are computed from the input, not
     the output body.
+
+    Unlike a sentinel-parse failure, this response *did* parse cleanly, so
+    `invoke_composer` never wrote it to `$SPAEX_COMPOSER_LOG` - it only had a
+    reason to log garbage, not a well-formed body that turned out to be
+    incomplete. Write the composed body here too, so the same "go inspect
+    the log" hint holds for this failure mode as well: seeing exactly where
+    the body stopped citing fragments is what tells an operator whether this
+    is truncation (output cut off mid-document) or a genuine omission.
     """
     cited = _cited_scoped_ids(composed_body)
     excused = {
@@ -772,6 +786,10 @@ def _verify_completeness(
         if f.scoped_id not in cited and f.scoped_id not in excused
     )
     if missing:
+        log_path = resolve_composer_log_path(
+            invoke_options or InvokeOptions(), repo_root
+        )
+        write_composer_log(log_path, composed_body)
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,
             "Composer output omits fragment(s) with no recorded clarification: "

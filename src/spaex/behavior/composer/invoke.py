@@ -165,7 +165,7 @@ def invoke_composer(
     prompt = load_effective_prompt(repo_root)
     payload = composer_input.to_json()
     timeout = _resolve_timeout(options)
-    log_path = _resolve_log_path(options, repo_root)
+    log_path = resolve_composer_log_path(options, repo_root)
 
     cli_runtimes = (
         options.forced_cli_runtimes
@@ -219,7 +219,7 @@ def _resolve_timeout(options: InvokeOptions) -> float:
     return value
 
 
-def _resolve_log_path(options: InvokeOptions, repo_root: Path) -> Path:
+def resolve_composer_log_path(options: InvokeOptions, repo_root: Path) -> Path:
     if options.composer_log_path is not None:
         return options.composer_log_path
     raw = os.environ.get(COMPOSER_LOG_ENV)
@@ -341,7 +341,7 @@ def _parse(raw: str, *, log_path: Path) -> ComposerResult:
     """Parse a Composer response into Shape A or Shape B."""
     match = _SENTINEL_RE.search(raw)
     if match is None:
-        _write_composer_log(log_path, raw)
+        write_composer_log(log_path, raw)
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,
             "Composer output missing SPAEX-COMPOSER sentinel block",
@@ -350,14 +350,14 @@ def _parse(raw: str, *, log_path: Path) -> ComposerResult:
     try:
         envelope = json.loads(match.group("json"))
     except json.JSONDecodeError as exc:
-        _write_composer_log(log_path, raw)
+        write_composer_log(log_path, raw)
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,
             f"Composer sentinel JSON invalid: {exc}",
         )
         raise AssertionError("unreachable") from exc
     if not isinstance(envelope, dict):
-        _write_composer_log(log_path, raw)
+        write_composer_log(log_path, raw)
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,
             f"Composer sentinel JSON must be an object; got {type(envelope).__name__}",
@@ -368,7 +368,7 @@ def _parse(raw: str, *, log_path: Path) -> ComposerResult:
     if shape_kind == "composed":
         body = raw[match.end():].lstrip("\n\r ")
         if not body:
-            _write_composer_log(log_path, raw)
+            write_composer_log(log_path, raw)
             raise_for(
                 ComposerFailureCategory.INVALID_OUTPUT,
                 "Shape A response missing composed constitution body",
@@ -378,7 +378,7 @@ def _parse(raw: str, *, log_path: Path) -> ComposerResult:
     if shape_kind == "questions":
         questions_raw = envelope.get("questions") or ()
         if not isinstance(questions_raw, list) or not questions_raw:
-            _write_composer_log(log_path, raw)
+            write_composer_log(log_path, raw)
             raise_for(
                 ComposerFailureCategory.INVALID_OUTPUT,
                 "Shape B response has no questions",
@@ -387,7 +387,7 @@ def _parse(raw: str, *, log_path: Path) -> ComposerResult:
         parsed = tuple(_parse_question(q, log_path=log_path, raw_output=raw) for q in questions_raw)
         return QuestionsShape(questions=parsed)
 
-    _write_composer_log(log_path, raw)
+    write_composer_log(log_path, raw)
     raise_for(
         ComposerFailureCategory.INVALID_OUTPUT,
         f"Composer sentinel type {shape_kind!r} is not 'composed' or 'questions'",
@@ -399,7 +399,7 @@ def _parse_question(
     raw: Any, *, log_path: Path, raw_output: str = ""
 ) -> ClarificationQuestion:
     if not isinstance(raw, dict):
-        _write_composer_log(log_path, raw_output or json.dumps(raw))
+        write_composer_log(log_path, raw_output or json.dumps(raw))
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,
             f"Shape B question must be an object; got {type(raw).__name__}",
@@ -407,7 +407,7 @@ def _parse_question(
         raise AssertionError("unreachable")
     kind = raw.get("kind")
     if kind not in ("overlap", "contradiction"):
-        _write_composer_log(log_path, raw_output or json.dumps(raw))
+        write_composer_log(log_path, raw_output or json.dumps(raw))
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,
             f"Shape B question kind {kind!r} not in overlap|contradiction",
@@ -415,7 +415,7 @@ def _parse_question(
         raise AssertionError("unreachable")
     question = raw.get("question")
     if not isinstance(question, str) or not question.strip():
-        _write_composer_log(log_path, raw_output or json.dumps(raw))
+        write_composer_log(log_path, raw_output or json.dumps(raw))
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,
             "Shape B question text must be a non-empty string",
@@ -424,7 +424,7 @@ def _parse_question(
     cited_raw = raw.get("cited_fragments") or ()
     cited: list[dict[str, str]] = []
     if not isinstance(cited_raw, list):
-        _write_composer_log(log_path, raw_output or json.dumps(raw))
+        write_composer_log(log_path, raw_output or json.dumps(raw))
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,
             "Shape B cited_fragments must be a list",
@@ -446,7 +446,7 @@ def _parse_question(
     )
 
 
-def _write_composer_log(path: Path, raw: str) -> None:
+def write_composer_log(path: Path, raw: str) -> None:
     """Best-effort write of raw Composer output for invalid-output diagnostics."""
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -519,4 +519,6 @@ __all__ = [
     "QuestionsShape",
     "RuntimeDescriptor",
     "invoke_composer",
+    "resolve_composer_log_path",
+    "write_composer_log",
 ]
