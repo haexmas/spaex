@@ -220,6 +220,7 @@ def _resolve_timeout(options: InvokeOptions) -> float:
 
 
 def resolve_composer_log_path(options: InvokeOptions, repo_root: Path) -> Path:
+    """Resolve the configured path used for Composer diagnostic output."""
     if options.composer_log_path is not None:
         return options.composer_log_path
     raw = os.environ.get(COMPOSER_LOG_ENV)
@@ -307,7 +308,7 @@ def _load_avg_suffix() -> str:
     """
     try:
         load1, load5, load15 = os.getloadavg()
-    except OSError:
+    except (AttributeError, OSError):
         return ""
     return f" (host load avg 1/5/15m: {load1:.2f}/{load5:.2f}/{load15:.2f})"
 
