@@ -24,6 +24,8 @@ import os
 import re
 import shutil
 import subprocess
+import sys
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -163,7 +165,7 @@ def invoke_composer(
     prompt = load_effective_prompt(repo_root)
     payload = composer_input.to_json()
     timeout = _resolve_timeout(options)
-    log_path = _resolve_log_path(options, repo_root)
+    log_path = resolve_composer_log_path(options, repo_root)
 
     cli_runtimes = (
         options.forced_cli_runtimes
@@ -217,7 +219,8 @@ def _resolve_timeout(options: InvokeOptions) -> float:
     return value
 
 
-def _resolve_log_path(options: InvokeOptions, repo_root: Path) -> Path:
+def resolve_composer_log_path(options: InvokeOptions, repo_root: Path) -> Path:
+    """Resolve the configured path used for Composer diagnostic output."""
     if options.composer_log_path is not None:
         return options.composer_log_path
     raw = os.environ.get(COMPOSER_LOG_ENV)
@@ -251,6 +254,12 @@ def _call_cli(
     """Shell out to a locally installed agent CLI runtime."""
     argv = _cli_argv(name)
     stdin_input = _cli_stdin(system_prompt, payload)
+    sys.stdout.write(
+        f"composer: invoking {name} (payload {len(stdin_input)} chars, "
+        f"timeout {timeout:.0f}s)...\n"
+    )
+    sys.stdout.flush()
+    start = time.monotonic()
     try:
         completed = subprocess.run(  # noqa: S603
             argv,
@@ -263,7 +272,7 @@ def _call_cli(
     except subprocess.TimeoutExpired as exc:
         raise_for(
             ComposerFailureCategory.TIMEOUT,
-            f"{name} timed out after {timeout}s",
+            f"{name} timed out after {timeout}s{_load_avg_suffix()}",
         )
         raise AssertionError("unreachable") from exc
     except (OSError, ValueError) as exc:
@@ -272,6 +281,8 @@ def _call_cli(
             f"could not launch {name}: {exc}",
         )
         raise AssertionError("unreachable") from exc
+    elapsed = time.monotonic() - start
+    sys.stdout.write(f"composer: {name} responded in {elapsed:.1f}s\n")
     if completed.returncode != 0:
         stderr = (completed.stderr or "").strip()
         if _is_quota_failure(stderr):
@@ -284,6 +295,22 @@ def _call_cli(
             f"{name} exited {completed.returncode}: {stderr}",
         )
     return completed.stdout
+
+
+def _load_avg_suffix() -> str:
+    """Append host load averages to a timeout diagnostic, when available.
+
+    A composer timeout on an otherwise-working runtime is frequently host
+    contention (other concurrent CLI sessions/processes), not a genuinely
+    stuck call — `os.getloadavg()` is the cheapest signal that distinguishes
+    the two without a second manual investigation. Unix-only; absent on
+    Windows, where this silently contributes nothing.
+    """
+    try:
+        load1, load5, load15 = os.getloadavg()
+    except (AttributeError, OSError):
+        return ""
+    return f" (host load avg 1/5/15m: {load1:.2f}/{load5:.2f}/{load15:.2f})"
 
 
 def _cli_argv(name: str) -> list[str]:
@@ -315,7 +342,7 @@ def _parse(raw: str, *, log_path: Path) -> ComposerResult:
     """Parse a Composer response into Shape A or Shape B."""
     match = _SENTINEL_RE.search(raw)
     if match is None:
-        _write_composer_log(log_path, raw)
+        write_composer_log(log_path, raw)
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,
             "Composer output missing SPAEX-COMPOSER sentinel block",
@@ -324,14 +351,14 @@ def _parse(raw: str, *, log_path: Path) -> ComposerResult:
     try:
         envelope = json.loads(match.group("json"))
     except json.JSONDecodeError as exc:
-        _write_composer_log(log_path, raw)
+        write_composer_log(log_path, raw)
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,
             f"Composer sentinel JSON invalid: {exc}",
         )
         raise AssertionError("unreachable") from exc
     if not isinstance(envelope, dict):
-        _write_composer_log(log_path, raw)
+        write_composer_log(log_path, raw)
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,
             f"Composer sentinel JSON must be an object; got {type(envelope).__name__}",
@@ -342,7 +369,7 @@ def _parse(raw: str, *, log_path: Path) -> ComposerResult:
     if shape_kind == "composed":
         body = raw[match.end():].lstrip("\n\r ")
         if not body:
-            _write_composer_log(log_path, raw)
+            write_composer_log(log_path, raw)
             raise_for(
                 ComposerFailureCategory.INVALID_OUTPUT,
                 "Shape A response missing composed constitution body",
@@ -352,7 +379,7 @@ def _parse(raw: str, *, log_path: Path) -> ComposerResult:
     if shape_kind == "questions":
         questions_raw = envelope.get("questions") or ()
         if not isinstance(questions_raw, list) or not questions_raw:
-            _write_composer_log(log_path, raw)
+            write_composer_log(log_path, raw)
             raise_for(
                 ComposerFailureCategory.INVALID_OUTPUT,
                 "Shape B response has no questions",
@@ -361,7 +388,7 @@ def _parse(raw: str, *, log_path: Path) -> ComposerResult:
         parsed = tuple(_parse_question(q, log_path=log_path, raw_output=raw) for q in questions_raw)
         return QuestionsShape(questions=parsed)
 
-    _write_composer_log(log_path, raw)
+    write_composer_log(log_path, raw)
     raise_for(
         ComposerFailureCategory.INVALID_OUTPUT,
         f"Composer sentinel type {shape_kind!r} is not 'composed' or 'questions'",
@@ -373,7 +400,7 @@ def _parse_question(
     raw: Any, *, log_path: Path, raw_output: str = ""
 ) -> ClarificationQuestion:
     if not isinstance(raw, dict):
-        _write_composer_log(log_path, raw_output or json.dumps(raw))
+        write_composer_log(log_path, raw_output or json.dumps(raw))
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,
             f"Shape B question must be an object; got {type(raw).__name__}",
@@ -381,7 +408,7 @@ def _parse_question(
         raise AssertionError("unreachable")
     kind = raw.get("kind")
     if kind not in ("overlap", "contradiction"):
-        _write_composer_log(log_path, raw_output or json.dumps(raw))
+        write_composer_log(log_path, raw_output or json.dumps(raw))
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,
             f"Shape B question kind {kind!r} not in overlap|contradiction",
@@ -389,7 +416,7 @@ def _parse_question(
         raise AssertionError("unreachable")
     question = raw.get("question")
     if not isinstance(question, str) or not question.strip():
-        _write_composer_log(log_path, raw_output or json.dumps(raw))
+        write_composer_log(log_path, raw_output or json.dumps(raw))
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,
             "Shape B question text must be a non-empty string",
@@ -398,7 +425,7 @@ def _parse_question(
     cited_raw = raw.get("cited_fragments") or ()
     cited: list[dict[str, str]] = []
     if not isinstance(cited_raw, list):
-        _write_composer_log(log_path, raw_output or json.dumps(raw))
+        write_composer_log(log_path, raw_output or json.dumps(raw))
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,
             "Shape B cited_fragments must be a list",
@@ -420,7 +447,7 @@ def _parse_question(
     )
 
 
-def _write_composer_log(path: Path, raw: str) -> None:
+def write_composer_log(path: Path, raw: str) -> None:
     """Best-effort write of raw Composer output for invalid-output diagnostics."""
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -493,4 +520,6 @@ __all__ = [
     "QuestionsShape",
     "RuntimeDescriptor",
     "invoke_composer",
+    "resolve_composer_log_path",
+    "write_composer_log",
 ]
