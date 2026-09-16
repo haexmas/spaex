@@ -92,7 +92,27 @@ def partition(
             )
 
     for molecule_id, group in groups:
-        group_size = _serialized_size(group)
+        if len(group) > limits.max_fragments:
+            raise_for(
+                ComposerFailureCategory.INVALID_OUTPUT,
+                (
+                    f"molecule {molecule_id!r} fragment group contains "
+                    f"{len(group)} fragments, exceeding the "
+                    f"{limits.max_fragments}-fragment batch ceiling and "
+                    "cannot be split across batches"
+                ),
+                context={
+                    "reason": "input-too-large",
+                    "molecule_id": molecule_id,
+                    "fragment_count": str(len(group)),
+                    "ceiling": str(limits.max_fragments),
+                },
+            )
+            raise AssertionError("unreachable")
+
+        group_size = _serialized_size(
+            group, _clarifications_for_fragments(group, clarifications)
+        )
         if group_size > limits.max_bytes:
             raise_for(
                 ComposerFailureCategory.INVALID_OUTPUT,
@@ -111,7 +131,11 @@ def partition(
             raise AssertionError("unreachable")
 
         prospective_count = len(current) + len(group)
-        prospective_size = _serialized_size(tuple(current) + group)
+        prospective_fragments = tuple(current) + group
+        prospective_size = _serialized_size(
+            prospective_fragments,
+            _clarifications_for_fragments(prospective_fragments, clarifications),
+        )
         if current and (
             prospective_count > limits.max_fragments
             or prospective_size > limits.max_bytes
@@ -147,10 +171,36 @@ def _group_by_molecule(
     return groups
 
 
-def _serialized_size(fragments: Sequence[BehaviorFragment]) -> int:
+def _serialized_size(
+    fragments: Sequence[BehaviorFragment],
+    clarifications: Sequence[Clarification] = (),
+) -> int:
     """Real payload byte-size a batch of `fragments` would occupy in a
     Composer call, reusing the exact serialization the call itself sends."""
-    return len(ComposerInput(fragments=tuple(fragments)).to_json().encode("utf-8"))
+    return len(
+        ComposerInput(
+            fragments=tuple(fragments), clarifications=tuple(clarifications)
+        )
+        .to_json()
+        .encode("utf-8")
+    )
+
+
+def _clarifications_for_fragments(
+    fragments: Sequence[BehaviorFragment], clarifications: Sequence[Clarification]
+) -> tuple[Clarification, ...]:
+    """Return clarifications fully scoped to the candidate fragment set."""
+    fragment_ids = {fragment.scoped_id for fragment in fragments}
+    return tuple(
+        clarification
+        for clarification in clarifications
+        if (
+            cited_ids := {
+                cited.scoped_id for cited in clarification.cited_fragments
+            }
+        )
+        and cited_ids <= fragment_ids
+    )
 
 
 def _assign_clarifications(

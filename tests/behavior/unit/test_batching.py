@@ -128,6 +128,19 @@ def test_oversized_molecule_raises_input_too_large_without_a_batch() -> None:
     assert "ceiling" in excinfo.value.context
 
 
+def test_molecule_exceeding_fragment_ceiling_raises_input_too_large() -> None:
+    fragments = [_fragment("mol-many", f"rule-{i}") for i in range(3)]
+    limits = BatchingLimits(max_fragments=2, max_bytes=100_000)
+
+    with pytest.raises(ComposerInvalidOutputError) as excinfo:
+        partition(fragments, limits=limits)
+
+    assert excinfo.value.context.get("reason") == "input-too-large"
+    assert excinfo.value.context.get("molecule_id") == "mol-many"
+    assert excinfo.value.context.get("fragment_count") == "3"
+    assert excinfo.value.context.get("ceiling") == "2"
+
+
 def test_clarification_scoped_to_one_batch_is_assigned_to_it() -> None:
     fragments = [_fragment(f"mol-{i}", "rule") for i in range(4)]
     limits = BatchingLimits(max_fragments=2, max_bytes=100_000)
@@ -155,3 +168,23 @@ def test_clarification_spanning_batches_is_cross_batch() -> None:
     assert result.cross_batch_clarifications == (spanning_clarification,)
     for batch in result.batches:
         assert batch.clarifications == ()
+
+
+def test_batch_byte_ceiling_includes_batch_local_clarifications() -> None:
+    fragments = [_fragment("mol-a", "rule"), _fragment("mol-b", "rule")]
+    clarification = _clarification(CitedFragment("mol-a", "rule", "hash"))
+    with_clarification = len(
+        ComposerInput(
+            fragments=tuple(fragments), clarifications=(clarification,)
+        )
+        .to_json()
+        .encode("utf-8")
+    )
+    limits = BatchingLimits(max_fragments=100, max_bytes=with_clarification - 1)
+
+    result = partition(fragments, [clarification], limits=limits)
+
+    assert len(result.batches) == 2
+    assert result.batches[0].fragments == (fragments[0],)
+    assert result.batches[0].clarifications == (clarification,)
+    assert result.batches[1].fragments == (fragments[1],)
