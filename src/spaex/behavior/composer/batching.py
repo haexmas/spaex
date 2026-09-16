@@ -19,10 +19,16 @@ from spaex.behavior.composer.invoke import ComposerInput
 from spaex.behavior.fragment import BehaviorFragment
 
 #: Fragment-count guard, checked alongside the byte-size ceiling — whichever
-#: is reached first closes a batch (research.md §2). Chosen so today's real
-#: fragment set (9 molecules, ~60KB) yields a handful of batches, matching
-#: quickstart.md's illustrated 3-batch walkthrough.
-DEFAULT_MAX_BATCH_FRAGMENTS = 12
+#: is reached first closes a batch (research.md §2: "a coarse first-pass
+#: filter... kept alongside the byte ceiling for simplicity", not the real
+#: constraint). The byte ceiling is what actually bounds a Composer call's
+#: input; this is only a cheap defensive cap against a pathological
+#: many-but-tiny-fragments case. Set well above where even minimal
+#: fragments hit the byte ceiling (~75 one-line fragments measured against
+#: `DEFAULT_MAX_BATCH_BYTES`) so it does not bind for realistic,
+#: fine-grained fragment authoring — a project with many small molecules
+#: must not be forced into more batches than its actual content requires.
+DEFAULT_MAX_BATCH_FRAGMENTS = 200
 
 #: Serialized-size ceiling in bytes, measured as the same
 #: `ComposerInput.to_json()` payload actually sent to a Composer call.

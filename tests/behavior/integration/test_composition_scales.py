@@ -133,10 +133,12 @@ def _merge_response(data: dict) -> str:
 
 
 def test_composition_scales_across_three_or_more_batches(tmp_path: Path) -> None:
-    """Compose 25 fragments through three batches and one flat merge."""
+    """Compose 150 tiny fragments (well past the default byte ceiling, still
+    comfortably under the fragment-count guard) through three batches."""
     repo = tmp_path / "repo"
     (repo / ".spaex").mkdir(parents=True)
-    resolved = [_resolved_molecule(tmp_path / "cache", i) for i in range(25)]
+    molecule_count = 150
+    resolved = [_resolved_molecule(tmp_path / "cache", i) for i in range(molecule_count)]
     stub = _RecordingStub()
 
     outcome = orchestrate.run(
@@ -147,14 +149,15 @@ def test_composition_scales_across_three_or_more_batches(tmp_path: Path) -> None
     )
 
     assert outcome.published
-    assert outcome.fragment_count == 25
-    # 3 batches (12, 12, 1); the merge input comfortably fits the default
-    # byte ceiling, so one flat merge call handles all three at once.
+    assert outcome.fragment_count == molecule_count
+    # 3 batches (~69, ~69, ~12) + 1 flat merge call = 4. A count-based
+    # ceiling of 12 (the old, too-strict default) would have forced 13
+    # batches instead of 3 — exactly the over-batching the fix avoids.
     assert stub.call_count == 4
     assert len(set(stub.runtimes)) == 1, "a single runtime must answer every step (FR-011)"
 
     body = (repo / ".spaex" / "constitution.md").read_text(encoding="utf-8")
-    for i in range(25):
+    for i in range(molecule_count):
         assert f"mol-{i:03d}/rule" in body
 
 
