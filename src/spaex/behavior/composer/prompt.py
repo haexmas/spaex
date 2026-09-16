@@ -18,7 +18,7 @@ import hashlib
 import re
 from pathlib import Path
 
-COMPOSER_PROMPT_VERSION = "1"
+COMPOSER_PROMPT_VERSION = "2"
 
 PROMPT_OVERRIDE_PATH = ".spaex/composer-prompt.md"
 
@@ -124,6 +124,11 @@ sorted provenance list, then normalized clause text).
 6. Line breaks inside a clause are collapsed to a single space so the file
    stays diff-friendly.
 7. Provenance backticks preserve the fragment identifier verbatim.
+8. Every fragment in the input must produce at least one citation somewhere
+   in your output; never silently omit one. If a fragment's body overlaps
+   enough with another to share one bullet, combine their provenances (rule
+   2) rather than dropping either fragment. Before finishing, check that
+   every fragment id you were given appears in at least one citation.
 
 ## Shape B: clarification questions
 
