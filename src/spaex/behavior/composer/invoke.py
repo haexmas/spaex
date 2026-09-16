@@ -42,6 +42,7 @@ from spaex.behavior.composer.prompt import (
     load_effective_prompt,
 )
 from spaex.behavior.fragment import BehaviorFragment
+from spaex.util.errors import HaexError
 
 COMPOSER_LOG_ENV = "SPAEX_COMPOSER_LOG"
 DEFAULT_COMPOSER_LOG = ".spaex/composer.log"
@@ -129,6 +130,36 @@ class InvokeOutcome:
 
 
 @dataclass(frozen=True)
+class ComposerLogEntry:
+    """One JSON-lines record in `$SPAEX_COMPOSER_LOG` (Spec 026 research.md §5).
+
+    `(step, invocation)` is unique within one attempt. `step` is
+    `"single"` for the legacy/degenerate one-call path, `"batch-1"`,
+    `"batch-2"`, ... for a map-reduce batch call, or `"merge"`-prefixed for a
+    merge node. `invocation` is `1` for a step's initial call and `2` for
+    its one bounded clarification-resolved re-invocation.
+    """
+
+    step: str
+    invocation: int
+    phase: str
+    raw_output: str
+    outcome: str
+
+    def to_json(self) -> str:
+        return json.dumps(
+            {
+                "step": self.step,
+                "invocation": self.invocation,
+                "phase": self.phase,
+                "raw_output": self.raw_output,
+                "outcome": self.outcome,
+            },
+            ensure_ascii=False,
+        )
+
+
+@dataclass(frozen=True)
 class InvokeOptions:
     """Overrides for testing; production callers use defaults.
 
@@ -151,19 +182,59 @@ def invoke_composer(
     *,
     repo_root: Path,
     options: InvokeOptions | None = None,
+    step: str = "single",
+    invocation: int = 1,
+    phase: str = "initial",
 ) -> InvokeOutcome:
     """Run the Composer and return its parsed output.
+
+    Thin wrapper over `invoke_step` for the canonical/project-override
+    compose prompt and a `ComposerInput` payload — the legacy single-call
+    shape, and the shape a map-reduce batch call also uses (Spec 026
+    research.md §1: batch calls reuse this unchanged machinery). `step`,
+    `invocation`, and `phase` label the JSON-lines log entry (data-model.md
+    `ComposerLogEntry`); callers outside a multi-step build never need to
+    pass them.
+    """
+    return invoke_step(
+        prompt_text=load_effective_prompt(repo_root),
+        payload_json=composer_input.to_json(),
+        repo_root=repo_root,
+        options=options,
+        step=step,
+        invocation=invocation,
+        phase=phase,
+    )
+
+
+def invoke_step(
+    *,
+    prompt_text: str,
+    payload_json: str,
+    repo_root: Path,
+    options: InvokeOptions | None = None,
+    step: str = "single",
+    invocation: int = 1,
+    phase: str = "initial",
+) -> InvokeOutcome:
+    """Generic runtime-resolution + call + parse + per-invocation log primitive.
+
+    `invoke_composer` is a thin wrapper around this for the canonical compose
+    prompt. `spaex.behavior.composer.reduce` calls this directly for a merge
+    step, which needs a different prompt (`prompt.MERGE_PROMPT`) and payload
+    shape (`MergeNodeInput`, not `ComposerInput`) but the exact same runtime
+    resolution, stub-caller test seam, and log lifecycle (Spec 026
+    research.md §1, §5).
 
     Runtime selection order (research.md §2, 4.2.0 CLI-only variant):
 
     1. If `options.stub_caller` is set, hand the call to it. Testing only.
-    2. Iterate `_CLI_RUNTIMES` in a stable order; use the first one on PATH.
+    2. Iterate `_CLI_RUNTIMES` (or `options.forced_cli_runtimes` when set) in
+       order; use the first one on PATH.
     3. `no-runtime` failure (exit 34) when no CLI is found.
     """
     options = options or InvokeOptions()
 
-    prompt = load_effective_prompt(repo_root)
-    payload = composer_input.to_json()
     timeout = _resolve_timeout(options)
     log_path = resolve_composer_log_path(options, repo_root)
 
@@ -179,8 +250,10 @@ def invoke_composer(
         # requested), so scenarios like "no-runtime" stay reachable by
         # passing `forced_cli_runtimes=()` and leaving stub_caller unset.
         name = cli_runtimes[0] if cli_runtimes else "stub"
-        raw = _call_stub(options.stub_caller, name, prompt, payload, timeout)
-        result = _parse(raw, log_path=log_path)
+        raw = _call_stub(options.stub_caller, name, prompt_text, payload_json, timeout)
+        result = _parse_and_log(
+            raw, log_path=log_path, step=step, invocation=invocation, phase=phase
+        )
         return InvokeOutcome(
             result=result,
             runtime=RuntimeDescriptor(kind="stub", identifier=name),
@@ -189,8 +262,10 @@ def invoke_composer(
 
     for name in cli_runtimes:
         if shutil.which(name) is not None:
-            raw = _call_cli(name, prompt, payload, timeout)
-            result = _parse(raw, log_path=log_path)
+            raw = _call_cli(name, prompt_text, payload_json, timeout)
+            result = _parse_and_log(
+                raw, log_path=log_path, step=step, invocation=invocation, phase=phase
+            )
             return InvokeOutcome(
                 result=result,
                 runtime=RuntimeDescriptor(kind="cli", identifier=name),
@@ -341,11 +416,48 @@ def _cli_stdin(system_prompt: str, payload: str) -> str:
     return f"{system_prompt}\n---\nCOMPOSER INPUT\n---\n{payload}\n"
 
 
-def _parse(raw: str, *, log_path: Path) -> ComposerResult:
+def _parse_and_log(
+    raw: str, *, log_path: Path, step: str, invocation: int, phase: str
+) -> ComposerResult:
+    """Parse a Composer response, then append exactly one log entry for it.
+
+    Every completed invocation (successful or not) gets one JSON-lines
+    record, appended immediately and flushed (research.md §5) — this
+    replaces `_parse`'s old behavior of overwriting the whole log file only
+    on a parse failure.
+    """
+    try:
+        result = _parse(raw)
+    except HaexError:
+        append_composer_log_entry(
+            log_path,
+            ComposerLogEntry(
+                step=step,
+                invocation=invocation,
+                phase=phase,
+                raw_output=raw,
+                outcome=ComposerFailureCategory.INVALID_OUTPUT.value,
+            ),
+        )
+        raise
+    outcome = "composed" if isinstance(result, ComposedShape) else "questions"
+    append_composer_log_entry(
+        log_path,
+        ComposerLogEntry(
+            step=step,
+            invocation=invocation,
+            phase=phase,
+            raw_output=raw,
+            outcome=outcome,
+        ),
+    )
+    return result
+
+
+def _parse(raw: str) -> ComposerResult:
     """Parse a Composer response into Shape A or Shape B."""
     match = _SENTINEL_RE.search(raw)
     if match is None:
-        write_composer_log(log_path, raw)
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,
             "Composer output missing SPAEX-COMPOSER sentinel block",
@@ -354,14 +466,12 @@ def _parse(raw: str, *, log_path: Path) -> ComposerResult:
     try:
         envelope = json.loads(match.group("json"))
     except json.JSONDecodeError as exc:
-        write_composer_log(log_path, raw)
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,
             f"Composer sentinel JSON invalid: {exc}",
         )
         raise AssertionError("unreachable") from exc
     if not isinstance(envelope, dict):
-        write_composer_log(log_path, raw)
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,
             f"Composer sentinel JSON must be an object; got {type(envelope).__name__}",
@@ -372,7 +482,6 @@ def _parse(raw: str, *, log_path: Path) -> ComposerResult:
     if shape_kind == "composed":
         body = raw[match.end():].lstrip("\n\r ")
         if not body:
-            write_composer_log(log_path, raw)
             raise_for(
                 ComposerFailureCategory.INVALID_OUTPUT,
                 "Shape A response missing composed constitution body",
@@ -382,16 +491,14 @@ def _parse(raw: str, *, log_path: Path) -> ComposerResult:
     if shape_kind == "questions":
         questions_raw = envelope.get("questions") or ()
         if not isinstance(questions_raw, list) or not questions_raw:
-            write_composer_log(log_path, raw)
             raise_for(
                 ComposerFailureCategory.INVALID_OUTPUT,
                 "Shape B response has no questions",
             )
             raise AssertionError("unreachable")
-        parsed = tuple(_parse_question(q, log_path=log_path, raw_output=raw) for q in questions_raw)
+        parsed = tuple(_parse_question(q) for q in questions_raw)
         return QuestionsShape(questions=parsed)
 
-    write_composer_log(log_path, raw)
     raise_for(
         ComposerFailureCategory.INVALID_OUTPUT,
         f"Composer sentinel type {shape_kind!r} is not 'composed' or 'questions'",
@@ -399,11 +506,8 @@ def _parse(raw: str, *, log_path: Path) -> ComposerResult:
     raise AssertionError("unreachable")
 
 
-def _parse_question(
-    raw: Any, *, log_path: Path, raw_output: str = ""
-) -> ClarificationQuestion:
+def _parse_question(raw: Any) -> ClarificationQuestion:
     if not isinstance(raw, dict):
-        write_composer_log(log_path, raw_output or json.dumps(raw))
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,
             f"Shape B question must be an object; got {type(raw).__name__}",
@@ -411,7 +515,6 @@ def _parse_question(
         raise AssertionError("unreachable")
     kind = raw.get("kind")
     if kind not in ("overlap", "contradiction"):
-        write_composer_log(log_path, raw_output or json.dumps(raw))
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,
             f"Shape B question kind {kind!r} not in overlap|contradiction",
@@ -419,7 +522,6 @@ def _parse_question(
         raise AssertionError("unreachable")
     question = raw.get("question")
     if not isinstance(question, str) or not question.strip():
-        write_composer_log(log_path, raw_output or json.dumps(raw))
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,
             "Shape B question text must be a non-empty string",
@@ -428,7 +530,6 @@ def _parse_question(
     cited_raw = raw.get("cited_fragments") or ()
     cited: list[dict[str, str]] = []
     if not isinstance(cited_raw, list):
-        write_composer_log(log_path, raw_output or json.dumps(raw))
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,
             "Shape B cited_fragments must be a list",
@@ -450,13 +551,53 @@ def _parse_question(
     )
 
 
-def write_composer_log(path: Path, raw: str) -> None:
-    """Best-effort write of raw Composer output for invalid-output diagnostics."""
+def truncate_composer_log(path: Path) -> None:
+    """Truncate `$SPAEX_COMPOSER_LOG` exactly once, at the start of a fresh
+    build attempt (research.md §5). Every invocation within the attempt then
+    appends via `append_composer_log_entry`/`write_composer_log`, so a later
+    step's failure (including one that never returns) can't erase evidence
+    of earlier steps.
+    """
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(raw, encoding="utf-8")
+        path.write_text("", encoding="utf-8")
     except OSError:
         pass
+
+
+def append_composer_log_entry(path: Path, entry: ComposerLogEntry) -> None:
+    """Best-effort append of one JSON-lines record, flushed immediately."""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(entry.to_json())
+            handle.write("\n")
+            handle.flush()
+    except OSError:
+        pass
+
+
+def write_composer_log(
+    path: Path,
+    raw: str,
+    *,
+    step: str = "final",
+    invocation: int = 1,
+    phase: str = "initial",
+    outcome: str = ComposerFailureCategory.INVALID_OUTPUT.value,
+) -> None:
+    """Append one log entry for a single raw blob outside the normal
+    invoke/parse dispatch loop (e.g. `orchestrate._verify_completeness`
+    logging a composed body that parsed fine but silently dropped a
+    fragment). `step` defaults to `"final"`: the fully-composed document,
+    whether produced by the legacy single call or the map-reduce root merge.
+    """
+    append_composer_log_entry(
+        path,
+        ComposerLogEntry(
+            step=step, invocation=invocation, phase=phase, raw_output=raw, outcome=outcome
+        ),
+    )
 
 
 def _classify_stub_exception(exc: Exception) -> ComposerFailureCategory:
@@ -517,12 +658,16 @@ __all__ = [
     "ClarificationQuestion",
     "ComposedShape",
     "ComposerInput",
+    "ComposerLogEntry",
     "ComposerResult",
     "InvokeOptions",
     "InvokeOutcome",
     "QuestionsShape",
     "RuntimeDescriptor",
+    "append_composer_log_entry",
     "invoke_composer",
+    "invoke_step",
     "resolve_composer_log_path",
+    "truncate_composer_log",
     "write_composer_log",
 ]

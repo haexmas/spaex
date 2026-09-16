@@ -27,7 +27,7 @@ Single existing project (`src/spaex/`, `tests/`), per plan.md's Project Structur
 
 ## Phase 1: Setup
 
-- [ ] T001 Create `src/spaex/behavior/composer/batching.py` and `src/spaex/behavior/composer/reduce.py` as empty modules with module-level docstrings describing their role per plan.md's Project Structure.
+- [x] T001 Create `src/spaex/behavior/composer/batching.py` and `src/spaex/behavior/composer/reduce.py` as empty modules with module-level docstrings describing their role per plan.md's Project Structure.
 
 ---
 
@@ -35,11 +35,11 @@ Single existing project (`src/spaex/`, `tests/`), per plan.md's Project Structur
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete — every user story's tests depend on the log format and the extracted clarification helper.
 
-- [ ] T002 [P] Change `$SPAEX_COMPOSER_LOG` to a JSON-lines format (data-model.md's `ComposerLogEntry`: `step`, `invocation`, `phase`, `raw_output`, `outcome`), truncate it exactly once at attempt start, and append/flush each completed invocation thereafter in `src/spaex/behavior/composer/invoke.py` (`write_composer_log`/`resolve_composer_log_path` and their call sites). Preserve both records of a clarification round trip. Applies uniformly whether a build has one step or many — no separate "small fragment set" log format.
+- [x] T002 [P] Change `$SPAEX_COMPOSER_LOG` to a JSON-lines format (data-model.md's `ComposerLogEntry`: `step`, `invocation`, `phase`, `raw_output`, `outcome`), truncate it exactly once at attempt start, and append/flush each completed invocation thereafter in `src/spaex/behavior/composer/invoke.py` (`write_composer_log`/`resolve_composer_log_path` and their call sites). Preserve both records of a clarification round trip. Applies uniformly whether a build has one step or many — no separate "small fragment set" log format.
 - [ ] T003 [P] Extract `orchestrate.py`'s existing `_resolve_clarifications` clarification round-trip into a form callable once per batch call or once for the merge call (not only once for the whole build), preserving its existing one-round-trip bound (a second Shape B from the same call remains `invalid-output`), in `src/spaex/behavior/orchestrate.py`.
 - [ ] T004 [P] Implement deterministic fragment→batch partitioning per research.md §2 (byte-size ceiling with a fragment-count guard; a molecule's fragments never split across batches) in `src/spaex/behavior/composer/batching.py`.
 - [ ] T005 [P] Unit tests for batch partitioning — determinism (same input → same batches across repeated calls), boundary sizes (exactly at the ceiling, one byte over), a molecule whose fragments would otherwise straddle a boundary, an oversized molecule that returns the typed `input-too-large` diagnostic without a `Batch`, and the single-batch degenerate case — in `tests/behavior/unit/test_batching.py`.
-- [ ] T006 [P] Unit test asserting the new composer-log format: truncate once per simulated attempt, append multiple independently parseable entries across steps, and retain ordered initial/resolved records for a clarification round trip, in `tests/behavior/unit/test_composer_log_format.py`.
+- [x] T006 [P] Unit test asserting the new composer-log format: truncate once per simulated attempt, append multiple independently parseable entries across steps, and retain ordered initial/resolved records for a clarification round trip, in `tests/behavior/unit/test_composer_log_format.py`.
 
 **Checkpoint**: Foundation ready — user story implementation can begin.
 

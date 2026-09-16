@@ -1,5 +1,8 @@
 """Composer output completeness verification (Spec 023 T073, FR-012b).
 
+Spec 026 T002 changed `$SPAEX_COMPOSER_LOG` to a JSON-lines format: one
+record per invocation instead of the whole file holding one raw blob.
+
 `_verify_completeness` closes the gap `emit_composed`'s hash checks cannot
 see: both hashes are computed from the *input* fragments and merely echoed
 back by the Composer, so a Shape A response can carry correct hashes while
@@ -11,6 +14,7 @@ and the operator's resolution already explains why it is missing).
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -181,4 +185,8 @@ def test_missing_fragment_writes_composed_body_to_composer_log(tmp_path: Path) -
         )
 
     log_path = tmp_path / ".spaex" / "composer.log"
-    assert log_path.read_text(encoding="utf-8") == body
+    lines = log_path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1
+    entry = json.loads(lines[0])
+    assert entry["raw_output"] == body
+    assert entry["outcome"] == "invalid-output"
