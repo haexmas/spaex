@@ -246,6 +246,7 @@ class _ClarificationAwareComposer:
         options: InvokeOptions | None = None,
         **_kwargs: object,
     ) -> InvokeOutcome:
+        """Ask once for unresolved input, then compose clarified fragments."""
         data = json.loads(composer_input.to_json())
         self.calls.append({"clarification_count": len(data["clarifications"])})
         fragments = data["fragments"]

@@ -147,6 +147,7 @@ class ComposerLogEntry:
     outcome: str
 
     def to_json(self) -> str:
+        """Serialize the log entry as one JSON-lines-compatible record."""
         return json.dumps(
             {
                 "step": self.step,
@@ -507,6 +508,7 @@ def _parse(raw: str) -> ComposerResult:
 
 
 def _parse_question(raw: Any) -> ClarificationQuestion:
+    """Validate and convert one raw Shape-B clarification question."""
     if not isinstance(raw, dict):
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,

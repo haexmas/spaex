@@ -25,11 +25,13 @@ from spaex.behavior.composer.invoke import (
 
 
 def _read_entries(path: Path) -> list[dict]:
+    """Read every non-empty JSON-lines entry from a composer log."""
     text = path.read_text(encoding="utf-8")
     return [json.loads(line) for line in text.splitlines() if line]
 
 
 def test_truncate_then_append_yields_one_entry_per_line(tmp_path: Path) -> None:
+    """Append each completed invocation as an independent JSON line."""
     log_path = tmp_path / "composer.log"
     truncate_composer_log(log_path)
     append_composer_log_entry(
@@ -51,6 +53,7 @@ def test_truncate_then_append_yields_one_entry_per_line(tmp_path: Path) -> None:
 
 
 def test_truncate_clears_a_prior_attempts_entries(tmp_path: Path) -> None:
+    """Clear records from the prior composition attempt."""
     log_path = tmp_path / "composer.log"
     append_composer_log_entry(
         log_path,
@@ -65,6 +68,7 @@ def test_truncate_clears_a_prior_attempts_entries(tmp_path: Path) -> None:
 
 
 def _shape_a_body() -> str:
+    """Return a minimal composed Shape-A response."""
     return (
         "<<<SPAEX-COMPOSER-BEGIN>>>\n"
         '{"type": "composed", "questions": []}\n'
@@ -75,6 +79,7 @@ def _shape_a_body() -> str:
 
 
 def _shape_b_body() -> str:
+    """Return a minimal clarification Shape-B response."""
     return (
         "<<<SPAEX-COMPOSER-BEGIN>>>\n"
         '{"type": "questions", "questions": ['
@@ -88,11 +93,13 @@ def _shape_b_body() -> str:
 def test_invoke_composer_appends_one_independently_parseable_entry_per_step(
     tmp_path: Path,
 ) -> None:
+    """Log independently parseable entries for successive batch steps."""
     (tmp_path / ".spaex").mkdir()
     log_path = tmp_path / ".spaex" / "composer.log"
     truncate_composer_log(log_path)
 
     def stub(runtime: str, prompt: str, payload: str, timeout: float) -> str:
+        """Return a successful composed response for every invocation."""
         return _shape_a_body()
 
     options = InvokeOptions(stub_caller=stub, composer_log_path=log_path)
@@ -112,6 +119,7 @@ def test_invoke_composer_appends_one_independently_parseable_entry_per_step(
 
 
 def test_clarification_round_trip_retains_both_ordered_records(tmp_path: Path) -> None:
+    """Retain ordered records for both sides of a clarification retry."""
     (tmp_path / ".spaex").mkdir()
     log_path = tmp_path / ".spaex" / "composer.log"
     truncate_composer_log(log_path)
@@ -119,6 +127,7 @@ def test_clarification_round_trip_retains_both_ordered_records(tmp_path: Path) -
     responses = iter([_shape_b_body(), _shape_a_body()])
 
     def stub(runtime: str, prompt: str, payload: str, timeout: float) -> str:
+        """Return a question first and a composition on retry."""
         return next(responses)
 
     options = InvokeOptions(stub_caller=stub, composer_log_path=log_path)

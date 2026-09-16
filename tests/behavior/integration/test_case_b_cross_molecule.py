@@ -269,6 +269,7 @@ _FILLER_COUNT = 11  # + "contradiction-a" fills batch-1 to the default 12-fragme
 
 
 def _cross_batch_fragments() -> list[BehaviorFragment]:
+    """Build fragments whose contradictory pair straddles a batch boundary."""
     fragments = [
         _fragment(f"filler-{i:02d}", "rule", "**MUST** follow filler rule.\n")
         for i in range(_FILLER_COUNT)
@@ -287,6 +288,7 @@ def _cross_batch_fragments() -> list[BehaviorFragment]:
 
 
 def _fragment(molecule: str, fid: str, body: str) -> BehaviorFragment:
+    """Build one in-memory behavior fragment."""
     raw = (
         f"---\nid: {fid}\nkind: constitution_fragment\n"
         f"atom_source: pkg.a\n---\n{body}"
@@ -295,6 +297,7 @@ def _fragment(molecule: str, fid: str, body: str) -> BehaviorFragment:
 
 
 def _batch_response(data: dict) -> str:
+    """Return a Shape-A composition for one batch payload."""
     bullets = [
         f"- {f['body'].strip()} _[from `{f['molecule_id']}/{f['fragment_id']}`]_"
         for f in data["fragments"]
@@ -307,6 +310,7 @@ def _batch_response(data: dict) -> str:
 
 
 def _merge_shape_b(question_kind: str = "contradiction") -> str:
+    """Return a merge-level Shape-B question for the conflicting pair."""
     question = {
         "kind": question_kind,
         "cited_fragments": [
@@ -326,6 +330,7 @@ def _merge_shape_b(question_kind: str = "contradiction") -> str:
 
 
 def _merge_shape_a(data: dict) -> str:
+    """Return a Shape-A merge preserving all input citations."""
     bullets = [
         line
         for bc in data["batch_compositions"]
@@ -352,6 +357,7 @@ def _make_cross_batch_stub():
     contradiction question until an answer is staged, then composes."""
 
     def stub(runtime: str, prompt: str, payload: str, timeout: float) -> str:
+        """Compose batches and ask unresolved merge questions once."""
         data = json.loads(payload)
         if "batch_compositions" not in data:
             return _batch_response(data)
@@ -363,6 +369,7 @@ def _make_cross_batch_stub():
 
 
 def test_cross_batch_contradiction_raises_merge_node_shape_b(tmp_path: Path) -> None:
+    """Resolve a contradiction first discovered at the merge node."""
     fragments = _cross_batch_fragments()
     partition_result = batching.partition(fragments, [])
     assert len(partition_result.batches) == 2, "fixture must actually straddle two batches"
@@ -370,6 +377,7 @@ def test_cross_batch_contradiction_raises_merge_node_shape_b(tmp_path: Path) -> 
     answer_calls: list[str] = []
 
     def operator_answer(question) -> str:
+        """Record and answer the expected cross-batch contradiction."""
         answer_calls.append(question.question)
         assert question.kind == "contradiction"
         assert {c["molecule_id"] for c in question.cited_fragments} == {
@@ -397,9 +405,11 @@ def test_cross_batch_contradiction_raises_merge_node_shape_b(tmp_path: Path) -> 
 
 
 def test_cross_batch_contradiction_answer_is_persisted_and_not_reasked(tmp_path: Path) -> None:
+    """Reuse a persisted cross-batch answer on a later composition."""
     fragments = _cross_batch_fragments()
 
     def first_operator_answer(question) -> str:
+        """Resolve the contradiction during the first composition."""
         return "zzz-contradiction-b's rule wins"
 
     first_partition = batching.partition(fragments, [])
@@ -417,6 +427,7 @@ def test_cross_batch_contradiction_answer_is_persisted_and_not_reasked(tmp_path:
     assert len(store.entries) == 1
 
     def operator_answer_must_not_be_called(question) -> str:
+        """Fail if the persisted answer does not suppress the question."""
         raise AssertionError("clarification already persisted; must not re-ask")
 
     second_partition = batching.partition(fragments, tuple(store.entries.values()))

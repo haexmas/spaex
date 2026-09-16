@@ -21,6 +21,7 @@ from spaex.behavior.fragment import BehaviorFragment
 
 
 def _fragment(molecule: str, fid: str, body: str = "**MUST** run tests.\n") -> BehaviorFragment:
+    """Build a behavior fragment for batching scenarios."""
     raw = (
         f"---\nid: {fid}\nkind: constitution_fragment\n"
         f"atom_source: pkg.a\nmodality: MUST\n---\n{body}"
@@ -29,6 +30,7 @@ def _fragment(molecule: str, fid: str, body: str = "**MUST** run tests.\n") -> B
 
 
 def _clarification(*cited: CitedFragment, key: str = "k") -> Clarification:
+    """Build a resolved clarification citing the supplied fragments."""
     return Clarification(
         key=key,
         question="q?",
@@ -40,6 +42,7 @@ def _clarification(*cited: CitedFragment, key: str = "k") -> Clarification:
 
 
 def test_single_batch_degenerate_case() -> None:
+    """Keep a fragment set within the limits in one batch."""
     fragments = [_fragment("alpha", "a"), _fragment("beta", "b")]
 
     result = partition(fragments)
@@ -51,6 +54,7 @@ def test_single_batch_degenerate_case() -> None:
 
 
 def test_partitioning_is_deterministic_across_repeated_calls() -> None:
+    """Produce identical ordered batches across repeated calls."""
     fragments = [_fragment(f"mol-{i}", "rule") for i in reversed(range(6))]
     limits = BatchingLimits(max_fragments=2, max_bytes=100_000)
 
@@ -64,6 +68,7 @@ def test_partitioning_is_deterministic_across_repeated_calls() -> None:
 
 
 def test_fragment_count_ceiling_splits_into_multiple_batches() -> None:
+    """Split fragments when the configured count ceiling is reached."""
     fragments = [_fragment(f"mol-{i}", "rule") for i in range(6)]
     limits = BatchingLimits(max_fragments=2, max_bytes=100_000)
 
@@ -96,6 +101,7 @@ def test_molecule_fragments_never_split_across_a_batch_boundary() -> None:
 
 
 def test_byte_ceiling_exactly_at_boundary_fits_in_one_batch() -> None:
+    """Allow a serialized batch exactly at the byte ceiling."""
     fragments = [_fragment("mol-a", "one"), _fragment("mol-b", "two")]
     exact = len(ComposerInput(fragments=tuple(fragments)).to_json().encode("utf-8"))
     limits = BatchingLimits(max_fragments=100, max_bytes=exact)
@@ -106,6 +112,7 @@ def test_byte_ceiling_exactly_at_boundary_fits_in_one_batch() -> None:
 
 
 def test_byte_ceiling_one_byte_over_splits_into_two_batches() -> None:
+    """Split a serialized batch that exceeds the byte ceiling by one."""
     fragments = [_fragment("mol-a", "one"), _fragment("mol-b", "two")]
     exact = len(ComposerInput(fragments=tuple(fragments)).to_json().encode("utf-8"))
     limits = BatchingLimits(max_fragments=100, max_bytes=exact - 1)
@@ -116,6 +123,7 @@ def test_byte_ceiling_one_byte_over_splits_into_two_batches() -> None:
 
 
 def test_oversized_molecule_raises_input_too_large_without_a_batch() -> None:
+    """Reject an indivisible molecule that exceeds the byte ceiling."""
     huge_body = "**MUST** " + ("x" * 5_000) + ".\n"
     fragments = [_fragment("mol-huge", "rule", body=huge_body)]
     limits = BatchingLimits(max_fragments=100, max_bytes=1_000)
@@ -142,6 +150,7 @@ def test_molecule_exceeding_fragment_ceiling_raises_input_too_large() -> None:
 
 
 def test_clarification_scoped_to_one_batch_is_assigned_to_it() -> None:
+    """Attach a clarification whose citations lie within one batch."""
     fragments = [_fragment(f"mol-{i}", "rule") for i in range(4)]
     limits = BatchingLimits(max_fragments=2, max_bytes=100_000)
     same_batch_clarification = _clarification(
@@ -157,6 +166,7 @@ def test_clarification_scoped_to_one_batch_is_assigned_to_it() -> None:
 
 
 def test_clarification_spanning_batches_is_cross_batch() -> None:
+    """Classify a clarification citing multiple batches as cross-batch."""
     fragments = [_fragment(f"mol-{i}", "rule") for i in range(4)]
     limits = BatchingLimits(max_fragments=2, max_bytes=100_000)
     spanning_clarification = _clarification(

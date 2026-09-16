@@ -268,6 +268,7 @@ from spaex.model.molecule_manifest import MoleculeManifest  # noqa: E402
 
 
 def _multi_batch_resolved_molecules(cache_root: Path, count: int) -> list[ResolvedMolecule]:
+    """Create deterministic resolved molecules without invoking the resolver."""
     resolved = []
     for index in range(count):
         mol_id = f"mol-{index:03d}"
@@ -309,9 +310,11 @@ class _DeterministicMultiBatchStub:
     strip it. Counts invocations for the reproducibility-skip assertion."""
 
     def __init__(self) -> None:
+        """Initialize the invocation counter."""
         self.call_count = 0
 
     def __call__(self, runtime: str, prompt: str, payload: str, timeout: float) -> str:
+        """Return deterministic Shape A output for batch and merge calls."""
         self.call_count += 1
         data = json.loads(payload)
         if "batch_compositions" in data:
@@ -342,6 +345,7 @@ class _DeterministicMultiBatchStub:
 
 
 def test_multi_batch_reproducibility_skip_avoids_recomposition(tmp_path: Path) -> None:
+    """Skip every composer call when multi-batch inputs are unchanged."""
     repo = tmp_path / "repo"
     (repo / ".spaex").mkdir(parents=True)
     resolved = _multi_batch_resolved_molecules(tmp_path / "cache", 25)
@@ -374,6 +378,7 @@ def test_multi_batch_reproducibility_skip_avoids_recomposition(tmp_path: Path) -
 
 
 def test_multi_batch_forced_recomposition_is_byte_identical(tmp_path: Path) -> None:
+    """Produce byte-identical output when unchanged input is force-composed."""
     repo = tmp_path / "repo"
     (repo / ".spaex").mkdir(parents=True)
     resolved = _multi_batch_resolved_molecules(tmp_path / "cache", 25)
