@@ -52,6 +52,9 @@ def verify_completeness(
     clarifications: ClarificationsStore,
     repo_root: Path,
     invoke_options: InvokeOptions | None,
+    step: str = "final",
+    invocation: int = 1,
+    phase: str = "initial",
 ) -> None:
     """Abort as `invalid-output` when the Composer silently dropped a fragment (FR-012b).
 
@@ -63,13 +66,11 @@ def verify_completeness(
     checks cannot see, because those hashes are computed from the input, not
     the output body.
 
-    Unlike a sentinel-parse failure, this response *did* parse cleanly, so
-    `invoke_composer` never wrote it to `$SPAEX_COMPOSER_LOG` - it only had a
-    reason to log garbage, not a well-formed body that turned out to be
-    incomplete. Write the composed body here too, so the same "go inspect
-    the log" hint holds for this failure mode as well: seeing exactly where
-    the body stopped citing fragments is what tells an operator whether this
-    is truncation (output cut off mid-document) or a genuine omission.
+    Although the response parsed cleanly, the invocation log records it as
+    composed before this post-parse check runs. Write the body here once more
+    with the invalid-output outcome, so the same "go inspect the log" hint
+    identifies the completeness failure and shows exactly where the body
+    stopped citing fragments.
     """
     cited = _cited_scoped_ids(composed_body)
     excused = {
@@ -84,11 +85,18 @@ def verify_completeness(
     )
     if missing:
         log_path = resolve_composer_log_path(invoke_options or InvokeOptions(), repo_root)
-        write_composer_log(log_path, composed_body)
+        write_composer_log(
+            log_path,
+            composed_body,
+            step=step,
+            invocation=invocation,
+            phase=phase,
+        )
         raise_for(
             ComposerFailureCategory.INVALID_OUTPUT,
-            "Composer output omits fragment(s) with no recorded clarification: "
+            f"Composer output for {step} omits fragment(s) with no recorded clarification: "
             + ", ".join(missing),
+            context={"step": step, "missing_fragments": ", ".join(missing)},
         )
 
 

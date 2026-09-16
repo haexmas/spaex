@@ -137,6 +137,8 @@ def compose(
 
     for batch in batches:
         options = _with_forced_runtime(invoke_options, runtime_name)
+        invocation = 1
+        phase = "initial"
         composer_input = ComposerInput(
             fragments=batch.fragments,
             clarifications=batch.clarifications,
@@ -168,17 +170,35 @@ def compose(
                 operator_answer=operator_answer,
                 runtime_name=runtime_name,
             )
+            invocation = 2
+            phase = "clarification-resolved"
 
         assert isinstance(outcome.result, ComposedShape)
         body = strip_header(outcome.result.body)
+        batch_scoped_ids = {fragment.scoped_id for fragment in batch.fragments}
+        batch_clarifications = {
+            clarification.key: clarification
+            for clarification in batch.clarifications
+        }
+        batch_clarifications.update(
+            {
+                clarification.key: clarification
+                for clarification in store.entries.values()
+                if {
+                    cited.scoped_id for cited in clarification.cited_fragments
+                }
+                <= batch_scoped_ids
+            }
+        )
         verify_completeness(
             canonical_fragments=batch.fragments,
             composed_body=body,
-            clarifications=ClarificationsStore(
-                entries={c.key: c for c in batch.clarifications}
-            ),
+            clarifications=ClarificationsStore(entries=batch_clarifications),
             repo_root=repo_root,
             invoke_options=options,
+            step=batch.batch_id,
+            invocation=invocation,
+            phase=phase,
         )
         molecule_count = len({fragment.molecule_id for fragment in batch.fragments})
         sys.stdout.write(

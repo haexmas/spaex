@@ -287,3 +287,82 @@ def test_batch_that_silently_drops_a_citation_aborts_before_the_next_batch(
     # The second batch must never be dispatched once batch-1's own
     # completeness check fails.
     assert len(stub.calls) == 1
+    log_entries = [
+        json.loads(line)
+        for line in (tmp_path / ".spaex" / "composer.log")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert log_entries[-1]["step"] == "batch-1"
+    assert log_entries[-1]["invocation"] == 1
+
+
+def test_batch_clarification_is_used_by_post_retry_completeness_check(
+    tmp_path: Path,
+) -> None:
+    """A newly answered batch clarification must excuse its cited omission."""
+    fragments = [
+        _fragment("mol-a", "do thing a."),
+        _fragment("mol-b", "do thing b."),
+        _fragment("mol-c", "do thing c."),
+    ]
+    limits = batching.BatchingLimits(max_fragments=2, max_bytes=100_000)
+    partition_result = batching.partition(fragments, [], limits=limits)
+    calls: list[dict[str, object]] = []
+    batch_one_attempts = 0
+
+    def stub(runtime: str, prompt: str, payload: str, timeout: float) -> str:
+        """Ask once in batch one, then omit the resolved overlap's second clause."""
+        nonlocal batch_one_attempts
+        data = json.loads(payload)
+        calls.append(data)
+        if "batch_compositions" in data:
+            return _merge_stub_response(payload, is_root=True)
+        if data["fragments"][0]["molecule_id"] == "mol-a":
+            batch_one_attempts += 1
+            if batch_one_attempts == 1:
+                return (
+                    "<<<SPAEX-COMPOSER-BEGIN>>>\n"
+                    + json.dumps(
+                        {
+                            "type": "questions",
+                            "questions": [
+                                {
+                                    "kind": "overlap",
+                                    "cited_fragments": [
+                                        {"molecule_id": "mol-a", "fragment_id": "rule"},
+                                        {"molecule_id": "mol-b", "fragment_id": "rule"},
+                                    ],
+                                    "question": "Which overlapping rule wins?",
+                                }
+                            ],
+                        }
+                    )
+                    + "\n<<<SPAEX-COMPOSER-END>>>\n"
+                )
+            return """<<<SPAEX-COMPOSER-BEGIN>>>
+{"type": "composed", "questions": []}
+<<<SPAEX-COMPOSER-END>>>
+
+## MUST
+
+- do thing a. _[from `mol-a/rule`]_
+"""
+        return _batch_stub_response(payload)
+
+    store, _build_input_hash, outcome = composer_reduce.compose(
+        partition_result=partition_result,
+        source_hash="a" * 64,
+        build_input_hash="b" * 64,
+        repo_root=tmp_path,
+        invoke_options=InvokeOptions(stub_caller=stub),
+        store=ClarificationsStore(),
+        prompt_hash="prompt-hash",
+        operator_answer=lambda _question: "keep the first rule",
+        abort_on_contradiction=True,
+        limits=limits,
+    )
+
+    assert len(store.entries) == 1
+    assert len(calls) == 4
+    assert "mol-a/rule" in outcome.result.body
