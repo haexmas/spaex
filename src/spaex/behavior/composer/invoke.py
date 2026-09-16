@@ -306,9 +306,12 @@ def _load_avg_suffix() -> str:
     the two without a second manual investigation. Unix-only; absent on
     Windows, where this silently contributes nothing.
     """
+    getloadavg = getattr(os, "getloadavg", None)
+    if getloadavg is None:
+        return ""
     try:
-        load1, load5, load15 = os.getloadavg()
-    except (AttributeError, OSError):
+        load1, load5, load15 = getloadavg()
+    except OSError:
         return ""
     return f" (host load avg 1/5/15m: {load1:.2f}/{load5:.2f}/{load15:.2f})"
 
