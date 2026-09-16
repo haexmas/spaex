@@ -19,7 +19,7 @@ from spaex.behavior.composer.invoke import InvokeOptions
 from spaex.constitution.resolve import ResolvedMolecule
 from spaex.model.molecule_manifest import MoleculeManifest
 
-_MOLECULE_COUNT = 25  # default batch ceiling is 12 fragments -> 3 batches (12, 12, 1)
+_MOLECULE_COUNT = 150  # exceeds the default 20KB byte ceiling -> 3 batches (72, 72, 6)
 
 
 class MockTimeout(Exception):

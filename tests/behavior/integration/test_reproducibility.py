@@ -348,7 +348,7 @@ def test_multi_batch_reproducibility_skip_avoids_recomposition(tmp_path: Path) -
     """Skip every composer call when multi-batch inputs are unchanged."""
     repo = tmp_path / "repo"
     (repo / ".spaex").mkdir(parents=True)
-    resolved = _multi_batch_resolved_molecules(tmp_path / "cache", 25)
+    resolved = _multi_batch_resolved_molecules(tmp_path / "cache", 150)
     stub = _DeterministicMultiBatchStub()
 
     first = behavior_orchestrate.run(
@@ -359,7 +359,7 @@ def test_multi_batch_reproducibility_skip_avoids_recomposition(tmp_path: Path) -
     )
     assert first.published
     calls_after_first_run = stub.call_count
-    assert calls_after_first_run > 1, "a 25-molecule set must actually go through map-reduce"
+    assert calls_after_first_run > 1, "a 150-molecule set must actually go through map-reduce"
     first_body = (repo / ".spaex" / "constitution.md").read_bytes()
 
     second = behavior_orchestrate.run(
@@ -381,7 +381,7 @@ def test_multi_batch_forced_recomposition_is_byte_identical(tmp_path: Path) -> N
     """Produce byte-identical output when unchanged input is force-composed."""
     repo = tmp_path / "repo"
     (repo / ".spaex").mkdir(parents=True)
-    resolved = _multi_batch_resolved_molecules(tmp_path / "cache", 25)
+    resolved = _multi_batch_resolved_molecules(tmp_path / "cache", 150)
     stub = _DeterministicMultiBatchStub()
 
     first = behavior_orchestrate.run(

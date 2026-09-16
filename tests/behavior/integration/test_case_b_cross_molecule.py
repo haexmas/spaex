@@ -265,7 +265,8 @@ from spaex.behavior.composer import batching  # noqa: E402
 from spaex.behavior.composer import reduce as composer_reduce  # noqa: E402
 from spaex.behavior.composer.clarifications import ClarificationsStore  # noqa: E402
 
-_FILLER_COUNT = 11  # + "contradiction-a" fills batch-1 to the default 12-fragment ceiling
+_FILLER_COUNT = 11  # + "contradiction-a" fills batch-1 to _TEST_LIMITS' 12-fragment ceiling
+_TEST_LIMITS = batching.BatchingLimits(max_fragments=12, max_bytes=100_000)
 
 
 def _cross_batch_fragments() -> list[BehaviorFragment]:
@@ -371,7 +372,7 @@ def _make_cross_batch_stub():
 def test_cross_batch_contradiction_raises_merge_node_shape_b(tmp_path: Path) -> None:
     """Resolve a contradiction first discovered at the merge node."""
     fragments = _cross_batch_fragments()
-    partition_result = batching.partition(fragments, [])
+    partition_result = batching.partition(fragments, [], limits=_TEST_LIMITS)
     assert len(partition_result.batches) == 2, "fixture must actually straddle two batches"
 
     answer_calls: list[str] = []
@@ -412,7 +413,7 @@ def test_cross_batch_contradiction_answer_is_persisted_and_not_reasked(tmp_path:
         """Resolve the contradiction during the first composition."""
         return "zzz-contradiction-b's rule wins"
 
-    first_partition = batching.partition(fragments, [])
+    first_partition = batching.partition(fragments, [], limits=_TEST_LIMITS)
     store, build_input_hash, _outcome = composer_reduce.compose(
         partition_result=first_partition,
         source_hash="a" * 64,
@@ -430,7 +431,9 @@ def test_cross_batch_contradiction_answer_is_persisted_and_not_reasked(tmp_path:
         """Fail if the persisted answer does not suppress the question."""
         raise AssertionError("clarification already persisted; must not re-ask")
 
-    second_partition = batching.partition(fragments, tuple(store.entries.values()))
+    second_partition = batching.partition(
+        fragments, tuple(store.entries.values()), limits=_TEST_LIMITS
+    )
     _store2, _build_input_hash2, outcome2 = composer_reduce.compose(
         partition_result=second_partition,
         source_hash="a" * 64,
