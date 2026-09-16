@@ -244,6 +244,7 @@ class _ClarificationAwareComposer:
         *,
         repo_root: Path,
         options: InvokeOptions | None = None,
+        **_kwargs: object,
     ) -> InvokeOutcome:
         data = json.loads(composer_input.to_json())
         self.calls.append({"clarification_count": len(data["clarifications"])})

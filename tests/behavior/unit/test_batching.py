@@ -11,7 +11,6 @@ from __future__ import annotations
 import pytest
 
 from spaex.behavior.composer.batching import (
-    Batch,
     BatchingLimits,
     partition,
 )

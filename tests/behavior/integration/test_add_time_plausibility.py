@@ -168,6 +168,7 @@ def _make_composer_stub(*, question_kind: str = "contradiction"):
         *,
         repo_root: Path,
         options: InvokeOptions | None = None,
+        **_kwargs: object,
     ) -> InvokeOutcome:
         data = json.loads(composer_input.to_json())
         calls.append(len(data["fragments"]))
