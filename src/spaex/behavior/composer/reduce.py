@@ -4,9 +4,11 @@ The only new caller of `invoke.py`'s single-call machinery. For each `Batch`
 (`batching.py`) this dispatches one Composer call reusing the existing
 sentinel/Shape A/Shape B contract unchanged, then combines the batches'
 composed output with one bounded merge step (a flat N-ary merge when the
-merge input fits the batching byte-size ceiling, otherwise a deterministic
-pairwise tree reduction) that re-checks for cross-batch contradictions
-before the final, header-bearing document is returned.
+merge input fits the merge ceiling — a multiple of the batching byte-size
+ceiling, since composed markdown carries much less structural overhead per
+fragment than raw JSON, see `_MERGE_CEILING_MULTIPLIER` — otherwise a
+deterministic pairwise tree reduction) that re-checks for cross-batch
+contradictions before the final, header-bearing document is returned.
 
 `compose()` is only entered for a fragment set spanning more than one batch;
 a single-batch build stays on `orchestrate.py`'s direct `invoke_composer`
@@ -39,6 +41,24 @@ from spaex.behavior.composer.invoke import (
 )
 from spaex.behavior.composer.prompt import MERGE_PROMPT, strip_header
 from spaex.behavior.fragment import BehaviorFragment
+
+#: Merge nodes combine already-composed markdown, not raw fragment JSON.
+#: research.md §3 assumed composed text is "far smaller and more compact"
+#: than the raw fragments it summarizes, so reusing the batching ceiling
+#: for merge decisions would usually be conservative. Real dogfooding
+#: against this project's own dense prose fragments showed otherwise: two
+#: batches each individually within the batching ceiling composed down to
+#: only a modest reduction, and together exceeded that same ceiling at the
+#: merge step. Composed markdown also carries far less structural overhead
+#: per fragment than raw JSON (no body_sha256, tags, or atom_source
+#: repeated per entry), so merge decisions get deliberate headroom above
+#: the batching ceiling instead of reusing it as-is.
+_MERGE_CEILING_MULTIPLIER = 2
+
+
+def _merge_ceiling(limits: BatchingLimits) -> int:
+    """Byte ceiling used for merge-node fit decisions (see multiplier above)."""
+    return limits.max_bytes * _MERGE_CEILING_MULTIPLIER
 
 
 @dataclass(frozen=True)
@@ -258,14 +278,16 @@ def _reduce(
     runtime_name: str | None,
     limits: BatchingLimits,
 ) -> tuple[ClarificationsStore, str, InvokeOutcome]:
-    """Bounded merge reduction (research.md §3): one flat N-ary merge when
-    the current node set fits the batching byte ceiling, otherwise a
-    deterministic pairwise tree level (adjacent nodes merged, an odd node
-    carried forward unchanged), repeated until one node remains."""
+    """Bounded merge reduction (research.md §3, merge ceiling per
+    `_merge_ceiling`): one flat N-ary merge when the current node set fits,
+    otherwise a deterministic pairwise tree level (adjacent nodes merged,
+    an odd node carried forward unchanged), repeated until one node
+    remains."""
+    merge_ceiling = _merge_ceiling(limits)
     level = 0
     while len(nodes) > 1:
         relevant = _relevant_clarifications(cross_batch_clarifications, _scoped_ids(nodes))
-        if _fits(nodes, relevant, source_hash, build_input_hash, limits):
+        if _fits(nodes, relevant, source_hash, build_input_hash, merge_ceiling):
             merged, store, build_input_hash, shape_b = _merge_call(
                 nodes,
                 relevant,
@@ -299,19 +321,22 @@ def _reduce(
                 pair_clarifications = _relevant_clarifications(
                     cross_batch_clarifications, _scoped_ids(pair)
                 )
-                if not _fits(pair, pair_clarifications, source_hash, build_input_hash, limits):
+                pair_fits = _fits(
+                    pair, pair_clarifications, source_hash, build_input_hash, merge_ceiling
+                )
+                if not pair_fits:
                     raise_for(
                         ComposerFailureCategory.INVALID_OUTPUT,
                         (
                             f"merge pair at tree level {level} (batches "
                             f"{sorted(pair[0].batch_ids | pair[1].batch_ids)}) "
-                            f"exceeds the {limits.max_bytes}-byte batch ceiling "
+                            f"exceeds the {merge_ceiling}-byte merge ceiling "
                             "and cannot be merged"
                         ),
                         context={
                             "reason": "input-too-large",
                             "step": f"merge-l{level}-{pair_index}",
-                            "ceiling": str(limits.max_bytes),
+                            "ceiling": str(merge_ceiling),
                         },
                     )
                     raise AssertionError("unreachable")
@@ -453,7 +478,7 @@ def _fits(
     clarifications: tuple[Clarification, ...],
     source_hash: str,
     build_input_hash: str,
-    limits: BatchingLimits,
+    ceiling: int,
 ) -> bool:
     """Return whether the nodes fit in one serialized merge request."""
     merge_input = MergeNodeInput(
@@ -463,7 +488,7 @@ def _fits(
         expected_build_input_hash=build_input_hash,
     )
     size = len(merge_input.to_json().encode("utf-8"))
-    return size <= limits.max_bytes
+    return size <= ceiling
 
 
 def _scoped_ids(nodes: Sequence[_Node]) -> set[str]:

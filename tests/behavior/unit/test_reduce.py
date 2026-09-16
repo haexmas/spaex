@@ -111,7 +111,7 @@ def test_odd_batch_count_forces_multi_level_pairwise_reduction_with_carry_forwar
     # Small enough that 5 (and 3) batch bodies together don't fit, but any
     # 2 adjacent bodies do — forces the pairwise-tree path across more than
     # one level instead of one flat merge.
-    merge_limits = batching.BatchingLimits(max_fragments=1_000_000, max_bytes=600)
+    merge_limits = batching.BatchingLimits(max_fragments=1_000_000, max_bytes=300)
     stub = _Stub(root_source_hash=source_hash, root_build_input_hash=build_input_hash)
 
     store, final_build_input_hash, outcome = composer_reduce.compose(
