@@ -25,6 +25,7 @@ from pathlib import Path
 from spaex.behavior.composer.batching import Batch, BatchingLimits, PartitionResult
 from spaex.behavior.composer.clarifications import Clarification, ClarificationsStore
 from spaex.behavior.composer.clarify import resolve_step_clarifications
+from spaex.behavior.composer.completeness import verify_completeness
 from spaex.behavior.composer.failure import ComposerFailureCategory, raise_for
 from spaex.behavior.composer.invoke import (
     ClarificationQuestion,
@@ -170,6 +171,15 @@ def compose(
 
         assert isinstance(outcome.result, ComposedShape)
         body = strip_header(outcome.result.body)
+        verify_completeness(
+            canonical_fragments=batch.fragments,
+            composed_body=body,
+            clarifications=ClarificationsStore(
+                entries={c.key: c for c in batch.clarifications}
+            ),
+            repo_root=repo_root,
+            invoke_options=options,
+        )
         molecule_count = len({fragment.molecule_id for fragment in batch.fragments})
         sys.stdout.write(
             f"composer: {batch.batch_id} composed "

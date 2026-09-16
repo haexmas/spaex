@@ -58,11 +58,13 @@ def _resolved_molecule(cache_root: Path, index: int) -> ResolvedMolecule:
 
 
 def _shape_a_response(payload: str) -> str:
-    """Compose the first fragment in a batch payload into Shape A."""
+    """Compose every fragment in a batch payload into Shape A."""
     data = json.loads(payload)
-    fragment = data["fragments"][0]
-    scoped = f"{fragment['molecule_id']}/{fragment['fragment_id']}"
-    body = f"## MUST\n\n- {fragment['body'].strip()} _[from `{scoped}`]_\n"
+    bullets = "\n".join(
+        f"- {f['body'].strip()} _[from `{f['molecule_id']}/{f['fragment_id']}`]_"
+        for f in data["fragments"]
+    )
+    body = f"## MUST\n\n{bullets}\n"
     return (
         "<<<SPAEX-COMPOSER-BEGIN>>>\n"
         '{"type": "composed", "questions": []}\n'

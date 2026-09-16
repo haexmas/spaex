@@ -97,6 +97,46 @@ def _noop_operator_answer(_question: object) -> str:
     raise AssertionError("no clarification expected in this scenario")
 
 
+def _batch_stub_response_missing_first_fragment(payload: str) -> str:
+    """Shape A for a batch call that cites every one of its input
+    fragments except the first — reproduces the dogfooding-observed bug
+    where a batch call silently drops a fragment's citation."""
+    data = json.loads(payload)
+    cited = data["fragments"][1:]
+    bullets = "\n".join(
+        f"- {f['body'].strip()} _[from `{f['molecule_id']}/{f['fragment_id']}`]_"
+        for f in cited
+    )
+    body = f"## MUST\n\n{bullets}\n"
+    return (
+        "<<<SPAEX-COMPOSER-BEGIN>>>\n"
+        '{"type": "composed", "questions": []}\n'
+        "<<<SPAEX-COMPOSER-END>>>\n\n" + body
+    )
+
+
+class _FirstBatchDropsFirstFragmentStub:
+    """The first batch call silently omits its first fragment's citation;
+    every other call (a later batch, or a merge) composes normally.
+    Records every call so a test can assert later calls never happen."""
+
+    def __init__(self) -> None:
+        """Initialize the call log and the first-batch counter."""
+        self.calls: list[dict[str, object]] = []
+        self._batch_calls = 0
+
+    def __call__(self, runtime: str, prompt: str, payload: str, timeout: float) -> str:
+        """Return an incomplete response for the first batch call only."""
+        data = json.loads(payload)
+        self.calls.append({"runtime": runtime, "payload": data})
+        if "batch_compositions" in data:
+            return _merge_stub_response(payload, is_root=True)
+        self._batch_calls += 1
+        if self._batch_calls == 1:
+            return _batch_stub_response_missing_first_fragment(payload)
+        return _batch_stub_response(payload)
+
+
 def test_odd_batch_count_forces_multi_level_pairwise_reduction_with_carry_forward(
     tmp_path: Path,
 ) -> None:
@@ -184,7 +224,7 @@ def test_oversized_merge_pair_raises_input_too_large_without_concatenation(
 
 def test_merge_uses_the_batch_byte_ceiling_without_extra_headroom(tmp_path: Path) -> None:
     """Use the documented batch ceiling for merge fit decisions as well."""
-    fragments = [_fragment("mol-a", "x" * 100), _fragment("mol-b", "x" * 100)]
+    fragments = [_fragment("mol-a", "x" * 100 + "."), _fragment("mol-b", "x" * 100 + ".")]
     partition_result = batching.partition(
         fragments, [], limits=batching.BatchingLimits(max_fragments=1, max_bytes=10_000)
     )
@@ -206,3 +246,44 @@ def test_merge_uses_the_batch_byte_ceiling_without_extra_headroom(tmp_path: Path
 
     assert excinfo.value.context.get("reason") == "input-too-large"
     assert not any("batch_compositions" in c["payload"] for c in stub.calls)
+
+
+def test_batch_that_silently_drops_a_citation_aborts_before_the_next_batch(
+    tmp_path: Path,
+) -> None:
+    """A batch's own response must cite every one of its input fragments; a
+    drop must be caught right after that batch call, before any later batch
+    or the merge step runs (Spec 026 T020 dogfooding finding: a batch call
+    can silently omit a fragment while its own progress line still reports
+    it as cited, and only the final root-document check used to catch it —
+    too late to say which batch dropped it)."""
+    fragments = [
+        _fragment("mol-a", "do thing a."),
+        _fragment("mol-b", "do thing b."),
+        _fragment("mol-c", "do thing c."),
+    ]
+    limits = batching.BatchingLimits(max_fragments=2, max_bytes=100_000)
+    partition_result = batching.partition(fragments, [], limits=limits)
+    assert len(partition_result.batches) == 2
+    assert len(partition_result.batches[0].fragments) == 2
+
+    stub = _FirstBatchDropsFirstFragmentStub()
+
+    with pytest.raises(ComposerInvalidOutputError) as excinfo:
+        composer_reduce.compose(
+            partition_result=partition_result,
+            source_hash="a" * 64,
+            build_input_hash="b" * 64,
+            repo_root=tmp_path,
+            invoke_options=InvokeOptions(stub_caller=stub),
+            store=ClarificationsStore(),
+            prompt_hash="prompt-hash",
+            operator_answer=_noop_operator_answer,
+            abort_on_contradiction=True,
+            limits=limits,
+        )
+
+    assert "mol-a/rule" in str(excinfo.value)
+    # The second batch must never be dispatched once batch-1's own
+    # completeness check fails.
+    assert len(stub.calls) == 1
