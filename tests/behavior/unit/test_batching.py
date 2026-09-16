@@ -136,17 +136,20 @@ def test_oversized_molecule_raises_input_too_large_without_a_batch() -> None:
     assert "ceiling" in excinfo.value.context
 
 
-def test_molecule_exceeding_fragment_ceiling_raises_input_too_large() -> None:
+def test_molecule_exceeding_fragment_ceiling_but_not_byte_ceiling_gets_its_own_batch() -> None:
+    """Fragment count alone never fails a molecule (regression: a real
+    18-fragment molecule with a small total byte size was wrongly rejected
+    by an earlier version of this check). `max_fragments` only bounds
+    whether several molecules get COMBINED into one batch below; a single
+    molecule with many small fragments still gets one batch of its own,
+    larger than max_fragments, as long as it fits the byte ceiling."""
     fragments = [_fragment("mol-many", f"rule-{i}") for i in range(3)]
     limits = BatchingLimits(max_fragments=2, max_bytes=100_000)
 
-    with pytest.raises(ComposerInvalidOutputError) as excinfo:
-        partition(fragments, limits=limits)
+    result = partition(fragments, limits=limits)
 
-    assert excinfo.value.context.get("reason") == "input-too-large"
-    assert excinfo.value.context.get("molecule_id") == "mol-many"
-    assert excinfo.value.context.get("fragment_count") == "3"
-    assert excinfo.value.context.get("ceiling") == "2"
+    assert len(result.batches) == 1
+    assert len(result.batches[0].fragments) == 3
 
 
 def test_clarification_scoped_to_one_batch_is_assigned_to_it() -> None:

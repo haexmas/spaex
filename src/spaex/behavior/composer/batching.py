@@ -93,24 +93,12 @@ def partition(
             )
 
     for molecule_id, group in groups:
-        if len(group) > limits.max_fragments:
-            raise_for(
-                ComposerFailureCategory.INVALID_OUTPUT,
-                (
-                    f"molecule {molecule_id!r} fragment group contains "
-                    f"{len(group)} fragments, exceeding the "
-                    f"{limits.max_fragments}-fragment batch ceiling and "
-                    "cannot be split across batches"
-                ),
-                context={
-                    "reason": "input-too-large",
-                    "molecule_id": molecule_id,
-                    "fragment_count": str(len(group)),
-                    "ceiling": str(limits.max_fragments),
-                },
-            )
-            raise AssertionError("unreachable")
-
+        # Fragment count alone never fails a molecule: max_fragments is a
+        # cheap first-pass guard for deciding whether to COMBINE multiple
+        # molecules into one batch (below), not a per-molecule cap. A
+        # molecule with many small fragments (e.g. one rule per file) still
+        # gets its own single batch, larger than max_fragments, as long as
+        # its serialized size fits — exactly what FR-012 gates on.
         group_size = _serialized_size(
             group, _clarifications_for_fragments(group, clarifications)
         )
