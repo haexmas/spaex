@@ -22,6 +22,7 @@ from spaex.behavior.fragment import BehaviorFragment
 
 
 def _fragment(molecule: str, body: str) -> BehaviorFragment:
+    """Build one fragment for a merge-tree scenario."""
     raw = (
         f"---\nid: rule\nkind: constitution_fragment\n"
         f"atom_source: pkg.a\nmodality: MUST\n---\n{body}\n"
@@ -72,11 +73,13 @@ class _Stub:
     shape, recording every call for structural assertions."""
 
     def __init__(self, *, root_source_hash: str, root_build_input_hash: str) -> None:
+        """Initialize expected root hashes and the call recording."""
         self.calls: list[dict[str, object]] = []
         self._root_source_hash = root_source_hash
         self._root_build_input_hash = root_build_input_hash
 
     def __call__(self, runtime: str, prompt: str, payload: str, timeout: float) -> str:
+        """Return a batch or merge response based on the payload shape."""
         data = json.loads(payload)
         self.calls.append({"runtime": runtime, "payload": data})
         if "batch_compositions" in data:
@@ -90,12 +93,14 @@ class _Stub:
 
 
 def _noop_operator_answer(_question: object) -> str:
+    """Fail if an unexpected clarification question is raised."""
     raise AssertionError("no clarification expected in this scenario")
 
 
 def test_odd_batch_count_forces_multi_level_pairwise_reduction_with_carry_forward(
     tmp_path: Path,
 ) -> None:
+    """Reduce an odd batch count with deterministic carry-forward nodes."""
     fragments = [_fragment(f"mol-{i}", f"do thing {i}.") for i in range(5)]
     limits = batching.BatchingLimits(max_fragments=1, max_bytes=100_000)
     partition_result = batching.partition(fragments, [], limits=limits)
@@ -146,6 +151,7 @@ def test_odd_batch_count_forces_multi_level_pairwise_reduction_with_carry_forwar
 def test_oversized_merge_pair_raises_input_too_large_without_concatenation(
     tmp_path: Path,
 ) -> None:
+    """Reject an oversized merge pair before concatenating its bodies."""
     big_body = "x" * 5_000 + "."
     fragments = [_fragment("mol-a", big_body), _fragment("mol-b", big_body)]
     limits = batching.BatchingLimits(max_fragments=1, max_bytes=100_000)

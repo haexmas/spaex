@@ -438,6 +438,7 @@ def _resolve_clarifications(
     """
 
     def retry(new_store: ClarificationsStore, new_build_input_hash: str) -> InvokeOutcome:
+        """Retry the legacy whole-fragment call with updated clarifications."""
         composer_input = ComposerInput(
             fragments=tuple(canonical_fragments),
             clarifications=tuple(new_store.entries.values()),

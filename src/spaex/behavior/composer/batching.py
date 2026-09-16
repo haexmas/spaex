@@ -86,6 +86,7 @@ def partition(
     current: list[BehaviorFragment] = []
 
     def flush() -> None:
+        """Append the current fragments as the next batch when non-empty."""
         if current:
             batches.append(
                 Batch(batch_id=f"batch-{len(batches) + 1}", fragments=tuple(current))
@@ -154,6 +155,7 @@ def partition(
 def _group_by_molecule(
     fragments: Sequence[BehaviorFragment],
 ) -> list[tuple[str, tuple[BehaviorFragment, ...]]]:
+    """Group canonically ordered fragments without splitting a molecule."""
     groups: list[tuple[str, tuple[BehaviorFragment, ...]]] = []
     current_id: str | None = None
     current: list[BehaviorFragment] = []
@@ -206,6 +208,7 @@ def _clarifications_for_fragments(
 def _assign_clarifications(
     batches: tuple[Batch, ...], clarifications: Sequence[Clarification]
 ) -> tuple[tuple[Batch, ...], tuple[Clarification, ...]]:
+    """Assign each clarification to one batch or the cross-batch result."""
     batch_of: dict[str, str] = {
         fragment.scoped_id: batch.batch_id
         for batch in batches

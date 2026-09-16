@@ -170,6 +170,7 @@ def _make_composer_stub(*, question_kind: str = "contradiction"):
         options: InvokeOptions | None = None,
         **_kwargs: object,
     ) -> InvokeOutcome:
+        """Return Shape B for two unresolved fragments and Shape A otherwise."""
         data = json.loads(composer_input.to_json())
         calls.append(len(data["fragments"]))
         if len(data["fragments"]) < 2 or data["clarifications"]:

@@ -27,6 +27,7 @@ class MockTimeout(Exception):
 
 
 def _resolved_molecule(cache_root: Path, index: int) -> ResolvedMolecule:
+    """Create one cached resolved molecule for a multi-batch run."""
     mol_id = f"mol-{index:03d}"
     cache_dir = cache_root / mol_id
     (cache_dir / "fragments").mkdir(parents=True)
@@ -57,6 +58,7 @@ def _resolved_molecule(cache_root: Path, index: int) -> ResolvedMolecule:
 
 
 def _shape_a_response(payload: str) -> str:
+    """Compose the first fragment in a batch payload into Shape A."""
     data = json.loads(payload)
     fragment = data["fragments"][0]
     scoped = f"{fragment['molecule_id']}/{fragment['fragment_id']}"
@@ -71,6 +73,7 @@ def _shape_a_response(payload: str) -> str:
 def test_batch_2_of_3_timeout_preserves_batch_1_log_and_leaves_constitution_untouched(
     tmp_path: Path,
 ) -> None:
+    """Preserve prior output and earlier logs when the second batch times out."""
     repo = tmp_path / "repo"
     (repo / ".spaex").mkdir(parents=True)
     previously_published = "old composed constitution, must survive untouched\n"
@@ -81,6 +84,7 @@ def test_batch_2_of_3_timeout_preserves_batch_1_log_and_leaves_constitution_unto
     calls = {"n": 0}
 
     def stub(runtime: str, prompt: str, payload: str, timeout: float) -> str:
+        """Succeed once, then simulate the second batch timing out."""
         calls["n"] += 1
         if calls["n"] == 1:
             return _shape_a_response(payload)

@@ -30,6 +30,7 @@ from spaex.model.molecule_manifest import MoleculeManifest
 
 
 def _resolved_molecule(cache_root: Path, index: int) -> ResolvedMolecule:
+    """Create one cached resolved molecule for a scale scenario."""
     mol_id = f"mol-{index:03d}"
     cache_dir = cache_root / mol_id
     (cache_dir / "fragments").mkdir(parents=True)
@@ -65,10 +66,12 @@ class _RecordingStub:
     `batch_compositions`) and recording every invocation's runtime."""
 
     def __init__(self) -> None:
+        """Initialize runtime and invocation recording."""
         self.runtimes: list[str] = []
         self.call_count = 0
 
     def __call__(self, runtime: str, prompt: str, payload: str, timeout: float) -> str:
+        """Record the call and route its payload to the matching responder."""
         self.call_count += 1
         self.runtimes.append(runtime)
         data = json.loads(payload)
@@ -130,6 +133,7 @@ def _merge_response(data: dict) -> str:
 
 
 def test_composition_scales_across_three_or_more_batches(tmp_path: Path) -> None:
+    """Compose 25 fragments through three batches and one flat merge."""
     repo = tmp_path / "repo"
     (repo / ".spaex").mkdir(parents=True)
     resolved = [_resolved_molecule(tmp_path / "cache", i) for i in range(25)]
@@ -155,6 +159,7 @@ def test_composition_scales_across_three_or_more_batches(tmp_path: Path) -> None
 
 
 def test_single_batch_fragment_set_makes_exactly_one_composer_call(tmp_path: Path) -> None:
+    """Preserve the legacy single-call path for a small fragment set."""
     repo = tmp_path / "repo"
     (repo / ".spaex").mkdir(parents=True)
     resolved = [_resolved_molecule(tmp_path / "cache", i) for i in range(2)]
@@ -172,6 +177,7 @@ def test_single_batch_fragment_set_makes_exactly_one_composer_call(tmp_path: Pat
 
 
 def _tree_fragment(molecule: str, index: int) -> BehaviorFragment:
+    """Build one fragment for a forced multi-level merge tree."""
     raw = (
         f"---\nid: rule\nkind: constitution_fragment\n"
         f"atom_source: pkg.a\nmodality: MUST\n---\ndo thing {index}.\n"
@@ -182,6 +188,7 @@ def _tree_fragment(molecule: str, index: int) -> BehaviorFragment:
 def test_multi_level_tree_root_is_only_result_with_full_header_and_all_citations_survive(
     tmp_path: Path,
 ) -> None:
+    """Keep only the root header while preserving every tree citation."""
     fragments = [_tree_fragment(f"mol-{i}", i) for i in range(5)]
     partition_result = batching.partition(
         fragments, [], limits=batching.BatchingLimits(max_fragments=1, max_bytes=100_000)
@@ -193,6 +200,7 @@ def test_multi_level_tree_root_is_only_result_with_full_header_and_all_citations
     stub = _RecordingStub()
 
     def operator_answer(_question: ClarificationQuestion) -> str:
+        """Fail if the contradiction-free tree asks a question."""
         raise AssertionError("no clarification expected in this scenario")
 
     store, final_build_input_hash, outcome = composer_reduce.compose(
@@ -220,6 +228,7 @@ def test_multi_level_tree_root_is_only_result_with_full_header_and_all_citations
 def test_cross_batch_contradiction_at_merge_node_round_trips_and_survives_to_final_output(
     tmp_path: Path,
 ) -> None:
+    """Round-trip a merge contradiction and retain both source citations."""
     fragments = [_tree_fragment("mol-0", 0), _tree_fragment("mol-1", 1)]
     partition_result = batching.partition(
         fragments, [], limits=batching.BatchingLimits(max_fragments=1, max_bytes=100_000)
@@ -231,6 +240,7 @@ def test_cross_batch_contradiction_at_merge_node_round_trips_and_survives_to_fin
     answer_calls = {"n": 0}
 
     def stub(runtime: str, prompt: str, payload: str, timeout: float) -> str:
+        """Compose batches, then ask and resolve one merge question."""
         data = json.loads(payload)
         if "batch_compositions" not in data:
             return _batch_response(data)
@@ -251,6 +261,7 @@ def test_cross_batch_contradiction_at_merge_node_round_trips_and_survives_to_fin
         return _merge_response(data)
 
     def operator_answer(question: ClarificationQuestion) -> str:
+        """Record and answer the expected merge contradiction."""
         answer_calls["n"] += 1
         assert question.kind == "contradiction"
         return "mol-1's rule wins"

@@ -61,6 +61,7 @@ class MergeNodeInput:
     expected_build_input_hash: str = ""
 
     def to_json(self) -> str:
+        """Serialize a merge node input using deterministic JSON ordering."""
         payload = {
             "expected_source_hash": self.expected_source_hash,
             "expected_build_input_hash": self.expected_build_input_hash,
@@ -74,6 +75,7 @@ class MergeNodeInput:
 
 
 def _clarification_to_json(c: Clarification) -> dict[str, object]:
+    """Convert a stored clarification to its merge-payload representation."""
     return {
         "key": c.key,
         "question": c.question,
@@ -211,9 +213,11 @@ def _resolve_batch_clarifications(
     operator_answer: Callable[[ClarificationQuestion], str],
     runtime_name: str | None,
 ) -> tuple[ClarificationsStore, str, InvokeOutcome]:
+    """Resolve one batch call's questions and perform its bounded retry."""
     batch_scoped_ids = {fragment.scoped_id for fragment in batch.fragments}
 
     def retry(new_store: ClarificationsStore, new_build_input_hash: str) -> InvokeOutcome:
+        """Reinvoke the batch with clarifications relevant to its fragments."""
         retry_input = ComposerInput(
             fragments=batch.fragments,
             clarifications=_relevant_clarifications(new_store.entries.values(), batch_scoped_ids),
@@ -397,6 +401,7 @@ def _merge_call(
         fragments_in_scope = tuple(fragment for node in nodes for fragment in node.fragments)
 
         def retry(new_store: ClarificationsStore, new_build_input_hash: str) -> InvokeOutcome:
+            """Reinvoke the merge node with its newly stored clarifications."""
             retry_input = MergeNodeInput(
                 batch_compositions=tuple(n.composition for n in nodes),
                 clarifications=_relevant_clarifications(
@@ -450,6 +455,7 @@ def _fits(
     build_input_hash: str,
     limits: BatchingLimits,
 ) -> bool:
+    """Return whether the nodes fit in one serialized merge request."""
     merge_input = MergeNodeInput(
         batch_compositions=tuple(n.composition for n in nodes),
         clarifications=clarifications,
@@ -461,6 +467,7 @@ def _fits(
 
 
 def _scoped_ids(nodes: Sequence[_Node]) -> set[str]:
+    """Collect every fragment scoped ID represented by the supplied nodes."""
     return {fragment.scoped_id for node in nodes for fragment in node.fragments}
 
 
