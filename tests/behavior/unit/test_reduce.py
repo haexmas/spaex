@@ -111,7 +111,7 @@ def test_odd_batch_count_forces_multi_level_pairwise_reduction_with_carry_forwar
     # Small enough that 5 (and 3) batch bodies together don't fit, but any
     # 2 adjacent bodies do — forces the pairwise-tree path across more than
     # one level instead of one flat merge.
-    merge_limits = batching.BatchingLimits(max_fragments=1_000_000, max_bytes=300)
+    merge_limits = batching.BatchingLimits(max_fragments=1_000_000, max_bytes=600)
     stub = _Stub(root_source_hash=source_hash, root_build_input_hash=build_input_hash)
 
     store, final_build_input_hash, outcome = composer_reduce.compose(
@@ -179,4 +179,30 @@ def test_oversized_merge_pair_raises_input_too_large_without_concatenation(
 
     assert excinfo.value.context.get("reason") == "input-too-large"
     # No merge call was ever attempted for the oversized pair.
+    assert not any("batch_compositions" in c["payload"] for c in stub.calls)
+
+
+def test_merge_uses_the_batch_byte_ceiling_without_extra_headroom(tmp_path: Path) -> None:
+    """Use the documented batch ceiling for merge fit decisions as well."""
+    fragments = [_fragment("mol-a", "x" * 100), _fragment("mol-b", "x" * 100)]
+    partition_result = batching.partition(
+        fragments, [], limits=batching.BatchingLimits(max_fragments=1, max_bytes=10_000)
+    )
+    stub = _Stub(root_source_hash="a" * 64, root_build_input_hash="b" * 64)
+
+    with pytest.raises(ComposerInvalidOutputError) as excinfo:
+        composer_reduce.compose(
+            partition_result=partition_result,
+            source_hash="a" * 64,
+            build_input_hash="b" * 64,
+            repo_root=tmp_path,
+            invoke_options=InvokeOptions(stub_caller=stub),
+            store=ClarificationsStore(),
+            prompt_hash="prompt-hash",
+            operator_answer=_noop_operator_answer,
+            abort_on_contradiction=True,
+            limits=batching.BatchingLimits(max_fragments=1_000_000, max_bytes=500),
+        )
+
+    assert excinfo.value.context.get("reason") == "input-too-large"
     assert not any("batch_compositions" in c["payload"] for c in stub.calls)

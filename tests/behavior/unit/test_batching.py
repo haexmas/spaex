@@ -152,6 +152,16 @@ def test_molecule_exceeding_fragment_ceiling_but_not_byte_ceiling_gets_its_own_b
     assert len(result.batches[0].fragments) == 3
 
 
+def test_many_bounded_molecules_are_not_limited_by_project_total_size() -> None:
+    """Scale by adding batches when the combined input is larger than one call."""
+    fragments = [_fragment(f"mol-{i}", "rule", body="x" * 5_000) for i in range(401)]
+    limits = BatchingLimits(max_fragments=1, max_bytes=10_000)
+
+    result = partition(fragments, limits=limits)
+
+    assert len(result.batches) == len(fragments)
+
+
 def test_clarification_scoped_to_one_batch_is_assigned_to_it() -> None:
     """Attach a clarification whose citations lie within one batch."""
     fragments = [_fragment(f"mol-{i}", "rule") for i in range(4)]
@@ -201,29 +211,3 @@ def test_batch_byte_ceiling_includes_batch_local_clarifications() -> None:
     assert result.batches[0].fragments == (fragments[0],)
     assert result.batches[0].clarifications == (clarification,)
     assert result.batches[1].fragments == (fragments[1],)
-
-
-def test_project_wide_total_under_sanity_ceiling_still_batches_normally() -> None:
-    """A project-wide total comfortably under max_total_bytes is unaffected."""
-    fragments = [_fragment(f"mol-{i}", "rule") for i in range(4)]
-    limits = BatchingLimits(max_fragments=2, max_bytes=100_000, max_total_bytes=1_000_000)
-
-    result = partition(fragments, limits=limits)
-
-    assert len(result.batches) == 2
-
-
-def test_project_wide_total_over_sanity_ceiling_fails_before_any_batch() -> None:
-    """Individual fragment/molecule size is irrelevant to this check — only
-    the project-wide total across every molecule matters."""
-    fragments = [_fragment(f"mol-{i}", "rule") for i in range(20)]
-    total_size = len(ComposerInput(fragments=tuple(fragments)).to_json().encode("utf-8"))
-    limits = BatchingLimits(
-        max_fragments=1_000, max_bytes=1_000_000, max_total_bytes=total_size - 1
-    )
-
-    with pytest.raises(ComposerInvalidOutputError) as excinfo:
-        partition(fragments, limits=limits)
-
-    assert excinfo.value.context.get("reason") == "project-too-large"
-    assert excinfo.value.context.get("ceiling") == str(total_size - 1)

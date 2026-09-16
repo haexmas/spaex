@@ -216,7 +216,7 @@ def test_multi_level_tree_root_is_only_result_with_full_header_and_all_citations
         prompt_hash="prompt-hash",
         operator_answer=operator_answer,
         abort_on_contradiction=True,
-        limits=batching.BatchingLimits(max_fragments=1_000_000, max_bytes=300),
+        limits=batching.BatchingLimits(max_fragments=1_000_000, max_bytes=600),
     )
 
     assert stub.call_count == 5 + 4  # 5 batches + the 4-call tree from test_reduce.py's math

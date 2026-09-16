@@ -38,15 +38,6 @@ DEFAULT_MAX_BATCH_FRAGMENTS = 200
 #: being meaningfully more generous than an earlier, unjustified 20KB.
 DEFAULT_MAX_BATCH_BYTES = 40_000
 
-#: Sanity ceiling on the *entire* project's fragment content, checked once
-#: before any batching happens. Unlike `max_bytes` (which bounds one
-#: Composer call for reliability), this only guards against a clearly
-#: pathological case — e.g. a fragment accidentally containing a vendored
-#: file or generated content — where no batching strategy would help
-#: anyway. Individual fragment/molecule size is otherwise unconstrained by
-#: this check; only the project-wide total is.
-DEFAULT_MAX_TOTAL_BYTES = 2_000_000
-
 
 @dataclass(frozen=True)
 class BatchingLimits:
@@ -54,7 +45,6 @@ class BatchingLimits:
 
     max_fragments: int = DEFAULT_MAX_BATCH_FRAGMENTS
     max_bytes: int = DEFAULT_MAX_BATCH_BYTES
-    max_total_bytes: int = DEFAULT_MAX_TOTAL_BYTES
 
 
 @dataclass(frozen=True)
@@ -96,30 +86,11 @@ def partition(
     (`reason=input-too-large`) before any batch is produced if a single
     molecule's fragment group alone exceeds `limits.max_bytes` — the
     no-splitting rule makes a valid batch impossible for that molecule
-    (FR-012). Also fails upfront, before any batching is attempted, if the
-    project's *entire* fragment set exceeds `limits.max_total_bytes` — a
-    sanity net against clearly pathological content (e.g. a vendored or
-    generated file mistaken for a fragment), independent of how any
-    individual fragment or molecule is sized.
+    (FR-012). There is deliberately no project-wide fragment-size ceiling:
+    once each no-split molecule group fits, larger projects scale by adding
+    more bounded batches and merge-tree levels (FR-001/FR-007).
     """
     limits = limits or BatchingLimits()
-    total_size = _serialized_size(fragments, clarifications)
-    if total_size > limits.max_total_bytes:
-        raise_for(
-            ComposerFailureCategory.INVALID_OUTPUT,
-            (
-                f"project fragment set serialized size {total_size} bytes "
-                f"exceeds the {limits.max_total_bytes}-byte project-wide "
-                "sanity ceiling"
-            ),
-            context={
-                "reason": "project-too-large",
-                "size": str(total_size),
-                "ceiling": str(limits.max_total_bytes),
-            },
-        )
-        raise AssertionError("unreachable")
-
     sorted_fragments = tuple(sorted(fragments, key=lambda f: f.scoped_id))
     groups = _group_by_molecule(sorted_fragments)
 
@@ -264,7 +235,6 @@ def _assign_clarifications(
 __all__ = [
     "DEFAULT_MAX_BATCH_BYTES",
     "DEFAULT_MAX_BATCH_FRAGMENTS",
-    "DEFAULT_MAX_TOTAL_BYTES",
     "Batch",
     "BatchingLimits",
     "PartitionResult",
