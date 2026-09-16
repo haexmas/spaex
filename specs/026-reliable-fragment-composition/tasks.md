@@ -79,8 +79,8 @@ Single existing project (`src/spaex/`, `tests/`), per plan.md's Project Structur
 
 ### Tests for User Story 2
 
-- [ ] T015 [P] [US2] Test: two consecutive compositions (via `stub_caller`, deterministic stub responses) against the same unchanged multi-batch fragment set produce byte-identical composed output, and a subsequent run with nothing changed hits the existing reproducibility skip without invoking any batch or merge call, in `tests/behavior/integration/test_reproducibility.py`.
-- [ ] T016 [P] [US2] Test: forcing recomposition (`force_composer=True`, matching `spaex constitution build --force`) of the same unchanged multi-batch fragment set produces output byte-identical to the original composition, in the same test file.
+- [x] T015 [P] [US2] Test: two consecutive compositions (via `stub_caller`, deterministic stub responses) against the same unchanged multi-batch fragment set produce byte-identical composed output, and a subsequent run with nothing changed hits the existing reproducibility skip without invoking any batch or merge call, in `tests/behavior/integration/test_reproducibility.py`.
+- [x] T016 [P] [US2] Test: forcing recomposition (`force_composer=True`, matching `spaex constitution build --force`) of the same unchanged multi-batch fragment set produces output byte-identical to the original composition, in the same test file.
 
 ### Implementation for User Story 2
 
@@ -98,8 +98,8 @@ No new production code expected (research.md §6: determinism holds by construct
 
 ### Tests for User Story 3
 
-- [ ] T017 [P] [US3] Test: two molecules with contradicting fragments placed in different batches — assert the merge step raises a `contradiction` Shape B question citing both fragments, in `tests/behavior/integration/test_case_b_cross_molecule.py` (extend existing file, which already covers this scenario for the single-call path).
-- [ ] T018 [P] [US3] Test: once the operator answers that cross-batch clarification, a subsequent composition of the same fragment set honors the persisted answer and does not re-ask, in the same test file.
+- [x] T017 [P] [US3] Test: two molecules with contradicting fragments placed in different batches — assert the merge step raises a `contradiction` Shape B question citing both fragments, in `tests/behavior/integration/test_case_b_cross_molecule.py` (extend existing file, which already covers this scenario for the single-call path).
+- [x] T018 [P] [US3] Test: once the operator answers that cross-batch clarification, a subsequent composition of the same fragment set honors the persisted answer and does not re-ask, in the same test file.
 
 ### Implementation for User Story 3
 
