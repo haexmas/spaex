@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from spaex.behavior.composer import batching
+from spaex.behavior.composer import invoke as composer_invoke
 from spaex.behavior.composer import reduce as composer_reduce
 from spaex.behavior.composer.clarifications import ClarificationsStore
 from spaex.behavior.composer.failure import ComposerInvalidOutputError
@@ -444,3 +445,49 @@ def test_composer_log_stays_valid_jsonlines_under_concurrent_batch_writes(
     entries = [json.loads(line) for line in lines]
     batch_steps = {e["step"] for e in entries if e["step"].startswith("batch-")}
     assert batch_steps == {f"batch-{i + 1}" for i in range(8)}
+    assert len(entries) == 9, "eight batch records plus one merge record are expected"
+
+
+def test_batch_dispatch_pins_runtime_without_rechecking_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Resolve the selected runtime once for all batch and merge calls."""
+    fragments = [_fragment("mol-a", "do thing a."), _fragment("mol-b", "do thing b.")]
+    limits = batching.BatchingLimits(max_fragments=1, max_bytes=100_000)
+    partition_result = batching.partition(fragments, [], limits=limits)
+    which_calls: list[str] = []
+
+    def fake_which(name: str) -> str | None:
+        """Expose a single installed runtime and record every PATH lookup."""
+        which_calls.append(name)
+        return "/usr/bin/claude" if name == "claude" else None
+
+    monkeypatch.setattr(composer_invoke.shutil, "which", fake_which)
+
+    def fake_run(argv: list[str], *, input: str, **_kwargs: object) -> object:
+        """Return scripted CLI output while preserving the real CLI path."""
+        payload = input.split("COMPOSER INPUT\n---\n", 1)[1].strip()
+        data = json.loads(payload)
+        output = (
+            _merge_stub_response(payload, is_root=True)
+            if "batch_compositions" in data
+            else _batch_stub_response(payload)
+        )
+        return composer_invoke.subprocess.CompletedProcess(argv, 0, output, "")
+
+    monkeypatch.setattr(composer_invoke.subprocess, "run", fake_run)
+
+    composer_reduce.compose(
+        partition_result=partition_result,
+        source_hash="a" * 64,
+        build_input_hash="b" * 64,
+        repo_root=tmp_path,
+        invoke_options=InvokeOptions(),
+        store=ClarificationsStore(),
+        prompt_hash="prompt-hash",
+        operator_answer=_noop_operator_answer,
+        abort_on_contradiction=True,
+        limits=limits,
+    )
+
+    assert which_calls == ["claude"]

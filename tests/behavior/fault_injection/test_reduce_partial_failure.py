@@ -88,22 +88,24 @@ def test_sibling_batch_timeout_preserves_batch_1_log_and_leaves_constitution_unt
 
     resolved = [_resolved_molecule(tmp_path / "cache", i) for i in range(_MOLECULE_COUNT)]
 
-    calls = {"n": 0}
+    dispatched_molecules: set[str] = set()
 
     def stub(runtime: str, prompt: str, payload: str, timeout: float) -> str:
         """Succeed only for the batch holding mol-000; every sibling times
         out. Decided by content (which molecule a batch actually holds),
         not call-arrival order, since batches dispatch concurrently and
         arrival order isn't deterministic."""
-        calls["n"] += 1
         data = json.loads(payload)
+        dispatched_molecules.update(
+            fragment["molecule_id"] for fragment in data["fragments"]
+        )
         if data["fragments"][0]["molecule_id"] == "mol-000":
             return _shape_a_response(payload)
         raise MockTimeout("simulated sibling-batch timeout")
 
     log_path = repo / ".spaex" / "composer.log"
 
-    with pytest.raises(ComposerTimeoutError):
+    with pytest.raises(ComposerTimeoutError) as excinfo:
         orchestrate.run(
             repo_root=repo,
             state_root=tmp_path / "state",
@@ -114,7 +116,8 @@ def test_sibling_batch_timeout_preserves_batch_1_log_and_leaves_constitution_unt
     # Concurrent dispatch means every batch fires regardless of a sibling's
     # outcome - unlike sequential dispatch, a later batch is not skipped
     # just because an earlier one already failed.
-    assert calls["n"] > 1, "every batch must dispatch concurrently"
+    assert dispatched_molecules == {f"mol-{i:03d}" for i in range(_MOLECULE_COUNT)}
+    assert excinfo.value.context["step"] == "batch-2"
     assert (
         repo / ".spaex" / "constitution.md"
     ).read_text(encoding="utf-8") == previously_published

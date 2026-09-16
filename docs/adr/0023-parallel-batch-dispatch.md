@@ -19,9 +19,11 @@ independent latencies that could instead overlap.
 ## Decision
 
 `composer.reduce.compose()` dispatches every batch's initial Composer call
-concurrently on a thread pool (`ThreadPoolExecutor`, one worker per batch;
+concurrently on the standard library's bounded `ThreadPoolExecutor`;
 `subprocess.run` releases the GIL while waiting on the child process, so
-threads give real parallelism here without needing `asyncio`). The CLI
+threads give real parallelism here without needing `asyncio`, while the
+executor's default worker cap prevents one thread and subprocess per batch.
+The CLI
 runtime is resolved once via the new `invoke.resolve_runtime_name` -
 exactly the `shutil.which` scan `invoke_step` already did, extracted so it
 can run before any call fires - and forced on every batch from the start,
@@ -56,3 +58,13 @@ writes can no longer interleave mid-line and corrupt the JSON-lines file.
 - Progress lines (`composer: invoking/responded/composed ...`) from
   concurrent batches can now interleave in terminal output; this is a
   cosmetic readability tradeoff, not a correctness one.
+
+## Maintainability follow-up
+
+`invoke.py` and `reduce.py` are cohesive composer-boundary modules but are
+already above the repository's 500-line maintainability boundary. This PR
+keeps the runtime/parser/logging and reducer/tree state together so the
+concurrency change remains one reviewable protocol change. Before the next
+non-trivial composer feature, extract runtime/process/JSONL logging concerns
+from `invoke.py` and merge-tree mechanics from `reduce.py` into focused
+modules, moving their tests with the respective boundaries.

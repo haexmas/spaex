@@ -161,7 +161,10 @@ def compose(
             phase="initial",
         )
 
-    with ThreadPoolExecutor(max_workers=len(batches)) as executor:
+    # ponytail: use the stdlib's bounded default worker count to avoid one
+    # thread/process per batch; make concurrency configurable if throughput
+    # tuning becomes necessary rather than coupling it to batch count.
+    with ThreadPoolExecutor() as executor:
         # `.map` returns results in argument order regardless of completion
         # order, so `zip(batches, outcomes)` below stays deterministic
         # (SC-003 byte-reproducibility) no matter which batch answers first.
@@ -541,7 +544,11 @@ def _with_forced_runtime(
     base = options or InvokeOptions()
     if runtime_name is None:
         return base
-    return replace(base, forced_cli_runtimes=(runtime_name,))
+    return replace(
+        base,
+        forced_cli_runtimes=(runtime_name,),
+        resolved_runtime_name=runtime_name,
+    )
 
 
 __all__ = [
