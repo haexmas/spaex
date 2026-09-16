@@ -8,7 +8,7 @@
 Spec 023's Composer sends the entire adopted fragment set as one
 non-interactive LLM call, reasoning about every fragment's overlaps and
 contradictions and producing one long, strictly-formatted, fully-cited
-document in a single turn. Against this project's own real fragment set (9
+document in a single turn. Against this project's own real fragment set (8
 adopted molecules, ~60KB composer input), 4 of 5 real `spaex install`
 attempts timed out even at a 600s budget, and the one attempt that did
 return a response silently dropped 9 fragments (correctly caught by the
