@@ -1,9 +1,14 @@
 """Partial multi-batch failure preserves earlier steps' evidence (Spec 026 T007).
 
-Batch 1 of 3 succeeds, batch 2 times out: the whole build aborts as
+Batch 1 succeeds, every other batch times out: the whole build aborts as
 `behavior-composer-timeout` (FR-008), the previously published constitution
 stays byte-unchanged (FR-004), and `$SPAEX_COMPOSER_LOG` still contains
-batch 1's completed entry even though batch 2 is the one that failed.
+batch 1's completed entry even though a sibling batch is the one that
+failed. Batches now dispatch concurrently (all of them fire regardless of
+a sibling's outcome), so this deliberately fails every batch but the first
+rather than pinning "exactly batch 2" — the property under test is that an
+already-succeeded batch's evidence survives a sibling's failure, not which
+specific batch failed.
 """
 
 from __future__ import annotations
@@ -72,10 +77,10 @@ def _shape_a_response(payload: str) -> str:
     )
 
 
-def test_batch_2_of_3_timeout_preserves_batch_1_log_and_leaves_constitution_untouched(
+def test_sibling_batch_timeout_preserves_batch_1_log_and_leaves_constitution_untouched(
     tmp_path: Path,
 ) -> None:
-    """Preserve prior output and earlier logs when the second batch times out."""
+    """Preserve prior output and earlier logs when a sibling batch times out."""
     repo = tmp_path / "repo"
     (repo / ".spaex").mkdir(parents=True)
     previously_published = "old composed constitution, must survive untouched\n"
@@ -86,11 +91,15 @@ def test_batch_2_of_3_timeout_preserves_batch_1_log_and_leaves_constitution_unto
     calls = {"n": 0}
 
     def stub(runtime: str, prompt: str, payload: str, timeout: float) -> str:
-        """Succeed once, then simulate the second batch timing out."""
+        """Succeed only for the batch holding mol-000; every sibling times
+        out. Decided by content (which molecule a batch actually holds),
+        not call-arrival order, since batches dispatch concurrently and
+        arrival order isn't deterministic."""
         calls["n"] += 1
-        if calls["n"] == 1:
+        data = json.loads(payload)
+        if data["fragments"][0]["molecule_id"] == "mol-000":
             return _shape_a_response(payload)
-        raise MockTimeout("simulated batch-2 timeout")
+        raise MockTimeout("simulated sibling-batch timeout")
 
     log_path = repo / ".spaex" / "composer.log"
 
@@ -102,7 +111,10 @@ def test_batch_2_of_3_timeout_preserves_batch_1_log_and_leaves_constitution_unto
             invoke_options=InvokeOptions(stub_caller=stub, composer_log_path=log_path),
         )
 
-    assert calls["n"] == 2, "batch-3 must never be dispatched once batch-2 fails"
+    # Concurrent dispatch means every batch fires regardless of a sibling's
+    # outcome - unlike sequential dispatch, a later batch is not skipped
+    # just because an earlier one already failed.
+    assert calls["n"] > 1, "every batch must dispatch concurrently"
     assert (
         repo / ".spaex" / "constitution.md"
     ).read_text(encoding="utf-8") == previously_published
