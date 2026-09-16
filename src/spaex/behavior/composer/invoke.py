@@ -25,6 +25,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -57,6 +58,12 @@ _SENTINEL_RE = re.compile(
 )
 
 _CLI_RUNTIMES: tuple[str, ...] = ("claude", "codex", "gemini")
+
+#: Guards `append_composer_log_entry`'s file write. Batch calls now dispatch
+#: concurrently (Spec 026 parallel-batch-dispatch), each appending its own
+#: entry from its own thread; without this, two threads' `write()`/`flush()`
+#: calls could interleave mid-line and corrupt the JSON-lines log.
+_COMPOSER_LOG_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -208,6 +215,37 @@ def invoke_composer(
     )
 
 
+def resolve_runtime_name(options: InvokeOptions | None = None) -> str:
+    """Return which CLI runtime a call would use, without invoking it.
+
+    Mirrors `invoke_step`'s own resolution order exactly (stub-caller first,
+    then `forced_cli_runtimes`/`_CLI_RUNTIMES` in PATH order), so a caller
+    that must force the same runtime across several concurrent calls
+    (FR-011) can pin it upfront, before dispatching any of them, instead of
+    only learning it from whichever call happens to finish first.
+    """
+    options = options or InvokeOptions()
+    cli_runtimes = (
+        options.forced_cli_runtimes
+        if options.forced_cli_runtimes is not None
+        else _CLI_RUNTIMES
+    )
+    if options.stub_caller is not None:
+        # Tests skip PATH-detection: the stub answers for whichever runtime
+        # was picked first (or a synthetic "stub" identifier when none was
+        # requested), so scenarios like "no-runtime" stay reachable by
+        # passing `forced_cli_runtimes=()` and leaving stub_caller unset.
+        return cli_runtimes[0] if cli_runtimes else "stub"
+    for name in cli_runtimes:
+        if shutil.which(name) is not None:
+            return name
+    raise_for(
+        ComposerFailureCategory.NO_RUNTIME,
+        "no LLM runtime available for the Composer",
+    )
+    raise AssertionError("raise_for did not raise")  # unreachable; makes mypy happy
+
+
 def invoke_step(
     *,
     prompt_text: str,
@@ -227,30 +265,18 @@ def invoke_step(
     resolution, stub-caller test seam, and log lifecycle (Spec 026
     research.md §1, §5).
 
-    Runtime selection order (research.md §2, 4.2.0 CLI-only variant):
-
-    1. If `options.stub_caller` is set, hand the call to it. Testing only.
-    2. Iterate `_CLI_RUNTIMES` (or `options.forced_cli_runtimes` when set) in
-       order; use the first one on PATH.
-    3. `no-runtime` failure (exit 34) when no CLI is found.
+    Runtime selection (`resolve_runtime_name`, research.md §2, 4.2.0
+    CLI-only variant): `options.stub_caller` when set, otherwise the first
+    of `_CLI_RUNTIMES`/`options.forced_cli_runtimes` found on PATH; a
+    `no-runtime` failure (exit 34) when none is.
     """
     options = options or InvokeOptions()
 
     timeout = _resolve_timeout(options)
     log_path = resolve_composer_log_path(options, repo_root)
-
-    cli_runtimes = (
-        options.forced_cli_runtimes
-        if options.forced_cli_runtimes is not None
-        else _CLI_RUNTIMES
-    )
+    name = resolve_runtime_name(options)
 
     if options.stub_caller is not None:
-        # Tests skip PATH-detection: the stub answers for whichever runtime
-        # was picked first (or a synthetic "stub" identifier when none was
-        # requested), so scenarios like "no-runtime" stay reachable by
-        # passing `forced_cli_runtimes=()` and leaving stub_caller unset.
-        name = cli_runtimes[0] if cli_runtimes else "stub"
         raw = _call_stub(options.stub_caller, name, prompt_text, payload_json, timeout)
         result = _parse_and_log(
             raw, log_path=log_path, step=step, invocation=invocation, phase=phase
@@ -261,23 +287,15 @@ def invoke_step(
             raw_output=raw,
         )
 
-    for name in cli_runtimes:
-        if shutil.which(name) is not None:
-            raw = _call_cli(name, prompt_text, payload_json, timeout)
-            result = _parse_and_log(
-                raw, log_path=log_path, step=step, invocation=invocation, phase=phase
-            )
-            return InvokeOutcome(
-                result=result,
-                runtime=RuntimeDescriptor(kind="cli", identifier=name),
-                raw_output=raw,
-            )
-
-    raise_for(
-        ComposerFailureCategory.NO_RUNTIME,
-        "no LLM runtime available for the Composer",
+    raw = _call_cli(name, prompt_text, payload_json, timeout)
+    result = _parse_and_log(
+        raw, log_path=log_path, step=step, invocation=invocation, phase=phase
     )
-    raise AssertionError("raise_for did not raise")  # unreachable; makes mypy happy
+    return InvokeOutcome(
+        result=result,
+        runtime=RuntimeDescriptor(kind="cli", identifier=name),
+        raw_output=raw,
+    )
 
 
 def _resolve_timeout(options: InvokeOptions) -> float:
@@ -568,13 +586,18 @@ def truncate_composer_log(path: Path) -> None:
 
 
 def append_composer_log_entry(path: Path, entry: ComposerLogEntry) -> None:
-    """Best-effort append of one JSON-lines record, flushed immediately."""
+    """Best-effort append of one JSON-lines record, flushed immediately.
+
+    Locked so concurrent batch calls (each on its own thread) can't
+    interleave their writes mid-line.
+    """
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8") as handle:
-            handle.write(entry.to_json())
-            handle.write("\n")
-            handle.flush()
+        with _COMPOSER_LOG_LOCK:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(entry.to_json())
+                handle.write("\n")
+                handle.flush()
     except OSError:
         pass
 
@@ -670,6 +693,7 @@ __all__ = [
     "invoke_composer",
     "invoke_step",
     "resolve_composer_log_path",
+    "resolve_runtime_name",
     "truncate_composer_log",
     "write_composer_log",
 ]

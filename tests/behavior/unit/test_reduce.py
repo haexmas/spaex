@@ -9,6 +9,7 @@ fallback instead of one flat merge.
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 
 import pytest
@@ -116,23 +117,24 @@ def _batch_stub_response_missing_first_fragment(payload: str) -> str:
 
 
 class _FirstBatchDropsFirstFragmentStub:
-    """The first batch call silently omits its first fragment's citation;
-    every other call (a later batch, or a merge) composes normally.
-    Records every call so a test can assert later calls never happen."""
+    """The batch containing `mol-a` silently omits its first fragment's
+    citation; every other call (a sibling batch, or a merge) composes
+    normally. Records every call so a test can assert later calls never
+    happen. Identifies "the batch to break" by its first fragment's
+    molecule id rather than call-arrival order, since batches now dispatch
+    concurrently and arrival order isn't deterministic."""
 
     def __init__(self) -> None:
-        """Initialize the call log and the first-batch counter."""
+        """Initialize the call log."""
         self.calls: list[dict[str, object]] = []
-        self._batch_calls = 0
 
     def __call__(self, runtime: str, prompt: str, payload: str, timeout: float) -> str:
-        """Return an incomplete response for the first batch call only."""
+        """Return an incomplete response only for the batch containing mol-a."""
         data = json.loads(payload)
         self.calls.append({"runtime": runtime, "payload": data})
         if "batch_compositions" in data:
             return _merge_stub_response(payload, is_root=True)
-        self._batch_calls += 1
-        if self._batch_calls == 1:
+        if data["fragments"][0]["molecule_id"] == "mol-a":
             return _batch_stub_response_missing_first_fragment(payload)
         return _batch_stub_response(payload)
 
@@ -252,11 +254,13 @@ def test_batch_that_silently_drops_a_citation_aborts_before_the_next_batch(
     tmp_path: Path,
 ) -> None:
     """A batch's own response must cite every one of its input fragments; a
-    drop must be caught right after that batch call, before any later batch
-    or the merge step runs (Spec 026 T020 dogfooding finding: a batch call
-    can silently omit a fragment while its own progress line still reports
-    it as cited, and only the final root-document check used to catch it —
-    too late to say which batch dropped it)."""
+    drop must be caught and clearly attributed to the batch that caused it,
+    before the merge step runs — even though every batch now dispatches
+    concurrently, so a sibling batch is no longer skipped just because this
+    one turned out incomplete (Spec 026 T020 dogfooding finding: a batch
+    call can silently omit a fragment while its own progress line still
+    reports it as cited, and only the final root-document check used to
+    catch it — too late to say which batch dropped it)."""
     fragments = [
         _fragment("mol-a", "do thing a."),
         _fragment("mol-b", "do thing b."),
@@ -284,9 +288,11 @@ def test_batch_that_silently_drops_a_citation_aborts_before_the_next_batch(
         )
 
     assert "mol-a/rule" in str(excinfo.value)
-    # The second batch must never be dispatched once batch-1's own
-    # completeness check fails.
-    assert len(stub.calls) == 1
+    # Both batches dispatch concurrently (neither waits on the other), but
+    # the merge step must never run once any batch fails its own
+    # completeness check.
+    assert len(stub.calls) == 2
+    assert not any("batch_compositions" in c["payload"] for c in stub.calls)
     log_entries = [
         json.loads(line)
         for line in (tmp_path / ".spaex" / "composer.log")
@@ -366,3 +372,75 @@ def test_batch_clarification_is_used_by_post_retry_completeness_check(
     assert len(store.entries) == 1
     assert len(calls) == 4
     assert "mol-a/rule" in outcome.result.body
+
+
+def test_batch_calls_dispatch_concurrently_not_sequentially(tmp_path: Path) -> None:
+    """Every batch call must fire at roughly the same time, not one after
+    another. Proven with a barrier every batch stub call has to reach
+    together: a sequential dispatcher only ever has one call in flight, so
+    the barrier's other parties never arrive and it times out."""
+    fragments = [_fragment(f"mol-{i}", f"do thing {i}.") for i in range(4)]
+    limits = batching.BatchingLimits(max_fragments=1, max_bytes=100_000)
+    partition_result = batching.partition(fragments, [], limits=limits)
+    assert len(partition_result.batches) == 4
+
+    barrier = threading.Barrier(4, timeout=5)
+
+    def stub(runtime: str, prompt: str, payload: str, timeout: float) -> str:
+        data = json.loads(payload)
+        if "batch_compositions" in data:
+            return _merge_stub_response(payload, is_root=True)
+        barrier.wait()
+        return _batch_stub_response(payload)
+
+    _store, _build_input_hash, outcome = composer_reduce.compose(
+        partition_result=partition_result,
+        source_hash="a" * 64,
+        build_input_hash="b" * 64,
+        repo_root=tmp_path,
+        invoke_options=InvokeOptions(stub_caller=stub),
+        store=ClarificationsStore(),
+        prompt_hash="prompt-hash",
+        operator_answer=_noop_operator_answer,
+        abort_on_contradiction=True,
+        limits=limits,
+    )
+
+    for i in range(4):
+        assert f"mol-{i}/rule" in outcome.result.body
+
+
+def test_composer_log_stays_valid_jsonlines_under_concurrent_batch_writes(
+    tmp_path: Path,
+) -> None:
+    """Concurrent batch calls append to the same `$SPAEX_COMPOSER_LOG`; every
+    line must still be its own, independently parseable JSON record - no
+    interleaved writes corrupting the file."""
+    fragments = [_fragment(f"mol-{i}", f"do thing {i}.") for i in range(8)]
+    limits = batching.BatchingLimits(max_fragments=1, max_bytes=100_000)
+    partition_result = batching.partition(fragments, [], limits=limits)
+    assert len(partition_result.batches) == 8
+
+    def stub(runtime: str, prompt: str, payload: str, timeout: float) -> str:
+        data = json.loads(payload)
+        if "batch_compositions" in data:
+            return _merge_stub_response(payload, is_root=True)
+        return _batch_stub_response(payload)
+
+    composer_reduce.compose(
+        partition_result=partition_result,
+        source_hash="a" * 64,
+        build_input_hash="b" * 64,
+        repo_root=tmp_path,
+        invoke_options=InvokeOptions(stub_caller=stub),
+        store=ClarificationsStore(),
+        prompt_hash="prompt-hash",
+        operator_answer=_noop_operator_answer,
+        abort_on_contradiction=True,
+        limits=limits,
+    )
+
+    lines = (tmp_path / ".spaex" / "composer.log").read_text(encoding="utf-8").splitlines()
+    entries = [json.loads(line) for line in lines]
+    batch_steps = {e["step"] for e in entries if e["step"].startswith("batch-")}
+    assert batch_steps == {f"batch-{i + 1}" for i in range(8)}

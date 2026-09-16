@@ -2,11 +2,12 @@
 
 The only new caller of `invoke.py`'s single-call machinery. For each `Batch`
 (`batching.py`) this dispatches one Composer call reusing the existing
-sentinel/Shape A/Shape B contract unchanged, then combines the batches'
-composed output with one bounded merge step (a flat N-ary merge when the
-merge input fits the batching byte-size ceiling, otherwise a deterministic
-pairwise tree reduction) that re-checks for cross-batch contradictions before
-the final, header-bearing document is returned.
+sentinel/Shape A/Shape B contract unchanged - every batch concurrently, on
+its own thread (ADR 0023) - then combines the batches' composed output with
+one bounded merge step (a flat N-ary merge when the merge input fits the
+batching byte-size ceiling, otherwise a deterministic pairwise tree
+reduction) that re-checks for cross-batch contradictions before the final,
+header-bearing document is returned.
 
 `compose()` is only entered for a fragment set spanning more than one batch;
 a single-batch build stays on `orchestrate.py`'s direct `invoke_composer`
@@ -19,6 +20,7 @@ from __future__ import annotations
 import json
 import sys
 from collections.abc import Callable, Iterable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -37,6 +39,7 @@ from spaex.behavior.composer.invoke import (
     RuntimeDescriptor,
     invoke_composer,
     invoke_step,
+    resolve_runtime_name,
 )
 from spaex.behavior.composer.prompt import MERGE_PROMPT, strip_header
 from spaex.behavior.fragment import BehaviorFragment
@@ -112,11 +115,17 @@ def compose(
 ) -> tuple[ClarificationsStore, str, InvokeOutcome]:
     """Multi-batch composition entry point (Spec 026 T011-T013).
 
-    Dispatches one Composer call per `Batch` (reusing the canonical/project
-    compose prompt via `invoke_composer`, exactly as a single-call build
-    would), resolving one CLI runtime once from the first call and forcing
-    every later call to the same runtime (FR-011). Then reduces the
-    batches' composed output with `_reduce` into one final document.
+    Dispatches one Composer call per `Batch` concurrently (reusing the
+    canonical/project compose prompt via `invoke_composer`, exactly as a
+    single-call build would): the CLI runtime is resolved once upfront,
+    before any batch is dispatched, and forced on every batch (FR-011) so
+    "same runtime throughout" holds regardless of dispatch order. Batches
+    are independent until this point — none needs another's output — so
+    running them on a thread pool turns their wall-clock cost from a sum
+    into a max. Each batch's own Shape-B resolution and completeness check
+    still run sequentially afterward, in batch order, since those touch the
+    shared `store`. Then reduces the batches' composed output with
+    `_reduce` into one final document.
 
     Returns `(store, build_input_hash, invoke_result)` mirroring
     `orchestrate._resolve_clarifications`'s shape so `orchestrate.run()`
@@ -132,20 +141,18 @@ def compose(
         raise AssertionError("composer_reduce.compose is only for multi-batch builds")
     limits = limits or BatchingLimits()
 
-    runtime_name: str | None = None
-    nodes: list[_Node] = []
+    runtime_name = resolve_runtime_name(invoke_options)
+    options = _with_forced_runtime(invoke_options, runtime_name)
 
-    for batch in batches:
-        options = _with_forced_runtime(invoke_options, runtime_name)
-        invocation = 1
-        phase = "initial"
+    def _dispatch(batch: Batch) -> InvokeOutcome:
+        """Fire one batch's initial Composer call (no shared-state access)."""
         composer_input = ComposerInput(
             fragments=batch.fragments,
             clarifications=batch.clarifications,
             expected_source_hash=source_hash,
             expected_build_input_hash=build_input_hash,
         )
-        outcome = invoke_composer(
+        return invoke_composer(
             composer_input,
             repo_root=repo_root,
             options=options,
@@ -153,8 +160,18 @@ def compose(
             invocation=1,
             phase="initial",
         )
-        if runtime_name is None:
-            runtime_name = outcome.runtime.identifier
+
+    with ThreadPoolExecutor(max_workers=len(batches)) as executor:
+        # `.map` returns results in argument order regardless of completion
+        # order, so `zip(batches, outcomes)` below stays deterministic
+        # (SC-003 byte-reproducibility) no matter which batch answers first.
+        outcomes = list(executor.map(_dispatch, batches))
+
+    nodes: list[_Node] = []
+
+    for batch, outcome in zip(batches, outcomes, strict=True):
+        invocation = 1
+        phase = "initial"
 
         if isinstance(outcome.result, QuestionsShape):
             if not abort_on_contradiction:
@@ -520,7 +537,7 @@ def _relevant_clarifications(
 def _with_forced_runtime(
     options: InvokeOptions | None, runtime_name: str | None
 ) -> InvokeOptions:
-    """Force every call after the first to the same resolved runtime (FR-011)."""
+    """Force a call to the given resolved runtime (FR-011), when known."""
     base = options or InvokeOptions()
     if runtime_name is None:
         return base
