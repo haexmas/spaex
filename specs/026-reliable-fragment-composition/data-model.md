@@ -16,7 +16,7 @@ An ordered, deterministic grouping of fragments assigned to one composer call.
 | `fragments` | `tuple[Fragment, ...]` | A contiguous slice of the canonically-sorted fragment list. All of a given molecule's fragments always land in the same batch (a molecule's fragments are never split across batches). |
 | `clarifications` | `tuple[Clarification, ...]` | The subset of the build's currently-valid clarifications whose cited fragments all fall inside this batch — a clarification about fragments spanning two batches is not meaningful at batch level and is only relevant to the merge step (see MergeInput). |
 
-**Validation rules**: Every fragment in the canonical fragment set appears in exactly one batch. Batch assignment, given the same fragment set, is byte-identical across runs (pure function of sorted fragment list + fixed size ceiling from research.md §2).
+**Validation rules**: For a supported input, every fragment in the canonical fragment set appears in exactly one batch. If all fragments belonging to one molecule exceed the fixed serialized-size ceiling, partitioning returns the existing typed pre-LLM `behavior-composer-invalid-output` diagnostic with `reason=input-too-large`, the offending molecule identifier, its measured size, and the ceiling; it produces no `Batch` for that molecule and composition does not start. Batch assignment for valid inputs, given the same fragment set, is byte-identical across runs (pure function of sorted fragment list + fixed size ceiling from research.md §2).
 
 ## BatchComposition *(new, process-internal)*
 
@@ -34,21 +34,23 @@ The input to the merge step: every batch's composed output, assembled once all b
 
 | Field | Type | Notes |
 |---|---|---|
-| `batch_compositions` | `tuple[BatchComposition, ...]` | Ordered by `batch_id` for determinism. |
+| `batch_compositions` | `tuple[BatchComposition, ...]` | Preserves deterministic batch-assignment order from `Batch` construction. The tuple position, not lexical sorting of labels such as `batch-10` and `batch-2`, defines order. |
 | `cross_batch_clarifications` | `tuple[Clarification, ...]` | Currently-valid clarifications whose cited fragments span more than one batch — not resolvable at batch level, carried forward to the merge call. |
 | `expected_source_hash` / `expected_build_input_hash` | `str` | *(existing fields, reused)* Computed once over the *entire* original fragment set exactly as today — the merge step's output carries the same header contract as a single-call composition, so downstream verification (`emit.py`'s hash check, FR-012b's completeness check) needs no changes. |
 
 ## ComposerLogEntry *(new, persisted at `$SPAEX_COMPOSER_LOG`)*
 
-One JSON-lines record per internal step, appended immediately as that step completes (see research.md §5).
+One JSON-lines record per internal invocation, appended immediately as that invocation completes (see research.md §5). A clarification round trip therefore has two records for one logical step.
 
 | Field | Type | Notes |
 |---|---|---|
 | `step` | `str` | `"batch-1"`, `"batch-2"`, ..., or `"merge"`. |
+| `invocation` | `int` | One-based invocation number for this step: `1` for the initial call and `2` for its clarification-resolved re-invocation. The pair `(step, invocation)` is unique within an attempt. |
+| `phase` | `str` | `"initial"` or `"clarification-resolved"`, matching `invocation`. |
 | `raw_output` | `str` | The step's raw LLM response, exactly as `invoke.py` receives it today (unchanged capture point). |
 | `outcome` | `str` | `"composed"`, `"questions"`, or the failure category name if this step is the one that ultimately aborted the build. |
 
-**Validation rules**: Entries are append-only within one build attempt; a fresh `spaex install` invocation starts a fresh log (existing `_write_composer_log` truncate-on-open behavior, applied per entry instead of once).
+**Validation rules**: At the start of each fresh build attempt, the log is truncated exactly once. Every subsequent invocation record appends without truncation and is flushed in completion order. For a clarification round trip, the initial `questions` record remains in the log before the later `composed` or failure record; neither raw response nor outcome is overwritten.
 
 ## Composed Constitution *(existing, unchanged shape)*
 
