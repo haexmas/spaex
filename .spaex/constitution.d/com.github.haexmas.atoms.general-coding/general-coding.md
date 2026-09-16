@@ -113,6 +113,14 @@ understand, verify, change, and remove safely.
   when possible. Mixed diffs make review, debugging, rollback, and blame less
   reliable.
 
+## Agent attribution and self-reference
+
+- LLM agents MUST NOT leave references to themselves, their model, runtime,
+  role, prompts, or participation in project artifacts. This includes commit
+  messages, commit trailers such as `Co-authored-by`, source and documentation
+  comments, changelogs, generated content, metadata, and other repository
+  content.
+
 ## Tests, review, and completion
 
 - Add or update tests with behavior changes. Test observable behavior and
