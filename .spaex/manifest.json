@@ -2,13 +2,16 @@
   "compounds": [
     {
       "molecules": [
+        "com.github.haexmas.atoms.ast-grep",
         "com.github.haexmas.atoms.general-coding",
         "com.github.haexmas.atoms.graphify-first-authoring",
+        "com.github.haexmas.atoms.javascript-typescript",
         "com.github.haexmas.atoms.ponytail",
         "com.github.haexmas.atoms.python",
-        "com.github.haexmas.atoms.spaex-constitution"
+        "com.github.haexmas.atoms.spaex-constitution",
+        "com.github.haexmas.atoms.speckit"
       ],
-      "revision": "1273ecd75ad0a644218e00146e4ad935b7605c9f",
+      "revision": "f6ca64fef5ed309bb7622a28eff95b6db81afbb6",
       "source": "https://github.com/haexmas/atoms"
     }
   ],
