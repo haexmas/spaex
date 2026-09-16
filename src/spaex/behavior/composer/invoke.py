@@ -183,6 +183,9 @@ class InvokeOptions:
     timeout_seconds: float | None = None
     composer_log_path: Path | None = None
     stub_caller: Callable[[str, str, str, float], str] | None = None
+    # Internal hand-off used by the multi-batch reducer after the one PATH
+    # lookup at the start of a composition attempt.
+    resolved_runtime_name: str | None = None
 
 
 def invoke_composer(
@@ -225,6 +228,8 @@ def resolve_runtime_name(options: InvokeOptions | None = None) -> str:
     only learning it from whichever call happens to finish first.
     """
     options = options or InvokeOptions()
+    if options.resolved_runtime_name is not None:
+        return options.resolved_runtime_name
     cli_runtimes = (
         options.forced_cli_runtimes
         if options.forced_cli_runtimes is not None
@@ -272,30 +277,45 @@ def invoke_step(
     """
     options = options or InvokeOptions()
 
-    timeout = _resolve_timeout(options)
-    log_path = resolve_composer_log_path(options, repo_root)
-    name = resolve_runtime_name(options)
+    try:
+        timeout = _resolve_timeout(options)
+        log_path = resolve_composer_log_path(options, repo_root)
+        name = resolve_runtime_name(options)
 
-    if options.stub_caller is not None:
-        raw = _call_stub(options.stub_caller, name, prompt_text, payload_json, timeout)
+        if options.stub_caller is not None:
+            raw = _call_stub(options.stub_caller, name, prompt_text, payload_json, timeout)
+            result = _parse_and_log(
+                raw, log_path=log_path, step=step, invocation=invocation, phase=phase
+            )
+            return InvokeOutcome(
+                result=result,
+                runtime=RuntimeDescriptor(kind="stub", identifier=name),
+                raw_output=raw,
+            )
+
+        raw = _call_cli(
+            name,
+            prompt_text,
+            payload_json,
+            timeout,
+            log_path=log_path,
+            step=step,
+            invocation=invocation,
+            phase=phase,
+        )
         result = _parse_and_log(
             raw, log_path=log_path, step=step, invocation=invocation, phase=phase
         )
         return InvokeOutcome(
             result=result,
-            runtime=RuntimeDescriptor(kind="stub", identifier=name),
+            runtime=RuntimeDescriptor(kind="cli", identifier=name),
             raw_output=raw,
         )
-
-    raw = _call_cli(name, prompt_text, payload_json, timeout)
-    result = _parse_and_log(
-        raw, log_path=log_path, step=step, invocation=invocation, phase=phase
-    )
-    return InvokeOutcome(
-        result=result,
-        runtime=RuntimeDescriptor(kind="cli", identifier=name),
-        raw_output=raw,
-    )
+    except HaexError as exc:
+        # Multi-step failures must identify the invocation that failed. Keep
+        # the category-specific diagnostic and add only non-sensitive context.
+        exc.context.setdefault("step", step)
+        raise
 
 
 def _resolve_timeout(options: InvokeOptions) -> float:
@@ -344,6 +364,11 @@ def _call_cli(
     system_prompt: str,
     payload: str,
     timeout: float,
+    *,
+    log_path: Path | None = None,
+    step: str = "single",
+    invocation: int = 1,
+    phase: str = "initial",
 ) -> str:
     """Shell out to a locally installed agent CLI runtime."""
     argv = _cli_argv(name)
@@ -364,6 +389,20 @@ def _call_cli(
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
+        partial_output = exc.output
+        if isinstance(partial_output, bytes):
+            partial_output = partial_output.decode("utf-8", errors="replace")
+        if log_path is not None and partial_output:
+            append_composer_log_entry(
+                log_path,
+                ComposerLogEntry(
+                    step=step,
+                    invocation=invocation,
+                    phase=phase,
+                    raw_output=partial_output,
+                    outcome=ComposerFailureCategory.TIMEOUT.value,
+                ),
+            )
         raise_for(
             ComposerFailureCategory.TIMEOUT,
             f"{name} timed out after {timeout}s{_load_avg_suffix()}",
@@ -379,6 +418,22 @@ def _call_cli(
     sys.stdout.write(f"composer: {name} responded in {elapsed:.1f}s\n")
     if completed.returncode != 0:
         stderr = (completed.stderr or "").strip()
+        failure_category = (
+            ComposerFailureCategory.QUOTA
+            if _is_quota_failure(stderr)
+            else ComposerFailureCategory.RUNTIME_ERROR
+        )
+        if log_path is not None:
+            append_composer_log_entry(
+                log_path,
+                ComposerLogEntry(
+                    step=step,
+                    invocation=invocation,
+                    phase=phase,
+                    raw_output=completed.stdout or "",
+                    outcome=failure_category.value,
+                ),
+            )
         if _is_quota_failure(stderr):
             raise_for(
                 ComposerFailureCategory.QUOTA,

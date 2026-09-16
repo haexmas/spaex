@@ -9,12 +9,15 @@ contention-caused timeout is recognizable without a separate investigation.
 
 from __future__ import annotations
 
+import json
 import subprocess
+from pathlib import Path
 
 import pytest
 
 from spaex.behavior.composer import invoke as invoke_mod
-from spaex.behavior.composer.failure import ComposerTimeoutError
+from spaex.behavior.composer.failure import ComposerRuntimeError, ComposerTimeoutError
+from spaex.behavior.composer.invoke import ComposerInput, InvokeOptions, invoke_composer
 
 
 def _fake_completed(stdout: str = "ok", returncode: int = 0) -> subprocess.CompletedProcess:
@@ -97,3 +100,75 @@ def test_call_cli_timeout_message_omits_load_when_attribute_is_missing(
         invoke_mod._call_cli("claude", "system prompt", "payload", timeout=30.0)
 
     assert excinfo.value.message == "claude timed out after 30.0s"
+
+
+def test_cli_failure_logs_partial_output_and_identifies_step(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Retain stdout from a completed failed step and name that step."""
+    log_path = tmp_path / ".spaex" / "composer.log"
+    monkeypatch.setattr(invoke_mod.shutil, "which", lambda _name: "/bin/runtime")
+    monkeypatch.setattr(
+        invoke_mod.subprocess,
+        "run",
+        lambda *_args, **_kwargs: _fake_completed(
+            stdout="partial composer output", returncode=1
+        ),
+    )
+
+    with pytest.raises(ComposerRuntimeError) as excinfo:
+        invoke_composer(
+            ComposerInput(fragments=()),
+            repo_root=tmp_path,
+            options=InvokeOptions(
+                forced_cli_runtimes=("claude",), composer_log_path=log_path
+            ),
+            step="batch-2",
+        )
+
+    assert excinfo.value.context["step"] == "batch-2"
+    entries = [
+        json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()
+    ]
+    assert entries == [
+        {
+            "step": "batch-2",
+            "invocation": 1,
+            "phase": "initial",
+            "raw_output": "partial composer output",
+            "outcome": "runtime-error",
+        }
+    ]
+
+
+def test_cli_timeout_logs_partial_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Retain partial stdout when a CLI process times out."""
+    log_path = tmp_path / ".spaex" / "composer.log"
+    monkeypatch.setattr(invoke_mod.shutil, "which", lambda _name: "/bin/runtime")
+
+    def timed_out(*_args: object, **_kwargs: object) -> object:
+        """Simulate a timed-out CLI that emitted a partial response."""
+        raise subprocess.TimeoutExpired(
+            cmd=["claude", "--print"], timeout=30.0, output="partial response"
+        )
+
+    monkeypatch.setattr(invoke_mod.subprocess, "run", timed_out)
+
+    with pytest.raises(ComposerTimeoutError):
+        invoke_composer(
+            ComposerInput(fragments=()),
+            repo_root=tmp_path,
+            options=InvokeOptions(
+                forced_cli_runtimes=("claude",), composer_log_path=log_path
+            ),
+            step="batch-3",
+        )
+
+    entries = [
+        json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()
+    ]
+    assert entries[0]["step"] == "batch-3"
+    assert entries[0]["raw_output"] == "partial response"
+    assert entries[0]["outcome"] == "timeout"
