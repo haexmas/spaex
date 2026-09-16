@@ -133,11 +133,11 @@ def _merge_response(data: dict) -> str:
 
 
 def test_composition_scales_across_three_or_more_batches(tmp_path: Path) -> None:
-    """Compose 150 tiny fragments (well past the default byte ceiling, still
+    """Compose 300 tiny fragments (well past the default byte ceiling, still
     comfortably under the fragment-count guard) through three batches."""
     repo = tmp_path / "repo"
     (repo / ".spaex").mkdir(parents=True)
-    molecule_count = 150
+    molecule_count = 300
     resolved = [_resolved_molecule(tmp_path / "cache", i) for i in range(molecule_count)]
     stub = _RecordingStub()
 
@@ -150,8 +150,8 @@ def test_composition_scales_across_three_or_more_batches(tmp_path: Path) -> None
 
     assert outcome.published
     assert outcome.fragment_count == molecule_count
-    # 3 batches (~69, ~69, ~12) + 1 flat merge call = 4. A count-based
-    # ceiling of 12 (the old, too-strict default) would have forced 13
+    # 3 batches (~145, ~144, ~11) + 1 flat merge call = 4. A count-based
+    # ceiling of 12 (the old, too-strict default) would have forced 25
     # batches instead of 3 — exactly the over-batching the fix avoids.
     assert stub.call_count == 4
     assert len(set(stub.runtimes)) == 1, "a single runtime must answer every step (FR-011)"
@@ -216,7 +216,7 @@ def test_multi_level_tree_root_is_only_result_with_full_header_and_all_citations
         prompt_hash="prompt-hash",
         operator_answer=operator_answer,
         abort_on_contradiction=True,
-        limits=batching.BatchingLimits(max_fragments=1_000_000, max_bytes=600),
+        limits=batching.BatchingLimits(max_fragments=1_000_000, max_bytes=300),
     )
 
     assert stub.call_count == 5 + 4  # 5 batches + the 4-call tree from test_reduce.py's math
