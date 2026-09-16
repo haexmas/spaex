@@ -31,16 +31,15 @@ import re
 import shutil
 import sys
 import tempfile
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from spaex.behavior.composer import batching, clarify
+from spaex.behavior.composer import reduce as composer_reduce
 from spaex.behavior.composer.clarifications import (
     CLARIFICATIONS_FILENAME,
-    CitedFragment,
-    Clarification,
     ClarificationsStore,
-    derive_key,
     invalidate,
     load,
     save,
@@ -56,6 +55,7 @@ from spaex.behavior.composer.invoke import (
     QuestionsShape,
     invoke_composer,
     resolve_composer_log_path,
+    truncate_composer_log,
     write_composer_log,
 )
 from spaex.behavior.composer.prompt import (
@@ -231,17 +231,46 @@ def run(
             dedup_provenance=dedup_provenance,
         )
 
-    composer_input = ComposerInput(
-        fragments=canonical_fragments,
-        clarifications=tuple(store.entries.values()),
-        expected_source_hash=source_hash,
-        expected_build_input_hash=build_input_hash,
+    truncate_composer_log(
+        resolve_composer_log_path(invoke_options or InvokeOptions(), repo_root)
     )
-    invoke_result = invoke_composer(
-        composer_input,
-        repo_root=repo_root,
-        options=invoke_options,
+    partition_result = batching.partition(
+        canonical_fragments, tuple(store.entries.values())
     )
+    if len(partition_result.batches) <= 1:
+        # Single-batch build: the existing, unmodified one-call path
+        # (contracts/batch-merge-composer-interface.md), preserved
+        # byte-for-byte for the common case (SC-004).
+        composer_input = ComposerInput(
+            fragments=canonical_fragments,
+            clarifications=tuple(store.entries.values()),
+            expected_source_hash=source_hash,
+            expected_build_input_hash=build_input_hash,
+        )
+        invoke_result = invoke_composer(
+            composer_input,
+            repo_root=repo_root,
+            options=invoke_options,
+        )
+    else:
+        # Map-reduce composition (Spec 026): batch calls plus a bounded
+        # merge already resolve any Shape B internally when
+        # abort_on_contradiction is True, so invoke_result.result is
+        # always ComposedShape below in that case; when False (the
+        # `spaex add` plausibility pre-check), a QuestionsShape may come
+        # back and falls through to the same handling a single-call Shape
+        # B would hit.
+        store, build_input_hash, invoke_result = composer_reduce.compose(
+            partition_result=partition_result,
+            source_hash=source_hash,
+            build_input_hash=build_input_hash,
+            repo_root=repo_root,
+            invoke_options=invoke_options,
+            store=store,
+            prompt_hash=prompt_hash,
+            operator_answer=operator_answer or _default_operator_answer,
+            abort_on_contradiction=abort_on_contradiction,
+        )
 
     if isinstance(invoke_result.result, QuestionsShape):
         if not abort_on_contradiction:
@@ -401,94 +430,37 @@ def _resolve_clarifications(
     Composer exactly once with the staged clarifications
     (contracts/composer-interface.md §Shape B, FR-010, FR-010a, FR-011).
 
-    A blank answer means the operator declined to reconcile (FR-005a) and
-    aborts with the same diagnostic as a non-interactive caller. A second
-    Shape B response from the re-invocation is an `invalid-output` failure;
-    the round is bounded to one re-invocation per build.
+    Delegates to `composer.clarify.resolve_step_clarifications` (Spec 026
+    T003), which generalizes this same round trip so a batch call or merge
+    node (`composer.reduce`) can use it too; this function supplies the
+    legacy whole-build retry (a full-set `ComposerInput`, `step="single"`),
+    unchanged from before that generalization.
     """
-    fragment_by_scoped_id = {f.scoped_id: f for f in canonical_fragments}
-    for question in questions:
-        cited = _cited_fragments_for_question(question, fragment_by_scoped_id)
-        answer = operator_answer(question).strip()
-        if not answer:
-            raise HaexError(
-                message=(
-                    "operator declined to reconcile clarification question: "
-                    f"{question.question}"
-                ),
-                diagnostic_key="behavior-clarification-required",
-                exit_code=exit_codes.BEHAVIOR_SEMANTIC_REFUSE,
-                hint=(
-                    "Provide a reconciling answer (choose one modality, merge, "
-                    "or reject both), or drop the molecule whose fragments "
-                    "trigger the overlap/contradiction."
-                ),
-            )
-        timestamp = utc_timestamp()
-        store = store.with_entry(
-            Clarification(
-                key=derive_key(cited),
-                question=question.question,
-                cited_fragments=cited,
-                answer=answer,
-                asked_at=timestamp,
-                answered_at=timestamp,
-            )
+
+    def retry(new_store: ClarificationsStore, new_build_input_hash: str) -> InvokeOutcome:
+        composer_input = ComposerInput(
+            fragments=tuple(canonical_fragments),
+            clarifications=tuple(new_store.entries.values()),
+            expected_source_hash=source_hash,
+            expected_build_input_hash=new_build_input_hash,
+        )
+        return invoke_composer(
+            composer_input,
+            repo_root=repo_root,
+            options=invoke_options,
+            step="single",
+            invocation=2,
+            phase="clarification-resolved",
         )
 
-    build_input_hash = compute_build_input_hash(
-        effective_prompt_sha256=prompt_hash,
-        composer_prompt_version=COMPOSER_PROMPT_VERSION,
-        valid_clarifications=store.entries.values(),
+    return clarify.resolve_step_clarifications(
+        questions=questions,
+        fragments_in_scope=canonical_fragments,
+        store=store,
+        prompt_hash=prompt_hash,
+        operator_answer=operator_answer,
+        retry=retry,
     )
-    composer_input = ComposerInput(
-        fragments=tuple(canonical_fragments),
-        clarifications=tuple(store.entries.values()),
-        expected_source_hash=source_hash,
-        expected_build_input_hash=build_input_hash,
-    )
-    invoke_result = invoke_composer(
-        composer_input,
-        repo_root=repo_root,
-        options=invoke_options,
-    )
-    if isinstance(invoke_result.result, QuestionsShape):
-        raise_for(
-            ComposerFailureCategory.INVALID_OUTPUT,
-            "Composer returned a second Shape B response in the same build; "
-            "the clarification round is bounded to one re-invocation "
-            "(contracts/composer-interface.md §Shape B)",
-        )
-        raise AssertionError("unreachable")
-
-    return store, build_input_hash, invoke_result
-
-
-def _cited_fragments_for_question(
-    question: ClarificationQuestion,
-    fragment_by_scoped_id: Mapping[str, BehaviorFragment],
-) -> tuple[CitedFragment, ...]:
-    """Resolve a Shape-B question's cited fragments to current body hashes."""
-    cited: list[CitedFragment] = []
-    for entry in question.cited_fragments:
-        molecule_id = entry.get("molecule_id", "")
-        fragment_id = entry.get("fragment_id", "")
-        fragment = fragment_by_scoped_id.get(f"{molecule_id}/{fragment_id}")
-        if fragment is None:
-            raise_for(
-                ComposerFailureCategory.INVALID_OUTPUT,
-                "Shape B question cites unknown fragment "
-                f"{molecule_id}/{fragment_id}",
-            )
-            raise AssertionError("unreachable")
-        cited.append(
-            CitedFragment(
-                molecule_id=molecule_id,
-                fragment_id=fragment_id,
-                body_sha256=fragment.body_hash,
-            )
-        )
-    return tuple(cited)
 
 
 def _default_operator_answer(question: ClarificationQuestion) -> str:

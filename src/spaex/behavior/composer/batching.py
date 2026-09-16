@@ -61,7 +61,7 @@ def partition(
     fragments: Sequence[BehaviorFragment],
     clarifications: Sequence[Clarification] = (),
     *,
-    limits: BatchingLimits = BatchingLimits(),
+    limits: BatchingLimits | None = None,
 ) -> PartitionResult:
     """Partition `fragments` into deterministic batches.
 
@@ -78,6 +78,7 @@ def partition(
     no-splitting rule makes a valid batch impossible for that molecule
     (FR-012).
     """
+    limits = limits or BatchingLimits()
     sorted_fragments = tuple(sorted(fragments, key=lambda f: f.scoped_id))
     groups = _group_by_molecule(sorted_fragments)
 
@@ -165,8 +166,9 @@ def _assign_clarifications(
     for clarification in clarifications:
         scoped_ids = {cited.scoped_id for cited in clarification.cited_fragments}
         batch_ids = {batch_of.get(scoped_id) for scoped_id in scoped_ids}
-        if len(batch_ids) == 1 and None not in batch_ids:
-            per_batch[next(iter(batch_ids))].append(clarification)
+        only_batch_id = next(iter(batch_ids)) if len(batch_ids) == 1 else None
+        if only_batch_id is not None:
+            per_batch[only_batch_id].append(clarification)
         else:
             cross_batch.append(clarification)
 
