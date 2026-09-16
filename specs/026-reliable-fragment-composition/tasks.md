@@ -111,9 +111,9 @@ No new production code expected beyond T012's merge-step Shape B handling and T0
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T019 [P] Add a short cross-reference from `specs/023-behavior-harness/contracts/composer-interface.md` to `contracts/batch-merge-composer-interface.md`, noting the latter extends the former for multi-batch builds (Spec Kit constitution Principle III: cross-artifact consistency).
-- [ ] T020 Manually run `quickstart.md`'s walkthrough against this project's own real fragment set (currently 9 molecules) once T001-T014 are implemented, confirming the actual observed behavior matches the documented example output.
-- [ ] T021 [P] Add a short ADR under `docs/adr/` recording the map-reduce composition decision and the new `Batch`/`BatchComposition`/`MergeInput` entities (Spec Kit constitution: architectural decisions materially changing the domain model SHOULD be recorded as ADRs).
+- [x] T019 [P] Add a short cross-reference from `specs/023-behavior-harness/contracts/composer-interface.md` to `contracts/batch-merge-composer-interface.md`, noting the latter extends the former for multi-batch builds (Spec Kit constitution Principle III: cross-artifact consistency).
+- [ ] T020 Manually run `quickstart.md`'s walkthrough against this project's own real fragment set (currently 9 molecules) once T001-T014 are implemented, confirming the actual observed behavior matches the documented example output. **Deferred**: this is the same real-world validation the operator's task description names as a separate post-merge step (retrying the pending atoms-publisher pin via `spaex install --speckit-agents claude,codex` against the main checkout's actual `.spaex/manifest.json`, not this worktree's). Tick this box in a small follow-up commit once that run is confirmed against `.spaex/install.lock`.
+- [x] T021 [P] Add a short ADR under `docs/adr/` recording the map-reduce composition decision and the new `Batch`/`BatchComposition`/`MergeInput` entities (Spec Kit constitution: architectural decisions materially changing the domain model SHOULD be recorded as ADRs).
 
 ---
 

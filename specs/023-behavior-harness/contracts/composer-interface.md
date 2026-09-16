@@ -2,6 +2,8 @@
 
 Defines how spaex invokes the LLM Composer, what the Composer's canonical system prompt requires, and what it returns.
 
+> **Spec 026 extension**: for a fragment set spanning more than one batch, [`../../026-reliable-fragment-composition/contracts/batch-merge-composer-interface.md`](../../026-reliable-fragment-composition/contracts/batch-merge-composer-interface.md) adds batch calls and a bounded merge reduction on top of everything below, which remains true of every individual call. A fragment set that fits in one batch is unaffected and keeps following this document alone.
+
 ## Invocation modes
 
 Two paths, tried in the order documented in research.md §1 and §2:
