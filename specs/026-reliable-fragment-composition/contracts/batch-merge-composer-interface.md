@@ -1,6 +1,6 @@
 # Contract: Batch/Merge Composition
 
-Extends `specs/023-behavior-harness/contracts/composer-interface.md`. Everything in that document remains true of every individual call this contract describes — the sentinel format, Shape A/Shape B envelope, build fingerprints, failure categories and exit codes, and determinism aids are unchanged and are not repeated here. This document adds only what changes: composition is now zero or more **batch calls** followed by exactly one **merge call**, both instances of the same existing per-call contract.
+Extends `specs/023-behavior-harness/contracts/composer-interface.md`. Everything in that document remains true of every individual call this contract describes — the sentinel format, Shape A/Shape B envelope, build fingerprints, failure categories and exit codes, and determinism aids are unchanged and are not repeated here. For a fragment set spanning multiple batches, this document adds the requirement for two or more **batch calls** followed by a bounded merge reduction. A fragment set that fits in one batch keeps the existing one-call path and has no merge call.
 
 ## When this contract applies
 
@@ -15,18 +15,20 @@ Identical to `composer-interface.md`'s "Composer input"/"Composer output" contra
 
 A batch call's Shape B (contradiction/overlap found *within this batch*) is handled by the existing clarification round-trip, scoped to this one batch call, bounded to one round-trip exactly as today (a second Shape B from the same batch call is `invalid-output`).
 
-## Merge call
+## Merge call and bounded reduction
 
-Runs once, after every batch has produced a `BatchComposition` (a batch that raised and resolved its own clarification contributes its post-resolution composed body, same as today's single-call flow).
+For a multi-batch composition, merging starts after every batch has produced a `BatchComposition` (a batch that raised and resolved its own clarification contributes its post-resolution composed body, same as today's single-call flow).
 
-**Input**: a JSON document structurally analogous to `ComposerInput`, but:
-- `batch_compositions`: the ordered list of each batch's composed Markdown (not raw fragments).
-- `clarifications`: only clarifications whose cited fragments span more than one batch (batch-local ones were already resolved and folded into the relevant `BatchComposition`).
+If the serialized merge input fits within the fixed merge-input ceiling from `research.md §2`, the reducer performs one N-ary merge call. Otherwise it performs a deterministic pairwise tree reduction: at each level it merges adjacent composed inputs in batch-assignment order, carries an unpaired final input to the next level unchanged, and repeats until one composed input remains. Every pairwise call receives only the two adjacent composed documents plus the applicable clarifications, and every intermediate result preserves all clause citations and the source-fragment membership of its inputs. A pair that cannot fit within the ceiling produces the existing typed pre-LLM `behavior-composer-invalid-output` diagnostic with `reason=input-too-large`; it is not split or silently concatenated.
+
+Each flat or tree merge input is a JSON document structurally analogous to `ComposerInput`, with:
+- `batch_compositions`: the ordered list of composed Markdown inputs for that merge node, never raw fragments.
+- `clarifications`: only currently-valid clarifications whose cited fragments span the inputs at that node; batch-local answers are already folded into the relevant composition.
 - `expected_source_hash` / `expected_build_input_hash`: identical to today's contract — computed over the *entire* original fragment set, unchanged by batching.
 
-**Output**: identical shape to today's Shape A/Shape B, with the `spaex-composed` header now added at this step (over the full-set hashes above). Shape A's body is the fully merged, deduplicated, citation-preserving final document — the same document a single whole-set call would have produced, byte-for-byte given the same runtime and inputs (research.md §6).
+**Output**: an intermediate merge returns a headerless, merged, deduplicated, citation-preserving partial document for the next tree level. The root merge returns the identical Shape A/Shape B contract as today's path and adds the `spaex-composed` header over the full-set hashes above. Repeated runs of this deterministic batch/merge pipeline are byte-identical (research.md §6); this contract makes no unsupported byte-for-byte equivalence claim against the legacy single whole-set call.
 
-The merge call's Shape B (a contradiction spanning two batches) goes through the same one-round-trip-bounded clarification flow as any other call. Once resolved, the merge call is re-invoked once with the answer staged, exactly as `composer-interface.md` already specifies for a single call.
+Any merge node's Shape B (a contradiction spanning its inputs) goes through the same one-round-trip-bounded clarification flow as any other call. Once resolved, that node is re-invoked once with the answer staged, then its resolved output continues up the reduction tree. A second Shape B from the same node is `invalid-output`.
 
 ## Runtime consistency
 
@@ -38,4 +40,4 @@ Unchanged categories (`timeout`, `runtime-error`, `invalid-output`, `quota`, `no
 
 ## Diagnostic log
 
-`$SPAEX_COMPOSER_LOG` (default `.spaex/composer.log`) becomes a JSON-lines file: one record per completed step, appended as that step completes (not buffered until the whole attempt finishes), per data-model.md's `ComposerLogEntry`. On failure, every step that completed before the failure has an entry already on disk; the failing step's entry (if it produced any output before failing) is the last one. This is the only change to the failure-log contract; the env var, default path, and "see this file for diagnosis" hint are unchanged.
+`$SPAEX_COMPOSER_LOG` (default `.spaex/composer.log`) becomes a JSON-lines file: one record per completed invocation, appended as that invocation completes (not buffered until the whole attempt finishes), per data-model.md's `ComposerLogEntry`. The file is truncated exactly once when a fresh attempt starts; clarification re-invocations append a second record for the same logical step and retain the initial questions response. On failure, every invocation that completed before the failure has an entry already on disk; the failing invocation's entry (if it produced any output before failing) is the last one. This is the only change to the failure-log contract; the env var, default path, and "see this file for diagnosis" hint are unchanged.

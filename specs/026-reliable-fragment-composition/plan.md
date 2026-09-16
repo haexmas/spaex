@@ -5,7 +5,7 @@
 
 ## Summary
 
-Replace the Composer's single-shot, whole-fragment-set LLM call with a bounded, deterministic **map-reduce composition**: partition the resolved fragment set into fixed-size batches, compose each batch independently with the existing single-call Composer machinery (reused unchanged), then merge the batches' composed output into one final document with a dedicated merge step that re-checks for cross-batch contradictions before publishing. Batch size stays constant regardless of how many molecules are adopted, so no individual LLM call's input grows unbounded with scale — only the number of batches does, and a batch/merge tree stays bounded in a later phase if batch counts themselves grow large. The existing single-call path degenerates to "one batch, no merge needed" and is preserved byte-for-byte for the common small case (SC-004).
+Replace the Composer's single-shot, whole-fragment-set LLM call with a bounded, deterministic **map-reduce composition**: partition the resolved fragment set into fixed-size batches, compose each batch independently with the existing single-call Composer machinery (reused unchanged), then merge the batches' composed output into one final document with a dedicated merge step that re-checks for cross-batch contradictions before publishing. Batch size stays constant regardless of how many molecules are adopted, so no individual LLM call's input grows unbounded with scale — only the number of batches does, and a bounded pairwise merge tree handles merge inputs that exceed the flat-merge ceiling. The existing single-call path degenerates to "one batch, no merge needed" and is preserved byte-for-byte for the common small case (SC-004).
 
 ## Technical Context
 
@@ -26,7 +26,7 @@ Replace the Composer's single-shot, whole-fragment-set LLM call with a bounded, 
 Checked against `.specify/memory/constitution.md` (Spec Kit constitution) and the spaex behavior-harness constitution composed at `.spaex/constitution.md`:
 
 - **I. Specifications Are the Product Contract** — spec.md states user-visible behavior (install succeeds reliably), scope, and testable acceptance scenarios. PASS.
-- **II. Plans Must Be Traceable** — this plan maps every FR (FR-001..FR-011) to a concrete design element in Phase 0/1 below; no unresolved ambiguity remains post-`/speckit.clarify`. PASS.
+- **II. Plans Must Be Traceable** — this plan maps every FR (FR-001..FR-012) to a concrete design element in Phase 0/1 below; no unresolved ambiguity remains post-`/speckit.clarify`. PASS.
 - **III. Cross-Artifact Consistency** — Phase 1 artifacts (data-model.md, contracts/) are derived directly from spec.md's entities and the existing composer-interface.md contract they extend, not invented independently. PASS.
 - **IV. Tasks Must Be Independently Verifiable** — deferred to `/speckit-tasks`; this plan's Project Structure section identifies the concrete test seams (fault-injection, unit, integration) each task will need. PASS (verifiable at task-generation time).
 - **V. Scope Is Explicit** — spec.md's Assumptions section states this feature is scoped to Composer reliability at scale only, not runtime selection or prompt authoring generally. PASS.
@@ -59,7 +59,7 @@ Single existing Python project; no new top-level project. This feature is additi
 ```text
 src/spaex/behavior/
 ├── composer/
-│   ├── invoke.py          # UNCHANGED: _call_cli, _parse, sentinel contract, single-batch invocation - reused as-is per batch/merge call
+│   ├── invoke.py          # CORE UNCHANGED: _call_cli, _parse, sentinel contract, single-call invocation; log lifecycle gains per-attempt/per-invocation records
 │   ├── failure.py          # UNCHANGED: five typed failure categories, exit codes 30-34
 │   ├── prompt.py           # EXTENDED: existing compose prompt (unchanged) + new merge-step prompt constant
 │   ├── batching.py         # NEW: deterministic fragment→batch partitioning (pure function, no I/O)
@@ -68,8 +68,9 @@ src/spaex/behavior/
 
 tests/behavior/
 ├── unit/
-│   ├── test_batching.py           # NEW: partitioning determinism, boundary sizes, single-batch degenerate case
-│   └── test_reduce.py             # NEW: batch dispatch + merge orchestration against stub_caller
+│   ├── test_batching.py           # NEW: partitioning determinism, boundary sizes, oversized-molecule failure, single-batch degenerate case
+│   ├── test_composer_log_format.py # NEW: attempt truncation, append-only entries, clarification round-trip retention
+│   └── test_reduce.py             # NEW: batch dispatch + bounded merge-tree orchestration against stub_caller
 ├── fault_injection/
 │   └── test_reduce_partial_failure.py  # NEW: a later batch/merge step fails after earlier ones succeeded - non-destructive + per-step log preservation
 └── integration/
