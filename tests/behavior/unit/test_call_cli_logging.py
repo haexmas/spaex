@@ -172,3 +172,32 @@ def test_cli_timeout_logs_partial_output(
     assert entries[0]["step"] == "batch-3"
     assert entries[0]["raw_output"] == "partial response"
     assert entries[0]["outcome"] == "timeout"
+
+
+def test_cli_argv_appends_model_flag_per_runtime_when_env_var_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Append --model <value> for every runtime when SPAEX_LLM_MODEL is set
+    (contracts/cli-surface.md documents this env var; the CLI-only 4.2.0
+    pivot never wired it up until a real dogfood run got stuck on a
+    runtime's own default model)."""
+    monkeypatch.setenv("SPAEX_LLM_MODEL", "sonnet")
+    assert invoke_mod._cli_argv("claude") == ["claude", "--print", "--model", "sonnet"]
+    assert invoke_mod._cli_argv("codex") == ["codex", "exec", "--model", "sonnet"]
+    assert invoke_mod._cli_argv("gemini") == [
+        "gemini",
+        "--prompt",
+        "-",
+        "--model",
+        "sonnet",
+    ]
+
+
+def test_cli_argv_omits_model_flag_when_env_var_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Default to the runtime's own canonical model when unset."""
+    monkeypatch.delenv("SPAEX_LLM_MODEL", raising=False)
+    assert invoke_mod._cli_argv("claude") == ["claude", "--print"]
+    assert invoke_mod._cli_argv("codex") == ["codex", "exec"]
+    assert invoke_mod._cli_argv("gemini") == ["gemini", "--prompt", "-"]

@@ -49,6 +49,7 @@ COMPOSER_LOG_ENV = "SPAEX_COMPOSER_LOG"
 DEFAULT_COMPOSER_LOG = ".spaex/composer.log"
 TIMEOUT_ENV = "SPAEX_COMPOSER_TIMEOUT"
 DEFAULT_TIMEOUT_SECONDS = 300
+LLM_MODEL_ENV = "SPAEX_LLM_MODEL"
 
 SENTINEL_BEGIN = "<<<SPAEX-COMPOSER-BEGIN>>>"
 SENTINEL_END = "<<<SPAEX-COMPOSER-END>>>"
@@ -469,15 +470,23 @@ def _cli_argv(name: str) -> list[str]:
     """Runtime-specific argv for a one-shot non-interactive session.
 
     Kept minimal; each runtime's non-interactive contract is documented in
-    research.md §1 (updated to reflect the CLI-only decision).
+    research.md §1 (updated to reflect the CLI-only decision). Appends
+    `--model <SPAEX_LLM_MODEL>` when that env var is set (contracts/
+    cli-surface.md), overriding whichever model the runtime would otherwise
+    pick on its own.
     """
     if name == "claude":
-        return ["claude", "--print"]
-    if name == "codex":
-        return ["codex", "exec"]
-    if name == "gemini":
-        return ["gemini", "--prompt", "-"]
-    return [name]
+        argv = ["claude", "--print"]
+    elif name == "codex":
+        argv = ["codex", "exec"]
+    elif name == "gemini":
+        argv = ["gemini", "--prompt", "-"]
+    else:
+        argv = [name]
+    model = os.environ.get(LLM_MODEL_ENV)
+    if model:
+        argv += ["--model", model]
+    return argv
 
 
 def _cli_stdin(system_prompt: str, payload: str) -> str:
@@ -732,6 +741,7 @@ __all__ = [
     "COMPOSER_LOG_ENV",
     "DEFAULT_COMPOSER_LOG",
     "DEFAULT_TIMEOUT_SECONDS",
+    "LLM_MODEL_ENV",
     "SENTINEL_BEGIN",
     "SENTINEL_END",
     "TIMEOUT_ENV",
