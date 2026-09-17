@@ -43,6 +43,7 @@ from spaex.behavior.composer.invoke import (
 )
 from spaex.behavior.composer.prompt import MERGE_PROMPT, strip_header
 from spaex.behavior.fragment import BehaviorFragment
+from spaex.util.errors import HaexError
 
 
 @dataclass(frozen=True)
@@ -164,11 +165,31 @@ def compose(
     # ponytail: use the stdlib's bounded default worker count to avoid one
     # thread/process per batch; make concurrency configurable if throughput
     # tuning becomes necessary rather than coupling it to batch count.
+    #
+    # Deliberately not `executor.map()`: its result iterator cancels every
+    # future it has not yet yielded as soon as an earlier one raises
+    # (`concurrent.futures._base.Executor.map`'s `result_iterator`:
+    # `finally: for future in fs: future.cancel()`). A future still queued
+    # - not yet started - *can* be cancelled that way, so a later batch can
+    # silently never run at all once an earlier one fails, contradicting
+    # this function's own documented guarantee (ADR 0023) that every batch
+    # fires regardless of a sibling's outcome. Submitting directly and
+    # collecting each `.result()` in argument order gives the same
+    # deterministic ordering without that cancellation side effect: every
+    # future is submitted up front, so all of them run to completion
+    # (or fail) regardless of what any other one does.
     with ThreadPoolExecutor() as executor:
-        # `.map` returns results in argument order regardless of completion
-        # order, so `zip(batches, outcomes)` below stays deterministic
-        # (SC-003 byte-reproducibility) no matter which batch answers first.
-        outcomes = list(executor.map(_dispatch, batches))
+        futures = [executor.submit(_dispatch, batch) for batch in batches]
+        outcomes: list[InvokeOutcome] = []
+        first_error: HaexError | None = None
+        for future in futures:
+            try:
+                outcomes.append(future.result())
+            except HaexError as exc:
+                if first_error is None:
+                    first_error = exc
+    if first_error is not None:
+        raise first_error
 
     nodes: list[_Node] = []
 

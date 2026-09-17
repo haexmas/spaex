@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 
 from spaex.behavior.composer.batching import (
+    DEFAULT_MAX_BATCH_BYTES,
     BatchingLimits,
     partition,
 )
@@ -39,6 +40,23 @@ def _clarification(*cited: CitedFragment, key: str = "k") -> Clarification:
         asked_at="2026-01-01T00:00:00Z",
         answered_at="2026-01-01T00:00:00Z",
     )
+
+
+def test_default_max_batch_bytes_stays_within_the_empirically_reliable_zone() -> None:
+    """Keep the default ceiling inside the range dogfooding found reliable.
+
+    2026-09-17 real-run evidence (Spec 026 follow-up): a batch near the old
+    40_000-byte ceiling (~38-40KB JSON payload) failed 5/5 real Composer
+    calls against this project's own fragment set - timeout, missing
+    sentinel (x2), a dropped citation, and a mid-stream API disconnect -
+    while a ~20KB sibling batch in the same runs never failed. The earlier
+    18-21KB-reliable/~60KB-fails-80%-of-the-time data point this ceiling was
+    originally based on undersold how close to the failure zone 40KB
+    already was; a single Composer call taking several hundred seconds to
+    stream has meaningfully higher odds of a connection drop than one
+    finishing in under two minutes.
+    """
+    assert DEFAULT_MAX_BATCH_BYTES <= 21_000
 
 
 def test_single_batch_degenerate_case() -> None:

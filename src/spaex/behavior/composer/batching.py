@@ -34,9 +34,15 @@ DEFAULT_MAX_BATCH_FRAGMENTS = 200
 #: `ComposerInput.to_json()` payload actually sent to a Composer call.
 #: Dogfooding this project's own dense-prose molecules found ~18-21KB
 #: composes reliably (183-522s) while ~60KB in one call fails ~80% of the
-#: time — 40KB keeps a clear safety margin below the known-bad point while
-#: being meaningfully more generous than an earlier, unjustified 20KB.
-DEFAULT_MAX_BATCH_BYTES = 40_000
+#: time. An earlier revision set this to 40KB as a safety margin below that
+#: known-bad point, but 2026-09-17 real-run evidence showed a batch near
+#: 40KB still failing 5/5 times (timeout, missing sentinel twice, a dropped
+#: citation, a mid-stream API disconnect) while a ~20KB sibling batch in the
+#: same runs never failed: a call that streams for several hundred seconds
+#: has meaningfully higher odds of a connection drop than one finishing in
+#: under two minutes, so the ceiling now sits inside the empirically
+#: reliable 18-21KB band instead of merely below the known-bad one.
+DEFAULT_MAX_BATCH_BYTES = 20_000
 
 
 @dataclass(frozen=True)
