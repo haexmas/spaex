@@ -54,9 +54,11 @@ failure can never erase an earlier step's evidence.
 
 ## Consequences
 
-- No fixed ceiling on adopted molecule/fragment count: growing the
-  fragment set adds more (bounded) batches and, past the merge-input
-  ceiling, more (bounded) tree levels — never a larger single call.
+- No fixed ceiling on adopted molecule/fragment count within the supported
+  total-content limit: growing the fragment set adds more (bounded) batches
+  and, past the merge-input ceiling, more (bounded) tree levels. The root
+  merge remains subject to the generous sanity backstop documented in ADR
+  0025, so this does not claim unbounded total input for one root call.
 - The shared clarification round-trip helper lives in a new
   `spaex.behavior.composer.clarify` module rather than directly in
   `orchestrate.py`: `orchestrate.py` imports `reduce.py` for the

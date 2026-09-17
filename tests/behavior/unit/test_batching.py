@@ -75,6 +75,7 @@ def test_merge_ceiling_is_independent_of_the_batching_ceiling() -> None:
     independent justification for the resulting value.
     """
     assert BatchingLimits().merge_max_bytes == DEFAULT_MERGE_MAX_BYTES
+    assert DEFAULT_MERGE_MAX_BYTES == 1_000_000
     assert DEFAULT_MERGE_MAX_BYTES != DEFAULT_MAX_BATCH_BYTES
 
 
