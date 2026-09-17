@@ -44,13 +44,30 @@ DEFAULT_MAX_BATCH_FRAGMENTS = 200
 #: reliable 18-21KB band instead of merely below the known-bad one.
 DEFAULT_MAX_BATCH_BYTES = 20_000
 
+#: Serialized-size ceiling in bytes for a merge node's input (research.md
+#: §3), independent of `DEFAULT_MAX_BATCH_BYTES` - not the same number
+#: reused, and not a multiplier of it. Composed markdown was originally
+#: assumed to be far smaller than the raw fragments it summarizes, but
+#: 2026-09-16/17 real dogfooding disproved that twice: composed bodies
+#: carry real per-fragment overhead from LLM-authored prose and structure,
+#: so two batches' composed bodies together can exceed whatever ceiling
+#: the batching step happens to use, for reasons that have nothing to do
+#: with merge-call reliability specifically. No merge-specific timing/
+#: failure data exists yet, so this starts at the same magnitude
+#: `DEFAULT_MAX_BATCH_BYTES` used when it was still set from general
+#: single-Composer-call reliability data (18-21KB reliable, ~60KB fails
+#: ~80% of the time) - revisit once real merge-call data exists.
+DEFAULT_MERGE_MAX_BYTES = 40_000
+
 
 @dataclass(frozen=True)
 class BatchingLimits:
-    """Batch-sizing ceilings (research.md §2). Overridable for tests."""
+    """Batch-sizing ceilings (research.md §2) plus the merge-node ceiling
+    (research.md §3). Overridable for tests."""
 
     max_fragments: int = DEFAULT_MAX_BATCH_FRAGMENTS
     max_bytes: int = DEFAULT_MAX_BATCH_BYTES
+    merge_max_bytes: int = DEFAULT_MERGE_MAX_BYTES
 
 
 @dataclass(frozen=True)
@@ -241,6 +258,7 @@ def _assign_clarifications(
 __all__ = [
     "DEFAULT_MAX_BATCH_BYTES",
     "DEFAULT_MAX_BATCH_FRAGMENTS",
+    "DEFAULT_MERGE_MAX_BYTES",
     "Batch",
     "BatchingLimits",
     "PartitionResult",

@@ -12,6 +12,7 @@ import pytest
 
 from spaex.behavior.composer.batching import (
     DEFAULT_MAX_BATCH_BYTES,
+    DEFAULT_MERGE_MAX_BYTES,
     BatchingLimits,
     partition,
 )
@@ -57,6 +58,24 @@ def test_default_max_batch_bytes_stays_within_the_empirically_reliable_zone() ->
     finishing in under two minutes.
     """
     assert DEFAULT_MAX_BATCH_BYTES <= 21_000
+
+
+def test_merge_ceiling_is_independent_of_the_batching_ceiling() -> None:
+    """Keep the merge ceiling a separately tunable value, not derived from
+    the batching ceiling by a fixed multiplier or reused outright.
+
+    2026-09-16/17 real-run evidence (Spec 026 follow-up, research.md §3):
+    reusing the batching ceiling for merge decisions broke twice - once at
+    40KB (two individually-fine batches' composed bodies together exceeded
+    it at merge time), and again after tightening the batching ceiling to
+    20KB for batch-level reliability (batch-1 and batch-2's composed bodies
+    together still exceeded a 20KB merge ceiling, even though each batch's
+    own raw payload fit comfortably). A merge ceiling that moves whenever
+    the batching ceiling is retuned for its own, unrelated reasons has no
+    independent justification for the resulting value.
+    """
+    assert BatchingLimits().merge_max_bytes == DEFAULT_MERGE_MAX_BYTES
+    assert DEFAULT_MERGE_MAX_BYTES != DEFAULT_MAX_BATCH_BYTES
 
 
 def test_single_batch_degenerate_case() -> None:

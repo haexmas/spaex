@@ -154,7 +154,7 @@ def test_odd_batch_count_forces_multi_level_pairwise_reduction_with_carry_forwar
     # Small enough that 5 (and 3) batch bodies together don't fit, but any
     # 2 adjacent bodies do — forces the pairwise-tree path across more than
     # one level instead of one flat merge.
-    merge_limits = batching.BatchingLimits(max_fragments=1_000_000, max_bytes=600)
+    merge_limits = batching.BatchingLimits(max_fragments=1_000_000, merge_max_bytes=600)
     stub = _Stub(root_source_hash=source_hash, root_build_input_hash=build_input_hash)
 
     store, final_build_input_hash, outcome = composer_reduce.compose(
@@ -203,7 +203,7 @@ def test_oversized_merge_pair_raises_input_too_large_without_concatenation(
 
     source_hash = "a" * 64
     build_input_hash = "b" * 64
-    merge_limits = batching.BatchingLimits(max_fragments=1_000_000, max_bytes=200)
+    merge_limits = batching.BatchingLimits(max_fragments=1_000_000, merge_max_bytes=200)
     stub = _Stub(root_source_hash=source_hash, root_build_input_hash=build_input_hash)
 
     with pytest.raises(ComposerInvalidOutputError) as excinfo:
@@ -225,30 +225,39 @@ def test_oversized_merge_pair_raises_input_too_large_without_concatenation(
     assert not any("batch_compositions" in c["payload"] for c in stub.calls)
 
 
-def test_merge_uses_the_batch_byte_ceiling_without_extra_headroom(tmp_path: Path) -> None:
-    """Use the documented batch ceiling for merge fit decisions as well."""
-    fragments = [_fragment("mol-a", "x" * 100 + "."), _fragment("mol-b", "x" * 100 + ".")]
+def test_merge_ceiling_is_independent_of_the_batch_ceiling(tmp_path: Path) -> None:
+    """A merge node's fit decision uses `merge_max_bytes`, not `max_bytes`.
+
+    research.md §3 (corrected 2026-09-17): the two ceilings are separately
+    configured values, not the same number reused or a fixed multiple of
+    one another. A `max_bytes` far too small for the merge payload, paired
+    with a `merge_max_bytes` that comfortably fits it, must still let the
+    merge succeed as one flat call - if the two ceilings were still
+    coupled, this would raise `input-too-large` the way merge decisions
+    did before the decoupling fix."""
+    fragments = [_fragment("mol-a", "do thing a."), _fragment("mol-b", "do thing b.")]
     partition_result = batching.partition(
-        fragments, [], limits=batching.BatchingLimits(max_fragments=1, max_bytes=10_000)
+        fragments, [], limits=batching.BatchingLimits(max_fragments=1, max_bytes=100_000)
     )
     stub = _Stub(root_source_hash="a" * 64, root_build_input_hash="b" * 64)
 
-    with pytest.raises(ComposerInvalidOutputError) as excinfo:
-        composer_reduce.compose(
-            partition_result=partition_result,
-            source_hash="a" * 64,
-            build_input_hash="b" * 64,
-            repo_root=tmp_path,
-            invoke_options=InvokeOptions(stub_caller=stub),
-            store=ClarificationsStore(),
-            prompt_hash="prompt-hash",
-            operator_answer=_noop_operator_answer,
-            abort_on_contradiction=True,
-            limits=batching.BatchingLimits(max_fragments=1_000_000, max_bytes=500),
-        )
+    composer_reduce.compose(
+        partition_result=partition_result,
+        source_hash="a" * 64,
+        build_input_hash="b" * 64,
+        repo_root=tmp_path,
+        invoke_options=InvokeOptions(stub_caller=stub),
+        store=ClarificationsStore(),
+        prompt_hash="prompt-hash",
+        operator_answer=_noop_operator_answer,
+        abort_on_contradiction=True,
+        limits=batching.BatchingLimits(
+            max_fragments=1_000_000, max_bytes=1, merge_max_bytes=100_000
+        ),
+    )
 
-    assert excinfo.value.context.get("reason") == "input-too-large"
-    assert not any("batch_compositions" in c["payload"] for c in stub.calls)
+    merge_calls = [c for c in stub.calls if "batch_compositions" in c["payload"]]
+    assert len(merge_calls) == 1, "merge_max_bytes must have allowed one flat merge"
 
 
 def test_batch_that_silently_drops_a_citation_aborts_before_the_next_batch(
