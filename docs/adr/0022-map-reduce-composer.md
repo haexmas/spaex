@@ -1,7 +1,8 @@
 # ADR 0022: Map-reduce Composer composition for reliability at scale
 
-**Status**: Accepted
+**Status**: Accepted; merge-ceiling detail superseded by ADR 0024
 **Date**: 2026-09-16
+**Related**: ADR 0024 (independent merge ceiling)
 
 ## Context
 
@@ -30,9 +31,10 @@ Composer call per batch, reusing `invoke.py`'s `_call_cli`/`_parse`
 machinery and the sentinel/Shape A/Shape B contract completely unchanged,
 then reduces the batches' composed output (each stripped of its
 placeholder header) with a bounded merge phase: one flat N-ary merge when
-the merge input fits the same byte ceiling, otherwise a deterministic
-pairwise tree with odd-node carry-forward, repeated until one
-header-bearing root document remains. One CLI runtime is resolved from the
+the merge input fits the independently configured merge ceiling, otherwise
+a deterministic pairwise tree with odd-node carry-forward, repeated until
+one header-bearing root document remains. The independent merge ceiling is
+the amendment recorded in ADR 0024. One CLI runtime is resolved from the
 first call and forced for every later call in the attempt (FR-011). A
 fragment set that fits in a single batch keeps the exact, unmodified
 single-call path (`orchestrate.py` never enters `reduce.py` at all),
