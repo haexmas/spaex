@@ -5,9 +5,10 @@ The only new caller of `invoke.py`'s single-call machinery. For each `Batch`
 sentinel/Shape A/Shape B contract unchanged - every batch concurrently, on
 its own thread (ADR 0023) - then combines the batches' composed output with
 one bounded merge step (a flat N-ary merge when the merge input fits the
-batching byte-size ceiling, otherwise a deterministic pairwise tree
-reduction) that re-checks for cross-batch contradictions before the final,
-header-bearing document is returned.
+merge byte-size ceiling - independent of the batching ceiling, see
+`BatchingLimits.merge_max_bytes` and research.md §3 - otherwise a
+deterministic pairwise tree reduction) that re-checks for cross-batch
+contradictions before the final, header-bearing document is returned.
 
 `compose()` is only entered for a fragment set spanning more than one batch;
 a single-batch build stays on `orchestrate.py`'s direct `invoke_composer`
@@ -330,11 +331,11 @@ def _reduce(
     limits: BatchingLimits,
 ) -> tuple[ClarificationsStore, str, InvokeOutcome]:
     """Bounded merge reduction (research.md §3): one flat N-ary merge when
-    the current node set fits the batching byte ceiling,
-    otherwise a deterministic pairwise tree level (adjacent nodes merged,
-    an odd node carried forward unchanged), repeated until one node
-    remains."""
-    merge_ceiling = limits.max_bytes
+    the current node set fits `limits.merge_max_bytes` (independent of the
+    batching ceiling), otherwise a deterministic pairwise tree level
+    (adjacent nodes merged, an odd node carried forward unchanged),
+    repeated until one node remains."""
+    merge_ceiling = limits.merge_max_bytes
     level = 0
     while len(nodes) > 1:
         relevant = _relevant_clarifications(cross_batch_clarifications, _scoped_ids(nodes))
