@@ -28,7 +28,7 @@ from spaex.behavior.fragment import BehaviorFragment
 from spaex.constitution.resolve import ResolvedMolecule
 from spaex.model.molecule_manifest import MoleculeManifest
 
-_MOLECULE_COUNT = 150  # exceeds the default 40KB byte ceiling -> multiple batches
+_MOLECULE_COUNT = 150  # exceeds the default 20KB byte ceiling -> multiple batches
 
 
 class MockTimeout(Exception):
