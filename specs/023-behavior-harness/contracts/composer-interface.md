@@ -4,20 +4,13 @@ Defines how spaex invokes the LLM Composer, what the Composer's canonical system
 
 > **Spec 026 extension**: for a fragment set spanning more than one batch, [`../../026-reliable-fragment-composition/contracts/batch-merge-composer-interface.md`](../../026-reliable-fragment-composition/contracts/batch-merge-composer-interface.md) adds batch calls and a bounded merge reduction on top of everything below, which remains true of every individual call. A fragment set that fits in one batch is unaffected and keeps following this document alone.
 
-## Invocation modes
+## Invocation mode
 
-Two paths, tried in the order documented in research.md §1 and §2:
+The 4.2.0 implementation uses a CLI shell-out to an installed agent runtime.
+Direct API invocation via litellm remains deferred, as recorded in
+`research.md` §1.
 
-### 1. Direct API via litellm
-
-spaex constructs a litellm request using:
-- Model id: `SPAEX_LLM_MODEL` if set, otherwise the runtime's canonical model.
-- System prompt: the canonical Composer prompt (see below).
-- User message: JSON-serialized composer input (see below).
-- Response format: text (Composer prompt requires strict Markdown output).
-- Timeout: `SPAEX_COMPOSER_TIMEOUT` seconds (default 300).
-
-### 2. CLI shell-out to installed agent runtime
+spaex invokes the CLI shell-out to an installed agent runtime:
 
 spaex invokes `claude` (or `codex`, `gemini`) as a subprocess with:
 - stdin: composer input as a single message.
