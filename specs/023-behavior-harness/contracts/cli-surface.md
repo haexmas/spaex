@@ -112,7 +112,7 @@ Existing commands. Extended per Clarification Q2:
 
 ## Environment variables
 
-- `SPAEX_LLM_MODEL`: override the auto-selected LLM model (litellm model id). Defaults to the runtime's canonical model.
+- `SPAEX_LLM_MODEL`: override the model the resolved CLI runtime uses, passed through as that runtime's own `--model`/`-m` flag (e.g. `sonnet`, `opus`, or a full model name — whatever the runtime itself accepts). Defaults to the runtime's own canonical/default model when unset. (Originally specified for a direct-API/litellm mode that 4.2.0's CLI-only pivot deferred; implemented 2026-09-17 for the CLI path after a real dogfood run got stuck on a runtime's own default model requiring separate usage credits.)
 - `SPAEX_COMPOSER_TIMEOUT`: composer timeout in seconds. Defaults to 300.
 - `SPAEX_COMPOSER_LOG`: path to write raw Composer output on invalid-output failures. Defaults to `.spaex/composer.log`.
 

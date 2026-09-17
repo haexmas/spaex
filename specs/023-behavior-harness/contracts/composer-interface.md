@@ -21,7 +21,7 @@ spaex constructs a litellm request using:
 
 spaex invokes `claude` (or `codex`, `gemini`) as a subprocess with:
 - stdin: composer input as a single message.
-- args: runtime-specific for a one-shot non-interactive session.
+- args: runtime-specific for a one-shot non-interactive session, plus `--model`/`-m` <`SPAEX_LLM_MODEL`> when that env var is set, otherwise the runtime's own default model.
 - stdout captured; parsed as if it were the direct-API response.
 
 Timeout applied via subprocess timeout.
