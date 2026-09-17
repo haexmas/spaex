@@ -47,17 +47,26 @@ DEFAULT_MAX_BATCH_BYTES = 20_000
 #: Serialized-size ceiling in bytes for a merge node's input (research.md
 #: §3), independent of `DEFAULT_MAX_BATCH_BYTES` - not the same number
 #: reused, and not a multiplier of it. Composed markdown was originally
-#: assumed to be far smaller than the raw fragments it summarizes, but
-#: 2026-09-16/17 real dogfooding disproved that twice: composed bodies
-#: carry real per-fragment overhead from LLM-authored prose and structure,
-#: so two batches' composed bodies together can exceed whatever ceiling
-#: the batching step happens to use, for reasons that have nothing to do
-#: with merge-call reliability specifically. No merge-specific timing/
-#: failure data exists yet, so this starts at the same magnitude
-#: `DEFAULT_MAX_BATCH_BYTES` used when it was still set from general
-#: single-Composer-call reliability data (18-21KB reliable, ~60KB fails
-#: ~80% of the time) - revisit once real merge-call data exists.
-DEFAULT_MERGE_MAX_BYTES = 40_000
+#: assumed to be far smaller than the raw fragments it summarizes, so a
+#: merge tree's root node - which represents every adopted fragment - was
+#: expected to stay small regardless of total project size. 2026-09-17
+#: real dogfooding disproved that: a merge call barely compresses its
+#: input (one real level-0 merge took 28770 raw input chars to 28254 raw
+#: output chars), so a pairwise-tree's root pair ends up needing to hold
+#: something close to the *entire* project's composed content in one call
+#: - which grows with total adopted content, not sub-linearly, no matter
+#: how the ceiling here is tuned. Retuning this value the way
+#: `DEFAULT_MAX_BATCH_BYTES` was tuned (a tight band around measured
+#: reliable/unreliable call sizes) would mean re-tuning it again every
+#: time a project's total content grows past whatever was measured last.
+#: This is instead a generous sanity backstop - like a project-wide total-
+#: size guard, not a per-call reliability tuning - against a genuinely
+#: pathological single fragment set (e.g. vendored or generated content
+#: accidentally adopted as a fragment); actual merge-call reliability at a
+#: given size is left to surface as its own typed failure (timeout,
+#: invalid-output) if and when it happens, rather than being pre-emptively
+#: guessed at here.
+DEFAULT_MERGE_MAX_BYTES = 1_000_000
 
 
 @dataclass(frozen=True)
