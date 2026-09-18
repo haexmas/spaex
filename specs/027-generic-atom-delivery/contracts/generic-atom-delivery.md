@@ -6,17 +6,18 @@ Observable behavior of `spaex install` / `spaex remove` for molecules that decla
 
 **Given** an adopted molecule declares one or more paths under an *exclusive* category (any key other than `behavior`, `skill`, `skills`, `nix_packages`):
 
-- Each declared path is written at that repo-root-relative location, content identical byte-for-byte to the molecule source.
+- Each declared path is written at that repo-root-relative location, content identical byte-for-byte to the molecule source, via an individually atomic write (temp file + rename — never a torn/partial file), and only *after* the destination's canonical path is confirmed to resolve inside the repo root through any symlinked ancestor (FR-010).
 - If the path is already occupied by a file install.lock does not currently record as spaex-owned, it is overwritten (FR-006; ADR 0026).
-- If another *currently adopted* molecule declares the same path under an exclusive category, the install is refused before any file is written for either molecule. This is new cross-molecule enforcement (a diagnostic in the same family as `atoms-category-overlap`, which today only catches one molecule's own manifest declaring a path twice) — there is no pre-existing cross-molecule check to extend, since `behavior` atoms never have their own destination path to collide on.
-- On success, `install.lock` records `{path, owning molecule id}` for each such file.
+- If another *currently adopted* molecule declares the same path under an exclusive category, the install is refused (diagnostic key `exclusive-atom-path-collision`, FR-003) before any file is written for either molecule. This is new cross-molecule enforcement — `atoms-category-overlap` only ever catches one molecule's own manifest declaring a path twice — there is no pre-existing cross-molecule check to extend, since `behavior` atoms never have their own destination path to collide on.
+- All exclusive-category root-file writes for a generation complete *before* that generation's `.spaex/` directory-swap transaction is staged and published (FR-011) — they are outside `.spaex/` and cannot participate in that swap. On success, `install.lock` records `{path, owning molecule id}` for each such file as part of that swap.
 
 **Given** one or more adopted molecules declare a `nix_packages` fragment:
 
 - `spaex install` reads every active molecule's fragment, composes them per research.md §2 (sorted, deduplicated union), and writes `.spaex/generated/nix-packages.json`.
 - Multiple molecules declaring `nix_packages` is not a conflict; none are refused on this account.
-- If any active molecule's fragment is not a JSON array of non-empty strings, the whole install is refused (FR-009) with a typed diagnostic naming that molecule id; no composed file is written, and no other molecule's contribution is silently composed without it.
-- On success, `install.lock` records `.spaex/generated/nix-packages.json` once, with every contributing molecule id listed as an owner of that path (the one case where a path has more than one owning molecule).
+- If any active molecule's fragment is not a *non-empty* JSON array of non-empty strings, the whole install is refused (FR-009, diagnostic key `nix-packages-fragment-invalid`) naming that molecule id; no composed file is written, and no other molecule's contribution is silently composed without it.
+- The written file's content is *only* the sorted, deduplicated JSON array of package identifiers (e.g. `["cargo", "python312", "rustc"]`) — no wrapping object, no `contributing_molecule_ids` field. That file lives inside `.spaex/generated/`, so it publishes through the existing `.spaex/` swap unchanged (FR-011), unlike exclusive-category root files.
+- On success, `install.lock` records `.spaex/generated/nix-packages.json` once, with every contributing molecule id listed as an owner of that path (the one case where a path has more than one owning molecule) — that ownership list lives in `install.lock` only, never in the generated file itself.
 
 **Idempotency** (both cases): re-running `spaex install` with no manifest or molecule-content change produces byte-identical files and an unchanged `install.lock` (generation id excepted).
 
@@ -24,7 +25,7 @@ Observable behavior of `spaex install` / `spaex remove` for molecules that decla
 
 **Given** the retracted molecule contributed exclusive-category files:
 
-- Every file install.lock attributes solely to that molecule is deleted, *unless* its on-disk content hash no longer matches what install.lock last recorded (FR-007) — in that case the file is left in place, a warning is emitted, and the path is dropped from install.lock's next-generation record for that molecule.
+- Every file install.lock attributes solely to that molecule is deleted individually, *before* the updated (smaller) `install.lock` generation is staged and published (FR-011) — so a deletion failure leaves the previous generation's `install.lock` still claiming that file, and a retry attempts deletion again. A file whose on-disk content hash no longer matches what install.lock last recorded is the one exception (FR-007): it is left in place, a warning is emitted, and the path is dropped from install.lock's next-generation record for that molecule regardless.
 
 **Given** the retracted molecule contributed a `nix_packages` fragment and at least one other adopted molecule still contributes one:
 

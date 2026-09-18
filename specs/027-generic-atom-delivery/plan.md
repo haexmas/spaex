@@ -5,7 +5,7 @@
 
 ## Summary
 
-Today `spaex install` only materializes files for the `behavior` atom category (into `.spaex/constitution.d/` + composed `.spaex/constitution.md`); every other declared `atoms` category is inert. This feature generalizes materialization to two new kinds: **exclusive** generic categories (any key besides `behavior`/`skill`/`skills`/`nix_packages`; single owner, verbatim delivery, refused on cross-molecule path collision, cleaned up on `spaex remove`) and one fixed **composable** category, `nix_packages` (multiple molecules each contribute a package-identifier fragment; `spaex install`/`spaex remove` merge the currently-active set deterministically into a generated file, regenerating rather than deleting it while other contributors remain). The reference/driving use case is a Nix devShell: a base molecule ships an exclusive `flake.nix`/`.envrc`/`.gitignore` skeleton, and per-language molecules (python, rust, ...) each contribute their toolchain via `nix_packages` instead of shipping competing `flake.nix` files. This required extending `install-lock.v4.schema.json`'s path pattern to admit bare repo-root filenames for the exclusive case (ADR 0026), since Nix/direnv/Git require those files at the literal repo root — the first time spaex's ownership tracking reaches outside a dot-directory.
+Today `spaex install` only materializes files for the `behavior` atom category (into `.spaex/constitution.d/` + composed `.spaex/constitution.md`); every other declared `atoms` category is inert. This feature generalizes materialization to two new kinds: **exclusive** generic categories (any key besides `behavior`/`skill`/`skills`/`nix_packages`; single owner, verbatim delivery, refused on cross-molecule path collision, cleaned up on `spaex remove`) and one fixed **composable** category, `nix_packages` (multiple molecules each contribute a package-identifier fragment; `spaex install`/`spaex remove` merge the currently-active set deterministically into a generated file, regenerating rather than deleting it while other contributors remain). The reference/driving use case is a Nix devShell: a base molecule ships an exclusive `flake.nix`/`.envrc`/`.gitignore` skeleton, and per-language molecules (python, rust, ...) each contribute their toolchain via `nix_packages` instead of shipping competing `flake.nix` files. This required extending `install-lock.v4.schema.json`'s path pattern to admit bare repo-root filenames for the exclusive case (ADR 0026), since Nix/direnv/Git require those files at the literal repo root — the first time spaex's ownership tracking reaches outside a dot-directory. Because the existing `.spaex/` directory-swap transaction (Spec 008) cannot cover files outside `.spaex/`, exclusive-category root files publish through a new, separate per-file-atomic, ordered-before-the-swap mechanism (research.md §6, FR-011) rather than participating in that transaction unchanged.
 
 ## Technical Context
 
@@ -16,7 +16,7 @@ Today `spaex install` only materializes files for the `behavior` atom category (
 **Target Platform**: Linux/macOS/WSL2 CLI tool (existing spaex target — no path in this feature may assume one OS's layout, per the `no-local-absolute-paths` constitution rule)
 **Project Type**: Single Python CLI project (existing `src/spaex` package + `tests/`)
 **Performance Goals**: N/A beyond existing `spaex install`/`spaex remove` responsiveness — composition here is in-process list/set operations on small inputs (package identifier lists), not a scaling concern like the `behavior` Composer's LLM calls
-**Constraints**: Must preserve existing install-transaction atomicity (Spec 008) and byte-reproducibility guarantees (FR-005) without modification to their mechanism — this feature's writes participate in the existing transaction, it does not introduce a second one
+**Constraints**: Must preserve existing install-transaction atomicity (Spec 008) and byte-reproducibility guarantees (FR-005) for everything already inside `.spaex/` (including the new `.spaex/generated/nix-packages.json`), without modifying `publish_generation`'s mechanism. Exclusive-category root files are structurally outside that mechanism's scope (it swaps exactly one directory) and instead use the per-file-atomic, publish-before-the-swap ordering defined in research.md §6/FR-011 — a real, additional mechanism, not a reuse of Spec 008's existing one
 **Scale/Scope**: Bounded by adopted-molecule count already in play elsewhere in this codebase (single digits to low tens); no new scale dimension
 
 ## Constitution Check
@@ -68,24 +68,39 @@ src/spaex/
 │                               # and for one path having multiple owning molecule ids
 │                               # (ComposedFile).
 ├── install/
-│   ├── generic_atoms.py        # NEW — materializes exclusive-category DeliveredFile entries
-│   │                           # (verbatim write, overwrite-unowned per FR-006, path-overlap
-│   │                           # refusal per FR-003), analogous to how behavior/materialize.py
-│   │                           # handles the `behavior` category today.
-│   └── nix_packages.py         # NEW — reads active PackageFragments, composes ComposedFile
-│                           # per research.md §2, writes/regenerates/deletes
-│                           # `.spaex/generated/nix-packages.json` per FR-006a/FR-006b.
+│   ├── generic_atoms.py        # NEW — materializes exclusive-category DeliveredFile entries:
+│   │                           # canonical-path containment check (FR-010), per-file atomic
+│   │                           # write via temp-file-plus-rename (FR-011, research.md §6),
+│   │                           # overwrite-unowned (FR-006), cross-molecule path-overlap
+│   │                           # refusal under the new `exclusive-atom-path-collision`
+│   │                           # diagnostic (FR-003). Does not reuse io/transaction.py — that
+│   │                           # module's swap is scoped to one `.spaex/`-style directory and
+│   │                           # cannot cover repo-root files (research.md §6).
+│   └── nix_packages.py         # NEW — reads active PackageFragments, rejects a non-empty
+│                           # array requirement violation under `nix-packages-fragment-invalid`
+│                           # (FR-009), composes the sorted/deduplicated `packages` array per
+│                           # research.md §2, writes/regenerates/deletes
+│                           # `.spaex/generated/nix-packages.json` (bare array on disk —
+│                           # `contributing_molecule_ids` is install.lock-only) per FR-006a/b.
 ├── cli/
-│   └── install.py             # Existing `run()` orchestration — call the two new
-│                               # materializers alongside the existing behavior pipeline;
-│                               # existing install-transaction wrapping (Spec 008) covers
-│                               # the new writes without modification.
+│   └── install.py             # Existing `run()` orchestration — call
+│                               # `generic_atoms.materialize_exclusive_atoms` (root-file writes)
+│                               # BEFORE staging/publishing the `.spaex/` swap that now also
+│                               # carries `nix_packages.py`'s generated file and the extended
+│                               # install.lock (FR-011 ordering) — the existing
+│                               # install-transaction wrapping (Spec 008) covers the
+│                               # `.spaex/`-scoped writes unchanged; it does not and cannot
+│                               # cover the root-file writes, which is why they must complete
+│                               # first (research.md §6).
 └── schema/data/
-    └── install-lock.v4.schema.json   # Extend `paths` pattern per research.md §5 (ADR 0026).
+    └── install-lock.v4.schema.json   # Extend `paths` pattern per research.md §5 (ADR 0026) —
+                                        # schema-level widening only, not category-scoped
+                                        # (data-model.md InstallLock extension).
 
 tests/
-├── contract/    # New: install-lock.v4 schema accepts bare-root filenames for exclusive
-│                # entries, still rejects them for behavior/skill/skills/nix_packages paths.
+├── contract/    # New: install-lock.v4 schema accepts bare-root filenames (any path entry,
+│                # since the schema cannot key off category — data-model.md), still rejects
+│                # path traversal/unsafe characters.
 ├── integration/ # New: adopt/install/remove for exclusive-category files (single molecule,
 │                # two-molecule collision-refused case) and for nix_packages (two
 │                # contributors, partial removal, last-contributor removal) — mirrors

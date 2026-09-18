@@ -55,6 +55,15 @@ consuming tools when placed at the root.
   uses this category should expect root-level file changes, the same way
   they already expect `.spaex/constitution.md` changes from `behavior`
   atoms.
+- `src/spaex/io/transaction.py`'s crash-safe publication (`publish_generation`,
+  Spec 008) is a rename-swap for exactly one `live` directory — it cannot be
+  extended to also cover files outside that directory. Widening the write
+  boundary to the repo root therefore also requires a second, separate
+  publication mechanism for root files (per-file atomic write, ordered to
+  complete before the `.spaex/` swap publishes; see research.md §6 and
+  spec.md FR-011) — not a reuse of Spec 008's existing guarantee under a new
+  name. This ADR's boundary widening and that mechanism are two parts of one
+  decision: there would be no reason to design one without the other.
 - FR-006's accepted overwrite behavior (a generic atom claiming a path
   already occupied by a file spaex does not own silently overwrites it)
   applies at the repo root, where pre-existing, individually-authored files
