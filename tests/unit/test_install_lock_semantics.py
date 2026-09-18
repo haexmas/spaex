@@ -71,11 +71,31 @@ def test_preserves_unknown_top_level_fields() -> None:
     assert serialized["future_field"] == data["future_field"]
 
 
-def test_rejects_path_without_leading_dot_segment() -> None:
-    """A path must start with a dot-segment root; there is no separate root list."""
+def test_accepts_bare_root_relative_filename() -> None:
+    """Spec 027: a bare filename (no leading dot-segment) is now a valid path shape.
+
+    Syntactic-only widening for exclusive generic-atom root files (e.g.
+    flake.nix, .envrc); the schema has no category field to key off, so
+    this is accepted regardless of which category actually produced it —
+    see data-model.md's InstallLock extension.
+    """
     molecules = [_molecule("com.example.molecule", paths=["README.md"])]
+    lock = InstallLock.from_json(_payload(molecules))
+    assert lock.molecules[0].paths == ("README.md",)
+
+
+def test_rejects_nested_path_without_leading_dot_segment() -> None:
+    """A nested non-dot path is still rejected — only a bare single-segment filename widened."""
+    molecules = [_molecule("com.example.molecule", paths=["src/README.md"])]
     with pytest.raises(InstallLockSchemaInvalidError):
         InstallLock.from_json(_payload(molecules))
+
+
+def test_rejects_dot_and_dotdot_as_bare_path() -> None:
+    """The bare-filename branch still excludes the literal `.` and `..` segments."""
+    for value in (".", ".."):
+        with pytest.raises(InstallLockSchemaInvalidError):
+            InstallLock.from_json(_payload([_molecule("com.example.molecule", paths=[value])]))
 
 
 def test_allows_empty_paths() -> None:

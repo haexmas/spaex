@@ -7,6 +7,7 @@ A molecule's `atoms` map (existing v4 schema) already permits any category key. 
 | Category key | Kind | Materialization |
 |---|---|---|
 | `behavior` | *(existing, unchanged)* | Constitution-fragment pipeline (Spec 023/026), untouched by this feature. |
+| `constitution` | *(existing, unchanged)* | The pre-Spec-023 legacy category: file(s) joined verbatim into `.spaex/constitution.md` by `spaex.constitution.resolve`/`publish`'s own, separate publication path. Not a Spec 027 generic atom, despite superficially having "just a category key and declared paths" — untouched by this feature. |
 | `skill`, `skills` | *(existing, reserved)* | Rejected by schema per the `not: {enum: [...]}` constraint already in place; untouched. |
 | `nix_packages` | **Composable** *(new)* | Every adopted molecule's package-identifier list is merged into one generated file (see ComposedFile below). |
 | anything else | **Exclusive** *(new, generalized)* | Each declared path is materialized verbatim, one owning molecule per path. |

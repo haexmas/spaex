@@ -101,6 +101,46 @@ class MoleculeAtomsCategoryOverlapError(HaexError):
 
 
 @dataclass
+class ExclusiveAtomPathCollisionError(HaexError):
+    """Spec 027 FR-003: two adopted molecules claim the same exclusive-category path.
+
+    New cross-molecule enforcement, distinct from `atoms-category-overlap`
+    (which only ever caught one molecule's own manifest declaring a path
+    twice — `behavior` atoms never had their own destination path to
+    collide on before this feature).
+    """
+
+    diagnostic_key: str = "exclusive-atom-path-collision"
+    exit_code: int = exit_codes.VALIDATION_REFUSE
+    hint: str = (
+        "Only one adopted molecule may declare a given path under an exclusive atom category."
+    )
+
+
+@dataclass
+class ExclusiveAtomPathEscapesRepoError(HaexError):
+    """Spec 027 FR-010: an exclusive-category destination resolves outside the repo root."""
+
+    diagnostic_key: str = "exclusive-atom-path-escapes-repo"
+    exit_code: int = exit_codes.VALIDATION_REFUSE
+    hint: str = (
+        "Remove the symlinked ancestor directory redirecting this path outside the repository."
+    )
+
+
+@dataclass
+class NixPackagesFragmentInvalidError(HaexError):
+    """Spec 027 FR-009: a `nix_packages` fragment is not a non-empty array of non-empty strings."""
+
+    diagnostic_key: str = "nix-packages-fragment-invalid"
+    exit_code: int = exit_codes.VALIDATION_REFUSE
+    hint: str = (
+        "Declare nix_packages as a non-empty JSON array of non-empty "
+        "package-identifier strings."
+    )
+
+
+@dataclass
 class VersionBelowMinError(HaexError):
     diagnostic_key: str = "spaex-version-below-min"
     exit_code: int = exit_codes.SYSTEM_REFUSE

@@ -46,14 +46,13 @@ def _molecule_manifest(
 ) -> dict:
     """Build a molecule manifest with an install_hook and optional constitution.
 
-    The schema requires ``atoms`` with at least one category; hook-only
-    molecules satisfy that with a non-constitution category (``agents``
-    pointing at the hook script itself). Only ``atoms.constitution``
-    contributes to the assembled constitution; other categories are
-    inert at install time (their consumer-side wiring is out of scope
-    for Spec 016).
+    A molecule declaring ``install_hook`` may use an empty ``atoms`` map
+    (schema v4's ``allOf``: an empty ``atoms`` is valid once ``speckit``,
+    ``external_skills``, or ``install_hook`` is present) — hook-only
+    molecules use that here rather than a placeholder category. Only
+    ``atoms.constitution`` contributes to the assembled constitution.
     """
-    atoms: dict[str, list[str]] = {"agents": ["install.py"]}
+    atoms: dict[str, list[str]] = {}
     if include_constitution:
         atoms["constitution"] = ["constitution.md"]
     manifest = {

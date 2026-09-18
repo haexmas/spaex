@@ -35,6 +35,7 @@ from spaex.constitution.resolve import (
     resolve_install_inputs,
 )
 from spaex.install import inflight
+from spaex.install.generic_atoms import DeliveredFile, collect_exclusive_atoms
 from spaex.install.hook_runner import HookOutcomeKind, run_install_hook
 from spaex.install.lock import OwnerToken
 from spaex.install.manifest_lock import (
@@ -42,6 +43,12 @@ from spaex.install.manifest_lock import (
     ManifestLockContext,
     active_manifest_lock_path,
 )
+from spaex.install.nix_packages import (
+    GENERATED_PACKAGES_PATH,
+    ComposedFile,
+    collect_package_fragments,
+)
+from spaex.install.nix_packages import compose as compose_nix_packages
 from spaex.integrations.speckit import emit_results, prepare_install
 from spaex.io import transaction
 from spaex.io.state import default_state_root, transaction_paths
@@ -242,6 +249,16 @@ def run(
                 repo_root, getattr(manifest, "local_fragments", ())
             )
             contributions, resolved = resolve_install_inputs(manifest, state_root)
+            delivered_files = collect_exclusive_atoms(resolved)
+            composed_packages = compose_nix_packages(collect_package_fragments(resolved))
+            extra_spaex_files = (
+                (transaction.StagedFile(
+                    GENERATED_PACKAGES_PATH.removeprefix(f"{transaction.SPAEX_DIR}/"),
+                    composed_packages.to_json_bytes(),
+                ),)
+                if composed_packages is not None
+                else ()
+            )
             preserved_behavior_files = (
                 _preserved_behavior_files(repo_root)
                 if project_local or _has_behavior_fragments(resolved)
@@ -279,6 +296,12 @@ def run(
                     contributing_ids=contributing_ids,
                     hook_status=hook_status,
                     speckit_records=speckit_records,
+                )
+                hook_only_records = _augment_records_with_generic_atoms(
+                    hook_only_records,
+                    resolved=resolved,
+                    delivered_files=delivered_files,
+                    composed_packages=composed_packages,
                 )
                 # FR-025: publish only when the complete post-hook state
                 # (empty constitution + molecule map with hook_status)
@@ -318,6 +341,8 @@ def run(
                             hook_only_records=tuple(hook_only_records),
                             speckit_records=speckit_records.publication_records,
                             preserved_files=preserved_files,
+                            extra_spaex_files=extra_spaex_files,
+                            delivered_files=delivered_files,
                         )
                     else:
                         publish_constitution(
@@ -326,6 +351,8 @@ def run(
                             state_root=state_root,
                             hook_only_records=tuple(hook_only_records),
                             preserved_files=preserved_files,
+                            extra_spaex_files=extra_spaex_files,
+                            delivered_files=delivered_files,
                         )
                     new_generation_id = _live_generation_id(repo_root)
                     if hook_only_records:
@@ -427,6 +454,13 @@ def run(
                 hook_status=hook_status,
                 speckit_records=speckit_records,
             )
+            hook_only_records = _augment_records_with_generic_atoms(
+                hook_only_records,
+                resolved=resolved,
+                delivered_files=delivered_files,
+                composed_packages=composed_packages,
+                exclude_ids=frozenset(contributing_ids),
+            )
             # FR-025: no-op iff the complete post-hook state (atom bytes
             # AND every molecule's hook_status, contributor + hook-only)
             # matches disk. A hook_status delta with unchanged atom bytes
@@ -471,6 +505,8 @@ def run(
                         hook_only_records=tuple(hook_only_records),
                         speckit_records=speckit_records.publication_records,
                         preserved_files=preserved_files,
+                        extra_spaex_files=extra_spaex_files,
+                        delivered_files=delivered_files,
                     )
                 else:
                     publish_constitution(
@@ -480,6 +516,8 @@ def run(
                         hook_status=hook_status.get(contribution.source.id),
                         hook_only_records=tuple(hook_only_records),
                         preserved_files=preserved_files,
+                        extra_spaex_files=extra_spaex_files,
+                        delivered_files=delivered_files,
                     )
                 new_generation_id = _live_generation_id(repo_root)
                 sys.stdout.write(f"installed generation {new_generation_id}\n")
@@ -898,3 +936,76 @@ def _hook_only_records(
             )
         )
     return records
+
+
+def _augment_records_with_generic_atoms(
+    records: Sequence[MoleculeEntry],
+    *,
+    resolved: Sequence[ResolvedMolecule],
+    delivered_files: Sequence[DeliveredFile],
+    composed_packages: ComposedFile | None,
+    exclude_ids: frozenset[str] = frozenset(),
+) -> list[MoleculeEntry]:
+    """Fold Spec 027 exclusive/composable generic-atom paths into install.lock.
+
+    Extends whatever record ``_hook_only_records`` already built for each
+    molecule with its exclusive-category paths, plus the shared
+    composed-packages path for every one of its contributing molecules.
+    Creates a fresh record for a molecule that contributes *only* generic
+    atoms and therefore has no existing entry (no behavior fragments, no
+    install_hook, no Spec Kit selection) — without this, such a molecule's
+    delivered files would have nowhere to be recorded.
+
+    ``exclude_ids`` (the legacy ``atoms.constitution`` contributor, built
+    and appended separately by the caller) is never folded in nor given a
+    fresh entry here, even if it also happens to declare a generic atom —
+    avoiding a duplicate ``molecules[]`` entry for the same id. A
+    contributor molecule additionally using a Spec 027 category is a narrow,
+    accepted gap: its generic-atom files still publish, only its own
+    install.lock entry omits those paths.
+    """
+    paths_by_molecule: dict[str, list[str]] = {}
+    for file in delivered_files:
+        if file.owning_molecule_id in exclude_ids:
+            continue
+        paths_by_molecule.setdefault(file.owning_molecule_id, []).append(file.path)
+    composed_owner_ids = (
+        set(composed_packages.contributing_molecule_ids) - exclude_ids
+        if composed_packages is not None
+        else set()
+    )
+
+    result: list[MoleculeEntry] = []
+    seen: set[str] = set()
+    for record in records:
+        extra = tuple(paths_by_molecule.get(record.id, ()))
+        if record.id in composed_owner_ids:
+            extra = (*extra, GENERATED_PACKAGES_PATH)
+        if extra:
+            record = MoleculeEntry(
+                id=record.id,
+                source=record.source,
+                revision=record.revision,
+                paths=tuple(sorted(set(record.paths) | set(extra))),
+                hook_status=record.hook_status,
+                speckit=record.speckit,
+            )
+        result.append(record)
+        seen.add(record.id)
+
+    remaining_ids = (set(paths_by_molecule) | composed_owner_ids) - seen
+    resolved_by_id = {rm.molecule_id: rm for rm in resolved}
+    for molecule_id in sorted(remaining_ids):
+        extra = tuple(paths_by_molecule.get(molecule_id, ()))
+        if molecule_id in composed_owner_ids:
+            extra = (*extra, GENERATED_PACKAGES_PATH)
+        rm = resolved_by_id[molecule_id]
+        result.append(
+            MoleculeEntry(
+                id=molecule_id,
+                source=rm.source_url,
+                revision=rm.revision,
+                paths=tuple(sorted(extra)),
+            )
+        )
+    return result

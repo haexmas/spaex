@@ -69,13 +69,16 @@ def test_survivor_files_untouched_when_one_of_many_retracted(
             _SKILL_ID: {
                 "path": "skill",
                 "version": "1.0.0",
-                # A skills-only molecule contributes nothing under the tracked
-                # roots — install writes an install.lock entry for it but with
-                # no `paths[]` — so the manifest can drop it without any
-                # orphan-deletion work. This still exercises the retraction
-                # path end-to-end while keeping the surviving constitution
-                # untouched.
-                    "atoms": {"instructions": ["skill.md"]},
+                # Spec 027: any non-reserved category (e.g. "instructions")
+                # is now an exclusive generic atom, delivered to
+                # `skill.md` at the repo root — real content, real
+                # cleanup on retraction. The *separate*, synthetic
+                # `.codex/retracted-skill.md` entry injected below (under
+                # its own unrelated id, not this molecule's) models a
+                # stale path from an unrelated prior generation, so
+                # orphan-cleanup's coverage isn't limited to paths the
+                # current resolver would naturally produce.
+                "atoms": {"instructions": ["skill.md"]},
             },
         },
     )
@@ -95,19 +98,29 @@ def test_survivor_files_untouched_when_one_of_many_retracted(
         m.paths for m in lock_before.molecules if m.id == _CONST_ID
     )
     assert const_paths, "constitution molecule must record its published paths"
+    skill_paths = tuple(m.paths for m in lock_before.molecules if m.id == _SKILL_ID)
+    assert skill_paths == (("skill.md",),), "exclusive atom must be recorded and delivered"
+    assert (consumer / "skill.md").exists()
 
-    # Seed a recorded path for the non-constitution molecule to model a
-    # previously installed contribution. Current v3 resolution filters that
-    # category, but removal must still discard every path in the prior lock.
+    # Seed a path under a wholly separate, never-adopted id to model a stale
+    # leftover from an unrelated prior generation — orphan-cleanup's coverage
+    # isn't limited to paths the current resolver would naturally produce for
+    # a currently-adopted molecule (data-model.md: it diffs the full
+    # previous-vs-current path set, not per retracted molecule).
+    _ORPHAN_ID = "com.example.publisher.legacy-orphan"
     lock_data = json.loads((consumer / ".spaex" / "install.lock").read_text())
     retracted_path = ".codex/retracted-skill.md"
     lock_data["molecules"].append(
         {
-            "id": _SKILL_ID,
+            "id": _ORPHAN_ID,
             "source": canonical,
             "revision": head,
             "paths": [retracted_path],
         }
+    )
+    # install.lock requires canonical (id, source, revision, paths) order.
+    lock_data["molecules"].sort(
+        key=lambda m: (m["id"], m["source"], m["revision"], tuple(m["paths"]))
     )
     (consumer / ".spaex" / "install.lock").write_text(json.dumps(lock_data))
     (consumer / retracted_path).parent.mkdir(parents=True, exist_ok=True)
@@ -115,7 +128,7 @@ def test_survivor_files_untouched_when_one_of_many_retracted(
     lock_before = InstallLock.from_json(
         (consumer / ".spaex" / "install.lock").read_bytes()
     )
-    retracted_entries = tuple(m for m in lock_before.molecules if m.id == _SKILL_ID)
+    retracted_entries = tuple(m for m in lock_before.molecules if m.id == _ORPHAN_ID)
     assert retracted_entries and retracted_entries[0].paths == (retracted_path,)
 
     rc = haex_add_helpers["run_remove"](
@@ -129,6 +142,10 @@ def test_survivor_files_untouched_when_one_of_many_retracted(
     surviving_ids = {m.id for m in lock_after.molecules}
     assert _CONST_ID in surviving_ids
     assert _SKILL_ID not in surviving_ids
+    assert _ORPHAN_ID not in surviving_ids
+    assert not (consumer / "skill.md").exists(), (
+        "retracted molecule's own exclusive atom should be gone"
+    )
     for entry in retracted_entries:
         for rel in entry.paths:
             assert not (consumer / rel).exists(), f"orphan {rel} was not deleted"

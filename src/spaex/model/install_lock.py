@@ -16,6 +16,14 @@ or was only ever relevant to the retired multi-source LLM merge
 The still-present `unknown_top_level` bag preserves *actually* unknown
 fields (anything the schema doesn't yet describe) across a read/write
 round-trip, so a future v4 field can survive a v3 reader.
+
+Spec 027 adds one new known top-level field, `content_hashes` (path ->
+`sha256:<hex>`), used only to detect operator modification of an
+exclusive generic-atom root file since spaex last wrote it (FR-007). It
+does not change `molecules[].paths`' meaning: a path under a leading
+dot-segment still names its participating root; a bare filename (no
+leading dot-segment, Spec 027) has no such root and lives at the literal
+repository root instead.
 """
 
 from __future__ import annotations
@@ -34,7 +42,9 @@ from spaex.util.errors import InstallLockSchemaInvalidError
 HookStatus = Literal["ok", "failed", "skipped"]
 SpeckitOutcomeStatus = Literal["installed", "already_satisfied", "skipped"]
 
-_KNOWN_TOP_LEVEL_FIELDS = frozenset({"spaex_version", "generation_id", "molecules"})
+_KNOWN_TOP_LEVEL_FIELDS = frozenset(
+    {"spaex_version", "generation_id", "molecules", "content_hashes"}
+)
 
 # Retired by the 2026-09-03 npm/pip-shape amendment (Spec 008). Enumerated
 # explicitly so a lock carrying any of them refuses at the runtime read gate,
@@ -120,10 +130,14 @@ class InstallLock:
     spaex_version: str
     generation_id: str
     molecules: tuple[MoleculeEntry, ...]
+    content_hashes: Mapping[str, str] = field(default_factory=dict)
     unknown_top_level: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "molecules", tuple(self.molecules))
+        object.__setattr__(
+            self, "content_hashes", freeze_json(dict(self.content_hashes))
+        )
         object.__setattr__(
             self,
             "unknown_top_level",
@@ -194,6 +208,7 @@ class InstallLock:
             spaex_version=data["spaex_version"],
             generation_id=data["generation_id"],
             molecules=molecules,
+            content_hashes=data.get("content_hashes", {}),
             unknown_top_level=unknown,
         )
 
@@ -204,6 +219,8 @@ class InstallLock:
             "generation_id": self.generation_id,
             "molecules": [_serialize_molecule(m) for m in self.molecules],
         }
+        if self.content_hashes:
+            obj["content_hashes"] = dict(thaw_json(self.content_hashes))
         for k, v in self.unknown_top_level.items():
             obj.setdefault(k, thaw_json(v))
         return json_deterministic.dumps(obj)

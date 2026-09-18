@@ -26,6 +26,7 @@ records are published alongside the lock.
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from pathlib import Path
@@ -37,6 +38,7 @@ from spaex.constitution.safety import (
     validate_no_plaintext_secrets,
 )
 from spaex.install.generation import allocate_generation_id
+from spaex.install.generic_atoms import DeliveredFile, content_hash, write_delivered_files
 from spaex.io import atomic, transaction
 from spaex.model.install_lock import (
     HookStatus,
@@ -60,6 +62,13 @@ def _delete_orphaned_paths(
     later unlink fails, earlier deletions are restored before the exception
     reaches ``publish_generation``, which then rolls the generation back too.
     Symlinked targets and paths resolving outside ``repo_root`` are ignored.
+
+    Spec 027 FR-007: a path `previous_lock.content_hashes` recorded is
+    skipped (with a WARN on stderr) instead of deleted when its on-disk
+    content no longer matches that recorded hash — an operator modification
+    since install. A path absent from `content_hashes` (every pre-Spec-027
+    orphaned path; e.g. a stale `behavior`-molecule leftover) is deleted
+    unconditionally, exactly as before this feature.
     """
     if previous_lock is None:
         return
@@ -80,6 +89,14 @@ def _delete_orphaned_paths(
             try:
                 resolved_target.relative_to(resolved_root)
             except ValueError:
+                continue
+            recorded_hash = previous_lock.content_hashes.get(path)
+            if recorded_hash is not None and content_hash(target.read_bytes()) != recorded_hash:
+                sys.stderr.write(
+                    f"WARN: {path} was modified since spaex last wrote it; "
+                    "leaving it in place\n"
+                )
+                sys.stderr.flush()
                 continue
             mode = S_IMODE(target.stat().st_mode)
             deleted.append((target, target.read_bytes(), mode))
@@ -115,6 +132,8 @@ def _publish_constitution(
     *,
     state_root: Path | None = None,
     preserved_files: Sequence[transaction.StagedFile] = (),
+    extra_spaex_files: Sequence[transaction.StagedFile] = (),
+    delivered_files: Sequence[DeliveredFile] = (),
 ) -> None:
     """Publish the effective constitution and install.lock atomically.
 
@@ -141,6 +160,19 @@ def _publish_constitution(
 
     ``preserved_files`` contains source files inside the live `.spaex` tree
     that must survive the full-directory rename-swap.
+
+    Spec 027: ``extra_spaex_files`` stages additional ``.spaex/``-relative
+    content computed fresh this generation (the composable category's
+    ``.spaex/generated/nix-packages.json``) — published by the same
+    directory swap as ``constitution.md``/``install.lock``, no separate
+    mechanism needed. ``delivered_files`` are exclusive-category root files
+    (outside ``.spaex/``); FR-011 requires they publish through a *separate*
+    mechanism, since the directory swap only ever publishes one directory
+    and these files live outside it — writing happens inside
+    ``post_write_verify``, below, *after* the swap: a write failure there
+    rolls the whole generation back via ``publish_generation``'s existing
+    swap-rollback path (research.md §6), which is a stronger guarantee than
+    merely ordering the writes before the swap.
     """
     existing_lock = _read_existing_lock(repo_root)
     unknown_top_level = (
@@ -158,10 +190,17 @@ def _publish_constitution(
             key=lambda m: (m.id, m.source, m.revision, m.paths),
         )
     )
+    # Pure function of content already in memory (DeliveredFile.content) —
+    # does not require the files to be written first, so it can be staged
+    # in install.lock before write_delivered_files runs post-swap.
+    content_hashes = {
+        file.path: content_hash(file.content) for file in delivered_files
+    }
     lock = InstallLock(
         spaex_version="4",
         generation_id=generation_id,
         molecules=molecules_tuple,
+        content_hashes=content_hashes,
         unknown_top_level=unknown_top_level,
     )
     lock_bytes = lock.to_json_bytes()
@@ -183,9 +222,11 @@ def _publish_constitution(
             raise PostWriteValidationError(
                 message="published install.lock does not match the assembled generation",
             )
+        if delivered_files:
+            write_delivered_files(delivered_files, repo_root=repo_root)
         _delete_orphaned_paths(repo_root, existing_lock, lock)
 
-    staged_files: list[transaction.StagedFile] = list(preserved_files)
+    staged_files: list[transaction.StagedFile] = [*preserved_files, *extra_spaex_files]
     if body is not None:
         staged_files.append(transaction.StagedFile(transaction.CONSTITUTION_NAME, body))
     staged_files.append(transaction.StagedFile(transaction.INSTALL_LOCK_NAME, lock_bytes))
@@ -209,6 +250,8 @@ def publish_constitution(
     hook_only_records: Sequence[MoleculeEntry] = (),
     speckit_records: Mapping[str, SpeckitLockRecord] | None = None,
     preserved_files: Sequence[transaction.StagedFile] = (),
+    extra_spaex_files: Sequence[transaction.StagedFile] = (),
+    delivered_files: Sequence[DeliveredFile] = (),
 ) -> None:
     """Join all declared constitution files from one molecule and publish.
 
@@ -234,7 +277,9 @@ def publish_constitution(
     molecules array alongside the constitution contributor's record.
 
     ``preserved_files`` carries configured project-local source files through
-    the full-directory rename-swap.
+    the full-directory rename-swap. ``extra_spaex_files``/``delivered_files``
+    are Spec 027's composable/exclusive generic-atom outputs — see
+    ``_publish_constitution``.
     """
     if not contributions:
         _publish_constitution(
@@ -243,6 +288,8 @@ def publish_constitution(
             repo_root,
             state_root=state_root,
             preserved_files=preserved_files,
+            extra_spaex_files=extra_spaex_files,
+            delivered_files=delivered_files,
         )
         return
 
@@ -274,6 +321,8 @@ def publish_constitution(
         repo_root,
         state_root=state_root,
         preserved_files=preserved_files,
+        extra_spaex_files=extra_spaex_files,
+        delivered_files=delivered_files,
     )
 
 
