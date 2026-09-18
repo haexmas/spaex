@@ -23,6 +23,46 @@ The v4 molecule-manifest schema treats `atoms{}` as an open `Dict[str, List[str]
 
 **Environment-config files** (`flake.nix`, `Dockerfile`, `devcontainer.json`, `.envrc`, `shell.nix`, etc.) can be declared under any category name a publisher chooses. The retired `skill` and `skills` categories are the one exception: a skill may still live in the publisher repository, but is declared as an `external_skills` reference and installed by the molecule's `install_hook`. Spec 014 makes no other naming commitment here; multi-environment vocabulary (dev/staging/prod), consumer-side selection, and orchestration verbs are the scope of Spec 015 (planned; see [docs/plans/2026-09-07-slot-015-multi-environment-placeholder.md](docs/plans/2026-09-07-slot-015-multi-environment-placeholder.md)).
 
+### Activating an adopted Nix devShell
+
+A molecule that delivers `flake.nix`/`.envrc` under an environment-config
+category (e.g. `com.github.haexmas.atoms.nix-devshell-base`) only writes
+those files; it does not — and should not — provision Nix or direnv
+themselves, since that needs interactive root access spaex should not
+attempt unattended. Three preconditions are easy to miss on a fresh
+machine after `spaex install`:
+
+1. **Flakes must be enabled.** A default Nix install has `nix-command`
+   and `flakes` behind the `experimental-features` flag — without it,
+   `nix develop`/direnv's `use flake` fail with `experimental Nix
+   feature 'nix-command' is disabled`. Enable it per-user, no root
+   needed:
+
+   ```bash
+   mkdir -p ~/.config/nix
+   echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
+   ```
+
+2. **direnv itself must be installed** (Nix does not bring it in):
+   `sudo pacman -S direnv`, `sudo apt install direnv`,
+   `brew install direnv`, or `nix profile install nixpkgs#direnv`.
+
+3. **direnv must be hooked into your shell**, then open a new shell:
+
+   ```bash
+   # bash (~/.bashrc) / zsh (~/.zshrc)
+   eval "$(direnv hook bash)"   # or: zsh
+
+   # fish (~/.config/fish/config.fish)
+   direnv hook fish | source
+   ```
+
+With all three in place, `cd` into the consumer repo and run
+`direnv allow` once; direnv builds the devShell and loads its tools into
+`PATH` automatically on every subsequent `cd`. Without direnv,
+`nix develop` (with flakes enabled per step 1) drops into an equivalent
+shell manually.
+
 ## Install
 
 **Once published to PyPI (upcoming with the `v5.0.0` tag):**
