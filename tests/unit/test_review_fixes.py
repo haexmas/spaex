@@ -183,6 +183,7 @@ def test_install_runs_hook_only_alongside_constitution_molecule(
         preserved_files=(),
         extra_spaex_files=(),
         delivered_files=(),
+        contributor_extra_paths=(),
     ):
         """Capture hook-only records forwarded to constitution publication."""
         captured_hook_only.append(tuple(hook_only_records))
@@ -194,6 +195,7 @@ def test_install_runs_hook_only_alongside_constitution_molecule(
             preserved_files,
             extra_spaex_files,
             delivered_files,
+            contributor_extra_paths,
         )
 
     monkeypatch.setattr(install_cli, "default_state_root", lambda: tmp_path / "state")

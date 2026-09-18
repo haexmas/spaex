@@ -38,7 +38,13 @@ from spaex.constitution.safety import (
     validate_no_plaintext_secrets,
 )
 from spaex.install.generation import allocate_generation_id
-from spaex.install.generic_atoms import DeliveredFile, content_hash, write_delivered_files
+from spaex.install.generic_atoms import (
+    DeliveredFile,
+    content_hash,
+    restore_delivered_targets,
+    snapshot_delivered_targets,
+    write_delivered_files,
+)
 from spaex.io import atomic, transaction
 from spaex.model.install_lock import (
     HookStatus,
@@ -222,9 +228,22 @@ def _publish_constitution(
             raise PostWriteValidationError(
                 message="published install.lock does not match the assembled generation",
             )
-        if delivered_files:
+        if not delivered_files:
+            _delete_orphaned_paths(repo_root, existing_lock, lock)
+            return
+        # `transaction.publish_generation`'s swap-rollback only covers
+        # `.spaex/` itself (ADR 0026) — these root-level targets live
+        # outside it. Snapshot them before writing so a failure here, or in
+        # the orphan cleanup that follows, can restore every target this
+        # call touched instead of leaving a mix of files from two
+        # generations on disk (research.md §6).
+        snapshot = snapshot_delivered_targets(delivered_files, repo_root=repo_root)
+        try:
             write_delivered_files(delivered_files, repo_root=repo_root)
-        _delete_orphaned_paths(repo_root, existing_lock, lock)
+            _delete_orphaned_paths(repo_root, existing_lock, lock)
+        except (OSError, HaexError):
+            restore_delivered_targets(snapshot)
+            raise
 
     staged_files: list[transaction.StagedFile] = [*preserved_files, *extra_spaex_files]
     if body is not None:
@@ -252,14 +271,15 @@ def publish_constitution(
     preserved_files: Sequence[transaction.StagedFile] = (),
     extra_spaex_files: Sequence[transaction.StagedFile] = (),
     delivered_files: Sequence[DeliveredFile] = (),
+    contributor_extra_paths: Sequence[str] = (),
 ) -> None:
     """Join all declared constitution files from one molecule and publish.
 
     The v3 ``atoms.constitution`` list may hold one file or several; when
     several, the tool concatenates them in the resolver's declared order
     (newline-separated) into the single effective constitution. The lock
-    records that molecule once, with ``.spaex/constitution.md`` as
-    its sole contributed path.
+    records that molecule once, with ``.spaex/constitution.md`` plus any
+    ``contributor_extra_paths`` as its contributed paths.
 
     When ``contributions`` is empty the empty-constitution state is
     published: ``install.lock`` with the non-classic molecule records (if
@@ -279,7 +299,14 @@ def publish_constitution(
     ``preserved_files`` carries configured project-local source files through
     the full-directory rename-swap. ``extra_spaex_files``/``delivered_files``
     are Spec 027's composable/exclusive generic-atom outputs — see
-    ``_publish_constitution``.
+    ``_publish_constitution``. ``contributor_extra_paths`` records the
+    generic-atom paths (exclusive and/or the shared composed-packages path)
+    that the *same* molecule contributing the classic constitution also
+    owns this generation: without this, a molecule declaring both
+    ``atoms.constitution`` and a Spec 027 category would have those extra
+    paths written to disk but never recorded against its own
+    ``install.lock`` entry, leaving them un-attributable to any molecule and
+    therefore never cleaned up by ``_delete_orphaned_paths`` on retraction.
     """
     if not contributions:
         _publish_constitution(
@@ -311,7 +338,7 @@ def publish_constitution(
         id=source.id,
         source=source.source,
         revision=source.revision,
-        paths=(CONSTITUTION_PATH,),
+        paths=tuple(sorted({CONSTITUTION_PATH, *contributor_extra_paths})),
         hook_status=hook_status,
         speckit=(speckit_records or {}).get(source.id),
     )

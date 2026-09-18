@@ -129,6 +129,28 @@ class ExclusiveAtomPathEscapesRepoError(HaexError):
 
 
 @dataclass
+class ExclusiveAtomPathUnsupportedShapeError(HaexError):
+    """An exclusive-category path cannot round-trip through install.lock's schema.
+
+    `install-lock.v4.schema.json`'s `paths` items only accept a bare
+    single-segment filename or a path whose first segment starts with a
+    literal dot; a molecule manifest's own `RepoRelativePath` validation is
+    looser (it merely forbids absolute paths, backslashes, and `.`/`..`
+    segments), so a nested path without a leading dot-segment (e.g.
+    `config/tool.toml`) would pass manifest parsing yet fail the very next
+    `install.lock` read.
+    """
+
+    diagnostic_key: str = "exclusive-atom-path-unsupported-shape"
+    exit_code: int = exit_codes.VALIDATION_REFUSE
+    hint: str = (
+        "Declare the exclusive atom's path as a bare root-level filename "
+        "(e.g. flake.nix) or nested under a leading dot-segment (e.g. "
+        ".codex/foo.md)."
+    )
+
+
+@dataclass
 class NixPackagesFragmentInvalidError(HaexError):
     """Spec 027 FR-009: a `nix_packages` fragment is not a non-empty array of non-empty strings."""
 
