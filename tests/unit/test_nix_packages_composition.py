@@ -6,10 +6,12 @@ from spaex.install.nix_packages import PackageFragment, compose
 
 
 def test_compose_returns_none_for_no_fragments() -> None:
+    """Omit the generated file when no molecule contributes packages."""
     assert compose(()) is None
 
 
 def test_compose_sorts_and_deduplicates_across_molecules() -> None:
+    """Merge package and contributor identities in deterministic order."""
     fragments = (
         PackageFragment(molecule_id="com.example.rust", packages=("rustc", "cargo")),
         PackageFragment(molecule_id="com.example.python", packages=("python312",)),
@@ -21,6 +23,7 @@ def test_compose_sorts_and_deduplicates_across_molecules() -> None:
 
 
 def test_compose_deduplicates_exact_duplicate_across_molecules() -> None:
+    """Retain all owners while emitting a shared package only once."""
     fragments = (
         PackageFragment(molecule_id="com.example.a", packages=("shared-tool",)),
         PackageFragment(molecule_id="com.example.b", packages=("shared-tool",)),
@@ -40,6 +43,7 @@ def test_compose_result_independent_of_fragment_order() -> None:
 
 
 def test_composed_file_serializes_as_bare_array() -> None:
+    """Serialize only the package array expected by Nix consumers."""
     composed = compose((PackageFragment(molecule_id="com.example.a", packages=("one", "two")),))
     assert composed is not None
     import json

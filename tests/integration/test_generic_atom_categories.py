@@ -21,6 +21,7 @@ from spaex.util.errors import HaexError
 
 
 def _local_git(cwd: Path, *args: str) -> str:
+    """Run Git in a fixture repository and return its trimmed output."""
     proc = subprocess.run(
         ["git", "-C", str(cwd), *args], capture_output=True, text=True, check=True
     )
@@ -90,6 +91,7 @@ _RUST_ID = "com.example.publisher.rust"
 
 
 def _base_and_language_publisher(tmp_path: Path, clone_dir):
+    """Create a publisher with one exclusive and two composable contributors."""
     return _make_publisher_with_files(
         tmp_path,
         clone_dir=clone_dir,

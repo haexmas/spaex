@@ -86,6 +86,7 @@ def collect_package_fragments(
 
 
 def _parse_fragment(molecule_id: str, path: Path) -> PackageFragment:
+    """Parse and validate one molecule's package fragment."""
     try:
         raw = path.read_text(encoding="utf-8")
         data = json.loads(raw)
