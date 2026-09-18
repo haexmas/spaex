@@ -257,6 +257,89 @@ def test_exclusive_atom_removed_on_retract_and_warns_when_modified(
     assert "modified" in capsys.readouterr().err.lower()
 
 
+def test_constitution_contributor_own_exclusive_atom_tracked_and_removed(
+    tmp_path: Path, haex_add_helpers, monkeypatch
+) -> None:
+    """A molecule using the legacy `atoms.constitution` category *and* an
+    exclusive generic-atom category must have both paths recorded against
+    its own `install.lock` entry, so `spaex remove` cleans up the generic
+    atom too — not just the classic constitution file. Regression test for
+    a CodeRabbit finding: the two categories used to publish through
+    different code paths, and only the constitution path was ever
+    attributed to the contributor's own entry.
+    """
+    combo_id = "com.example.publisher.combo"
+    canonical, head, state_root = _make_publisher_with_files(
+        tmp_path,
+        {
+            combo_id: {
+                "path": "combo",
+                "version": "1.0.0",
+                "atoms": {
+                    "constitution": ["constitution.md"],
+                    "dev_environment": ["flake.nix"],
+                },
+                "files": {
+                    "constitution.md": "# rules\n",
+                    "flake.nix": "{ outputs = { }; }\n",
+                },
+            },
+        },
+        clone_dir=haex_add_helpers["clone_dir"],
+    )
+    consumer = haex_add_helpers["make_consumer"](tmp_path)
+    rc = haex_add_helpers["run_add"](
+        consumer, state_root, monkeypatch,
+        source_url=canonical, molecule_ids=combo_id, revision=head,
+    )
+    assert rc == 0
+    assert (consumer / "flake.nix").exists()
+
+    lock = InstallLock.from_json((consumer / ".spaex/install.lock").read_bytes())
+    entry = next(m for m in lock.molecules if m.id == combo_id)
+    assert set(entry.paths) == {".spaex/constitution.md", "flake.nix"}
+
+    rc2 = haex_add_helpers["run_remove"](
+        consumer, state_root, monkeypatch, molecule_ids=combo_id
+    )
+    assert rc2 == 0
+    assert not (consumer / "flake.nix").exists(), (
+        "the contributor's own exclusive atom must be cleaned up on retraction"
+    )
+
+
+def test_exclusive_atom_nested_path_without_dot_segment_refused(
+    tmp_path: Path, haex_add_helpers, monkeypatch
+) -> None:
+    """A nested exclusive-atom path with no leading dot-segment (e.g.
+    `config/tool.toml`) cannot round-trip through install.lock's schema and
+    must be refused at install time rather than corrupt a later
+    `install.lock` read.
+    """
+    canonical, head, state_root = _make_publisher_with_files(
+        tmp_path,
+        {
+            "com.example.publisher.nested": {
+                "path": "nested",
+                "version": "1.0.0",
+                "atoms": {"dev_environment": ["config/tool.toml"]},
+                "files": {"config/tool.toml": "# config\n"},
+            },
+        },
+        clone_dir=haex_add_helpers["clone_dir"],
+    )
+    consumer = haex_add_helpers["make_consumer"](tmp_path)
+    with pytest.raises(HaexError):
+        haex_add_helpers["run_add"](
+            consumer, state_root, monkeypatch,
+            source_url=canonical,
+            molecule_ids="com.example.publisher.nested",
+            revision=head,
+        )
+    assert not (consumer / "config").exists()
+    assert not (consumer / ".spaex/install.lock").exists()
+
+
 def test_nix_packages_composition_and_removal(
     tmp_path: Path, haex_add_helpers, monkeypatch
 ) -> None:

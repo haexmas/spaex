@@ -249,7 +249,7 @@ def run(
                 repo_root, getattr(manifest, "local_fragments", ())
             )
             contributions, resolved = resolve_install_inputs(manifest, state_root)
-            delivered_files = collect_exclusive_atoms(resolved)
+            delivered_files = collect_exclusive_atoms(resolved, repo_root=repo_root)
             composed_packages = compose_nix_packages(collect_package_fragments(resolved))
             extra_spaex_files = (
                 (transaction.StagedFile(
@@ -461,6 +461,18 @@ def run(
                 composed_packages=composed_packages,
                 exclude_ids=frozenset(contributing_ids),
             )
+            # The constitution contributor's own record is built separately
+            # (below and inside `publish_constitution`, not via
+            # `_augment_records_with_generic_atoms`, which is why it is
+            # excluded above): fold in any generic-atom paths *this same*
+            # molecule also owns, so a molecule declaring both
+            # `atoms.constitution` and a Spec 027 category gets every path
+            # it contributed recorded against its one `install.lock` entry.
+            contributor_extra_paths = _generic_atom_paths_for_molecule(
+                contribution.source.id,
+                delivered_files=delivered_files,
+                composed_packages=composed_packages,
+            )
             # FR-025: no-op iff the complete post-hook state (atom bytes
             # AND every molecule's hook_status, contributor + hook-only)
             # matches disk. A hook_status delta with unchanged atom bytes
@@ -470,7 +482,7 @@ def run(
                     id=contribution.source.id,
                     source=contribution.source.source,
                     revision=contribution.source.revision,
-                    paths=(CONSTITUTION_PATH,),
+                    paths=tuple(sorted({CONSTITUTION_PATH, *contributor_extra_paths})),
                     hook_status=hook_status.get(contribution.source.id),
                     speckit=speckit_records.get(contribution.source.id),
                 ),
@@ -507,6 +519,7 @@ def run(
                         preserved_files=preserved_files,
                         extra_spaex_files=extra_spaex_files,
                         delivered_files=delivered_files,
+                        contributor_extra_paths=contributor_extra_paths,
                     )
                 else:
                     publish_constitution(
@@ -518,6 +531,7 @@ def run(
                         preserved_files=preserved_files,
                         extra_spaex_files=extra_spaex_files,
                         delivered_files=delivered_files,
+                        contributor_extra_paths=contributor_extra_paths,
                     )
                 new_generation_id = _live_generation_id(repo_root)
                 sys.stdout.write(f"installed generation {new_generation_id}\n")
@@ -938,6 +952,24 @@ def _hook_only_records(
     return records
 
 
+def _generic_atom_paths_for_molecule(
+    molecule_id: str,
+    *,
+    delivered_files: Sequence[DeliveredFile],
+    composed_packages: ComposedFile | None,
+) -> tuple[str, ...]:
+    """Every Spec 027 generic-atom path `molecule_id` owns this generation.
+
+    Used to fold the classic constitution contributor's own generic-atom
+    paths into its dedicated `install.lock` entry (built separately by
+    `publish_constitution`, not by `_augment_records_with_generic_atoms`).
+    """
+    paths = {file.path for file in delivered_files if file.owning_molecule_id == molecule_id}
+    if composed_packages is not None and molecule_id in composed_packages.contributing_molecule_ids:
+        paths.add(GENERATED_PACKAGES_PATH)
+    return tuple(sorted(paths))
+
+
 def _augment_records_with_generic_atoms(
     records: Sequence[MoleculeEntry],
     *,
@@ -959,10 +991,10 @@ def _augment_records_with_generic_atoms(
     ``exclude_ids`` (the legacy ``atoms.constitution`` contributor, built
     and appended separately by the caller) is never folded in nor given a
     fresh entry here, even if it also happens to declare a generic atom —
-    avoiding a duplicate ``molecules[]`` entry for the same id. A
-    contributor molecule additionally using a Spec 027 category is a narrow,
-    accepted gap: its generic-atom files still publish, only its own
-    install.lock entry omits those paths.
+    avoiding a duplicate ``molecules[]`` entry for the same id. The caller
+    instead folds that molecule's generic-atom paths into its own dedicated
+    entry via ``_generic_atom_paths_for_molecule`` and
+    ``publish_constitution``'s ``contributor_extra_paths``.
     """
     paths_by_molecule: dict[str, list[str]] = {}
     for file in delivered_files:
