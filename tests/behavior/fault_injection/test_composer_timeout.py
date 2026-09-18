@@ -11,10 +11,10 @@ from spaex.behavior.composer.invoke import InvokeOptions, _resolve_timeout
 from spaex.util import exit_codes
 
 
-def test_default_composer_timeout_is_300_seconds(monkeypatch) -> None:
+def test_default_composer_timeout_is_900_seconds(monkeypatch) -> None:
     monkeypatch.delenv("SPAEX_COMPOSER_TIMEOUT", raising=False)
 
-    assert _resolve_timeout(InvokeOptions()) == 300.0
+    assert _resolve_timeout(InvokeOptions()) == 900.0
 
 
 def test_timeout_scenario_raises_typed_error_with_exit_30(
