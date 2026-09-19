@@ -213,6 +213,7 @@ def test_noninteractive_all_selection_refuses_before_cli_invocation(tmp_path: Pa
 
 
 def test_legacy_lock_reuses_selection_without_reinstalling(tmp_path: Path) -> None:
+    """Reuse a legacy lock selection without invoking installation again."""
     resolved = _resolved(tmp_path, molecule_id="com.example.speckit", options={"codex": ""})
     # Fingerprint payload written before CLI provisioning was introduced.
     payload = {
