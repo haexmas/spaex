@@ -1,5 +1,14 @@
 # Changelog
 
+## [5.1.1](https://github.com/haexmas/spaex/compare/v5.1.0...v5.1.1) (2026-09-19)
+
+
+### Bug Fixes
+
+* **ci:** address pull request review findings ([0a8c4d2](https://github.com/haexmas/spaex/commit/0a8c4d295e9973043a43f1e9c95ac99d4030625f))
+* **release:** let manual dispatch target main via a version input ([1564488](https://github.com/haexmas/spaex/commit/1564488979b7c08e1a84aa42dc79319f0a99f5dd))
+* **speckit:** repair drifted claude/codex integrations instead of skipping them ([7a24af9](https://github.com/haexmas/spaex/commit/7a24af97ffe1e98ea72212bd957eb0a585366ff8))
+
 ## [5.1.0](https://github.com/haexmas/spaex/compare/v5.0.0...v5.1.0) (2026-09-19)
 
 
