@@ -307,6 +307,8 @@ def _detect_drifted_keys(
         payload = json.loads(result.stdout)
     except json.JSONDecodeError:
         return frozenset()
+    if not isinstance(payload, dict):
+        return frozenset()
     manifests = payload.get("manifests")
     if not isinstance(manifests, dict):
         return frozenset()
@@ -336,6 +338,8 @@ def _clear_stale_registrations(repo_root: Path, keys: frozenset[str]) -> None:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(data, dict):
         return
     installed = data.get("installed_integrations")
     if not isinstance(installed, list):

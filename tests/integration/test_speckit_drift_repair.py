@@ -133,6 +133,13 @@ def test_detect_drifted_keys_fails_closed_on_malformed_json(tmp_path: Path) -> N
     assert drifted == frozenset()
 
 
+def test_detect_drifted_keys_fails_closed_on_non_object_json(tmp_path: Path) -> None:
+    for response in ("null", "[]"):
+        executable = _status_only_cli(tmp_path, response=response)
+        drifted = _detect_drifted_keys(("codex",), repo_root=tmp_path, executable=executable)
+        assert drifted == frozenset()
+
+
 def test_clear_stale_registrations_removes_only_the_drifted_key(tmp_path: Path) -> None:
     state = tmp_path / ".specify" / "integration.json"
     state.parent.mkdir(parents=True)
@@ -168,6 +175,15 @@ def test_clear_stale_registrations_is_a_noop_on_malformed_state(tmp_path: Path) 
     state.write_text("not json")
     _clear_stale_registrations(tmp_path, frozenset({"codex"}))
     assert state.read_text() == "not json"
+
+
+def test_clear_stale_registrations_is_a_noop_on_non_object_state(tmp_path: Path) -> None:
+    state = tmp_path / ".specify" / "integration.json"
+    state.parent.mkdir(parents=True)
+    for payload in ("null", "[]"):
+        state.write_text(payload)
+        _clear_stale_registrations(tmp_path, frozenset({"codex"}))
+        assert state.read_text() == payload
 
 
 def _stateful_fake_cli(tmp_path: Path) -> tuple[str, str]:
