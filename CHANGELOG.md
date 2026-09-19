@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.1.1](https://github.com/haexmas/spaex/compare/v5.1.0...v5.1.1) (2026-09-19)
+
+
+### Bug Fixes
+
+* **release:** let manual dispatch target main via a version input ([1564488](https://github.com/haexmas/spaex/commit/1564488979b7c08e1a84aa42dc79319f0a99f5dd))
+
 ## [5.1.0](https://github.com/haexmas/spaex/compare/v5.0.0...v5.1.0) (2026-09-19)
 
 
