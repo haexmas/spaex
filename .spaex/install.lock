@@ -1,5 +1,5 @@
 {
-  "generation_id": "g_20260916T211818Z_e3b0",
+  "generation_id": "g_20260919T182316Z_e3b0",
   "molecules": [
     {
       "id": "com.github.haexmas.atoms.ast-grep",
@@ -18,7 +18,7 @@
       "source": "https://github.com/haexmas/atoms"
     },
     {
-      "hook_status": "failed",
+      "hook_status": "ok",
       "id": "com.github.haexmas.atoms.graphify-first-authoring",
       "paths": [
         ".spaex/constitution.md"
