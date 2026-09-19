@@ -244,7 +244,14 @@ def test_legacy_lock_reuses_selection_without_reinstalling(tmp_path: Path) -> No
     )
     assert records[resolved.molecule_id].selected == ("codex",)
     assert records[resolved.molecule_id].declaration_fingerprint == fingerprint
-    assert (tmp_path / "calls.log").read_text().splitlines() == ["version", "integration list"]
+    # The drift check (`integration status --json`) runs but the fake CLI
+    # doesn't implement it, so it fails closed (treated as "no drift") and
+    # `install` is never invoked below.
+    assert (tmp_path / "calls.log").read_text().splitlines() == [
+        "version",
+        "integration list",
+        "integration status --json",
+    ]
     assert not (tmp_path / "installed-codex").exists()
 
 
