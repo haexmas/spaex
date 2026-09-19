@@ -283,6 +283,74 @@ def verify_cli(
     return ".".join(str(part) for part in version), parse_supported_integrations(list_result.stdout)
 
 
+def _detect_drifted_keys(
+    keys: Sequence[str],
+    *,
+    repo_root: Path,
+    executable: Sequence[str],
+) -> frozenset[str]:
+    """Flag previously-installed integrations whose managed files are gone.
+
+    ``install.lock`` only remembers that an integration was *selected*; it
+    never checks whether the official CLI's own output tree (``.claude/``,
+    ``.agents/``, ...) still exists on disk. That tree is typically
+    per-checkout and gitignored, so a fresh clone, a ``git clean``, or a
+    manual deletion all silently desync it from the lock without spaex
+    noticing — the next install would otherwise skip these keys forever.
+    This asks the official CLI's own health check instead of trusting the
+    record.
+    """
+    result = run_cli([*executable, "integration", "status", "--json"], repo_root=repo_root)
+    if result.returncode != 0:
+        return frozenset()
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return frozenset()
+    manifests = payload.get("manifests")
+    if not isinstance(manifests, dict):
+        return frozenset()
+    return frozenset(
+        key
+        for key in keys
+        if not isinstance(manifests.get(key), dict)
+        or not manifests[key].get("readable", False)
+        or manifests[key].get("missing_files")
+    )
+
+
+def _clear_stale_registrations(repo_root: Path, keys: frozenset[str]) -> None:
+    """Drop drifted keys from the official CLI's own installation record.
+
+    As of specify-cli 1.0.6, ``specify integration install <key>`` refuses
+    to touch a key it already considers installed — even with ``--force``,
+    it just reports "no files changed" and exits 0. Clearing only the
+    drifted key's own entry in ``.specify/integration.json`` (never
+    touching sibling keys) is what makes the official CLI treat the
+    follow-up ``install`` call in ``install_selected`` as a genuine fresh
+    install instead of a no-op.
+    """
+    path = repo_root / ".specify" / "integration.json"
+    if not path.is_file():
+        return
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    installed = data.get("installed_integrations")
+    if not isinstance(installed, list):
+        return
+    remaining = [key for key in installed if key not in keys]
+    if remaining == installed:
+        return
+    data["installed_integrations"] = remaining
+    settings = data.get("integration_settings")
+    if isinstance(settings, dict):
+        for key in keys:
+            settings.pop(key, None)
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
 def install_selected(
     declaration: SpeckitDeclaration,
     selected: Sequence[str],
@@ -458,8 +526,18 @@ def prepare_install(
     previous_selected = (
         existing_for_first.selected if already_selected and existing_for_first else ()
     )
+    carried_over = tuple(key for key in selected if already_selected and key in previous_selected)
+    drifted = (
+        _detect_drifted_keys(carried_over, repo_root=repo_root, executable=cli_executable)
+        if carried_over
+        else frozenset()
+    )
+    if drifted:
+        _clear_stale_registrations(repo_root, drifted)
     new_keys = tuple(
-        key for key in selected if not already_selected or key not in previous_selected
+        key
+        for key in selected
+        if not already_selected or key not in previous_selected or key in drifted
     )
     outcomes = install_selected(
         first,
