@@ -1,23 +1,4 @@
 {
   "schema_version": 1,
-  "clarifications": {
-    "d4faf9e357fae4847ad9c47d631f344fa1923a4a3893ad6548d0d6deef88f345": {
-      "question": "ponytail requires non-trivial logic to leave exactly ONE minimal runnable check behind (an assert-based demo/self-check or one small test file, explicitly 'no frameworks, no fixtures'), while python-testing requires tests to use unittest or the project's chosen test framework consistently, to make setup and cleanup explicit via fixtures and framework cleanup hooks, and to exercise both success and failure behavior (malformed input, missing configuration, expected exceptions, resource cleanup). For Python code in this project, which rule governs the shape and scope of tests: ponytail's single framework-free check, python-testing's framework-based coverage, or a stated combination (for example, ponytail's minimal one-check scope but written with the project's test framework and its cleanup hooks)?",
-      "cited_fragments": [
-        {
-          "molecule_id": "com.github.haexmas.atoms.ponytail",
-          "fragment_id": "ponytail",
-          "body_sha256": "3cbdfa6ffb96b14a6ffb6580f09f8fa7f5110050d67625e246e9b91c5f031648"
-        },
-        {
-          "molecule_id": "com.github.haexmas.atoms.python",
-          "fragment_id": "python-testing",
-          "body_sha256": "909555b4a071f7b52e06c9b4e83f45ebb75407886ab0cb1aab90b3fc198c458f"
-        }
-      ],
-      "answer": "python-testing governs the shape and scope of Python tests in this project (the project's chosen framework, fixtures, cleanup hooks, and success+failure coverage). ponytail's \"no frameworks\" principle means do not introduce a NEW or additional framework/dependency, not that an already-adopted framework must be avoided: once a project has adopted a test (or component, or CSS, etc.) framework, ponytail's minimal-effort ethos applies through that framework, not as a framework-free alternative to it. There is no real conflict here.",
-      "asked_at": "2026-09-17T09:38:57Z",
-      "answered_at": "2026-09-17T09:38:57Z"
-    }
-  }
+  "clarifications": {}
 }
