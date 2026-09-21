@@ -1,6 +1,6 @@
 # Spec 007 — Unified Manifest & harness_sources v2 — Design
 
-**Status**: Draft (design brainstorming from 2026-08-28 session, iteration after PR #8 review)
+**Status**: Realized (2026-09-21). The unified consumer/molecule manifest this design proposed is what spaex ships today: the consumer manifest is `.spaex/manifest.json` and both manifests are at schema v4 (`src/spaex/schema/data/`), after the renames of Specs 013 and 014. This document is a design record, not the current contract; the normative text is under [`specs/007-unified-manifest-v2/`](../../specs/007-unified-manifest-v2/). Original status: Draft (design brainstorming from 2026-08-28 session, iteration after PR #8 review).
 **Author**: haex-hive constitution v1.2.0 process
 **Extends**: [Blueprints & Unified Manifest Model — PR #8](https://github.com/haexmas/haex-hive/pull/8)
 (not yet merged into `main` at the time this design was drafted; local file

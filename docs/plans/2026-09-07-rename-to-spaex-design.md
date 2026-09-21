@@ -1,6 +1,6 @@
 # Spec 014: Rename `haex-hive` to `spaex` and release to PyPI
 
-**Status**: 2026-09-07 requirements capture. Feeds `/speckit-specify` to open `specs/014-rename-to-spaex/`.
+**Status**: Landed as [Spec 014](../../specs/014-rename-to-spaex/) (all 57 tasks ticked) and released as 4.0.0 on 2026-09-07. This document is retained as the original 2026-09-07 requirements capture that fed `/speckit-specify`.
 
 **Purpose**: three co-shipping changes.
 

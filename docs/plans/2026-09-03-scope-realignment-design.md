@@ -2,6 +2,8 @@
 
 **Status**: Design. Captured 2026-09-03 from a brainstorming session that re-examined the project's premise rather than a single feature. Supersedes the scope framing of the main design doc; does not yet supersede any landed spec.
 
+**Implementation status (2026-09-21)**: Partly executed. Decision 9 (drop the multi-source LLM constitution merge) is recorded as [ADR 0010](../adr/0010-drop-multi-source-llm-constitution-merge.md), and Decision 11 (recalibrated hook trust model) is reflected by [Spec 016](2026-09-08-spec-016-molecule-install-hooks-design.md), which runs hooks as plain subprocesses under the operator's permissions and does not depend on Spec 009. The other decisions have not been re-checked against the shipped code in this update. Note that the project has since been renamed to spaex (4.0.0), and that the constitution assembly now runs through the behavior harness ([Spec 023](../../specs/023-behavior-harness/)).
+
 **Purpose**: The operator asked two questions in sequence. First, whether "model everything as a skill" would simplify the harness model. Second, and more fundamentally, whether haex-hive still solves a problem that is not already solved elsewhere. This document records the ecosystem findings, the resulting scope decisions, and what they mean for the specs in flight.
 
 **Related**:

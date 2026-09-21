@@ -1,7 +1,7 @@
 # haex-hive — Design
 
 Date: 2026-08-26
-Status: Brainstormed, not yet implemented
+Status: Historical (2026-09-21). Brainstormed 2026-08-26, not maintained as a live plan. The daemon, Nostr and mobile-control vision was retired by Decision 1 of the [Scope Realignment (2026-09-03)](2026-09-03-scope-realignment-design.md), and the project was renamed to spaex ([Spec 014](2026-09-07-rename-to-spaex-design.md), 4.0.0). Phases 0 and 1 shipped as Specs 001-005; Phase 2 (harness registry and multi-tool compiler) was reshaped and is realized by Specs 007, 008, 013 and 023. The current sequence lives in the [Composition UI & Skills Externalization Roadmap](2026-09-08-composition-ui-and-skills-externalization-roadmap.md).
 
 ## Problem
 

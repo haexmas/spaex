@@ -1,6 +1,6 @@
 # Spec 009 — Hook Boundary Contract
 
-**Status**: Draft (extracted from [Spec 007 design doc](2026-08-28-spec-007-unified-manifest-design.md) 2026-08-29 to keep the Spec 007 doc focused on the manifest-v2 architecture)
+**Status**: Deferred, never specced (2026-09-21; no `specs/009-*` exists). The [Scope Realignment](2026-09-03-scope-realignment-design.md) (Decision 11) recalibrated the trust model, and hook execution shipped instead as [Spec 016](2026-09-08-spec-016-molecule-install-hooks-design.md) (subprocess hooks under the operator's own permissions, no sandbox), which deliberately does not depend on this contract. Kept as a reference for a hardening pass if a hostile-publisher scenario arises. Original status: Draft (extracted from [Spec 007 design doc](2026-08-28-spec-007-unified-manifest-design.md) 2026-08-29 to keep the Spec 007 doc focused on the manifest-v2 architecture)
 **Author**: haex-hive constitution v1.3.0 process
 **Related**: [Spec 007 — Unified Manifest & harness_sources v2 design](2026-08-28-spec-007-unified-manifest-design.md);
 [Constitution §Principle I, VI](../../.specify/memory/constitution.md)

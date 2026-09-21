@@ -1,6 +1,6 @@
 # Spec 008 — Install Transaction Contract
 
-**Status**: Draft (extracted from [Spec 007 design doc](2026-08-28-spec-007-unified-manifest-design.md) 2026-08-29 to keep the Spec 007 doc focused on the manifest-v2 architecture)
+**Status**: Implemented as [Spec 008](../../specs/008-install-transaction/) (`spaex install` publishes generations transactionally), with gaps: in its `tasks.md` 38 checkboxes are ticked and 17 are open, some of which the spec marks as retired or deferred by the trust-git amendment (2026-09-01). Original status: Draft (extracted from [Spec 007 design doc](2026-08-28-spec-007-unified-manifest-design.md) 2026-08-29 to keep the Spec 007 doc focused on the manifest-v2 architecture)
 **Author**: haex-hive constitution v1.3.0 process
 **Related**: [Spec 007 — Unified Manifest & harness_sources v2 design](2026-08-28-spec-007-unified-manifest-design.md);
 [Constitution §Principle IV, VI](../../.specify/memory/constitution.md)

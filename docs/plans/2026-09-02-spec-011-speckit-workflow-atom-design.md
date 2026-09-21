@@ -1,6 +1,6 @@
 # Spec 011: Speckit Workflow Molecule (Design Preview)
 
-**Status**: Design preview. Not yet a spec. Captured 2026-09-02 as the requirements source for the eventual `/speckit-specify` invocation that creates `specs/011-speckit-workflow-atom/`.
+**Status**: Opened as [`specs/011-speckit-workflow-atom/`](../../specs/011-speckit-workflow-atom/) but never implemented (that spec's own status: no code handles `atoms.workflow`). The gap it targeted, which Speckit workflow is binding, is answered today by the declared workflow at `.specify/workflows/speckit/workflow.yml` ([ADR 0009](../adr/0009-declared-speckit-workflow-adherence.md)), delivered through the `speckit` molecule, while [Spec 024](../../specs/024-speckit-integration-installer/) installs the Spec Kit integrations (ADRs 0019, 0020). Captured 2026-09-02 as the requirements source for the eventual `/speckit-specify` invocation that creates `specs/011-speckit-workflow-atom/`.
 
 **Purpose**: define a mechanism for per-project speckit-workflow selection, so that the "which speckit workflow is binding" question is answered by an adopted, versioned molecule rather than by ad-hoc convention. This closes the gap identified during the 2026-09-02 amendment of the haex-hive constitution to 1.4.0 (see [ADR 0009](../adr/0009-declared-speckit-workflow-adherence.md)).
 
