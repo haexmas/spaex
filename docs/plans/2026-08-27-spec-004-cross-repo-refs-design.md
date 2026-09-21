@@ -1,7 +1,7 @@
 # Spec 004 — Cross-Repo References (Phase 1)
 
 Date: 2026-08-27
-Status: Brainstormed, not yet specified
+Status: Landed as [Spec 004](../../specs/004-cross-repo-refs/) (all 43 tasks ticked). This document is retained as the original 2026-08-27 design capture, when it read "Brainstormed, not yet specified".
 Feeds into: `specs/004-cross-repo-refs/` (to be created via `/speckit-specify`)
 
 ## Problem

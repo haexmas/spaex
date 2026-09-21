@@ -1,6 +1,6 @@
 # Spec 010 — Compiler & Agent Adapters — Design Preview
 
-**Status**: Preview notes. Not yet a spec. Captured 2026-08-31 during a conversation that mistakenly started drafting this as `Spec 008` before discovering that slot was already reserved for [Install Transaction Contract](2026-08-29-spec-008-install-transaction-requirements.md).
+**Status**: Preview notes; still not a spec (2026-09-21: no `specs/010-*` exists). Adjacent parts of its problem space shipped under other numbers: per-runtime bootstrap into Claude, Codex and Gemini contexts (`spaex install --global`, Spec 023), the declarative Spec Kit integration installer (Spec 024) and generic non-behavior atom delivery (Spec 027). No dedicated adapter/compiler spec, degradation reporting or `--json` output contract exists. Captured 2026-08-31 during a conversation that mistakenly started drafting this as `Spec 008` before discovering that slot was already reserved for [Install Transaction Contract](2026-08-29-spec-008-install-transaction-requirements.md).
 
 **Purpose**: preserve the design decisions worked out in that conversation so nothing is lost when Spec 010 is properly drafted after Spec 008 and Spec 009 have landed.
 

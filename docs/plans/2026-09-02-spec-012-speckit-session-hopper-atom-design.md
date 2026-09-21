@@ -1,6 +1,6 @@
 # Spec 012: Speckit Session Hopper Molecule (Design Preview)
 
-**Status**: Design preview. Not yet a spec. Captured 2026-09-02 as the requirements source for a subsequent `/speckit-specify` invocation that creates `specs/012-speckit-session-hopper-atom/`.
+**Status**: Design preview; parked (2026-09-21: no `specs/012-*` exists). Its skill-file delivery shape is what Phase A of the [roadmap](2026-09-08-composition-ui-and-skills-externalization-roadmap.md) moves to external skill references. Captured 2026-09-02 as the requirements source for a subsequent `/speckit-specify` invocation that creates `specs/012-speckit-session-hopper-atom/`.
 
 **Purpose**: define a first concrete `speckit-workflow` molecule (Spec 011 v3 `atoms` map) that prompts the operator, before every `command:` step of a speckit workflow, to run that step in a new agent session (fresh context) rather than inline in the current session. The prompt is advisory: the operator picks new-session or inline for each step. The molecule is fully declarative and portable across every LLM host, because the mechanism is Constitution rule plus a text-printing hook, with no client-specific subagent API.
 

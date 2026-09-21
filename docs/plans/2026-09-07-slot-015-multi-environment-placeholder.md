@@ -1,6 +1,6 @@
 # Spec 015 (placeholder): Multi-environment declaration and orchestration
 
-**Status**: 2026-09-07 slot reservation. Design not yet started. Not to be implemented before Spec 014 (rename to spaex) lands and stabilizes.
+**Status**: 2026-09-07 slot reservation. Partly opened on 2026-09-18 by [Spec 027](../../specs/027-generic-atom-delivery/) (generic atom-category delivery and removal, shipped in 5.1.0), which took the static-file half: a molecule ships environment files such as `flake.nix`, `.envrc` and `.gitignore` for a shared Nix devShell, and `spaex install` places them at the repo root and `spaex remove` cleans them up (write boundary: [ADR 0026](../adr/0026-generic-atom-root-write-boundary.md)). The multi-environment vocabulary, consumer-side environment selection and orchestration verbs below are still not started. Spec 014 has landed (4.0.0), so that precondition is met.
 
 **Purpose**: reserve the Spec 015 slot and record the product intent so it does not get lost while Spec 014 is in flight.
 
