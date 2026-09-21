@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.1.2](https://github.com/haexmas/spaex/compare/v5.1.1...v5.1.2) (2026-09-21)
+
+
+### Documentation
+
+* **plans:** bring plan status up to date and drop presets ([a8793c8](https://github.com/haexmas/spaex/commit/a8793c854545e224285f0c8e1d5b14e80b5cbaac))
+
 ## [5.1.1](https://github.com/haexmas/spaex/compare/v5.1.0...v5.1.1) (2026-09-19)
 
 
