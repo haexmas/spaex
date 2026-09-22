@@ -12,6 +12,7 @@ from spaex.util.errors import InstallLockGenerationInconsistentError
 
 
 def _write_lock(repo_root: Path, generation_id: str) -> None:
+    """Write an install lock with the supplied generation for read tests."""
     lock_path = repo_root / transaction.SPAEX_DIR / transaction.INSTALL_LOCK_NAME
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     lock = InstallLock("4", generation_id, ())
@@ -33,6 +34,7 @@ def test_mismatch_then_match_on_retry_succeeds(tmp_path: Path) -> None:
     calls = 0
 
     def build(lock: InstallLock) -> str:
+        """Publish one newer lock during the first bracketed read."""
         nonlocal calls
         calls += 1
         if calls == 1:
@@ -52,6 +54,7 @@ def test_persistent_mismatch_raises(tmp_path: Path) -> None:
     counter = 0
 
     def build(lock: InstallLock) -> str:
+        """Publish a newer lock during every bracketed read."""
         nonlocal counter
         counter += 1
         _write_lock(tmp_path, f"g_20260101T00000{counter}Z_0000")

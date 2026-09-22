@@ -264,6 +264,7 @@ def read_with_consistent_generation(
     lock_path = repo_root / transaction.SPAEX_DIR / transaction.INSTALL_LOCK_NAME
 
     def _read_lock() -> InstallLock:
+        """Read the current lock, using an empty lock before the first install."""
         if not lock_path.exists():
             return InstallLock(spaex_version="4", generation_id="", molecules=())
         return InstallLock.from_json(lock_path.read_bytes())

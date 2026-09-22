@@ -10,6 +10,7 @@ from spaex.model.consumer_manifest import (
 
 
 def _manifest(compounds: list[CompoundEntry]) -> ConsumerManifest:
+    """Build a consumer manifest from the compound pins under test."""
     return ConsumerManifest(
         spaex_version="4",
         identity="com.github.example.consumer",
