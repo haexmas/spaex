@@ -29,15 +29,18 @@ repository root instead.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from pathlib import Path
+from typing import Any, Literal, TypeVar
 
-from spaex.io import json_deterministic
+from spaex.io import json_deterministic, transaction
 from spaex.model._immutable import freeze_json, thaw_json
 from spaex.model.source_url import CanonicalSourceUrl
 from spaex.schema import validator as schema_validator
-from spaex.util.errors import InstallLockSchemaInvalidError
+from spaex.util.errors import InstallLockGenerationInconsistentError, InstallLockSchemaInvalidError
+
+T = TypeVar("T")
 
 HookStatus = Literal["ok", "failed", "skipped"]
 SpeckitOutcomeStatus = Literal["installed", "already_satisfied", "skipped"]
@@ -224,6 +227,63 @@ class InstallLock:
         for k, v in self.unknown_top_level.items():
             obj.setdefault(k, thaw_json(v))
         return json_deterministic.dumps(obj)
+
+
+def path_owners(lock: InstallLock) -> dict[str, tuple[str, ...]]:
+    """Map every path recorded in `lock` to the molecule id(s) that own it.
+
+    A path owned by more than one molecule (e.g. `.spaex/constitution.md`,
+    or a Spec 027 composable generated artifact) lists every owner, in
+    `lock.molecules` order (research.md R2 addendum, data-model.md
+    `PathOwnership`/`AtomGrouping`).
+    """
+    owners: dict[str, list[str]] = {}
+    for molecule in lock.molecules:
+        for path in molecule.paths:
+            owners.setdefault(path, []).append(molecule.id)
+    return {path: tuple(ids) for path, ids in owners.items()}
+
+
+def read_with_consistent_generation(
+    repo_root: Path, build: Callable[[InstallLock], T]
+) -> T:
+    """Read `.spaex/install.lock`, run `build` against it, and confirm its
+    `generation_id` did not change while `build` ran (research.md R9, FR-015).
+
+    `.spaex/` is published as one atomic unit, so a concurrent `spaex
+    install` can complete its swap between any two separate reads under
+    `.spaex/` that `build` performs (manifest, constitution fragments,
+    constitution body, ...). Bracketing with `generation_id` catches such a
+    torn read: read the lock, run `build`, then re-read the lock's
+    `generation_id` alone. A missing lock (never installed) is treated as
+    an empty `InstallLock`, never an error by itself. Retries the whole
+    read+build+re-read sequence once on a mismatch; raises
+    `InstallLockGenerationInconsistentError` naming both observed
+    generation ids if it still disagrees after the retry.
+    """
+    lock_path = repo_root / transaction.SPAEX_DIR / transaction.INSTALL_LOCK_NAME
+
+    def _read_lock() -> InstallLock:
+        if not lock_path.exists():
+            return InstallLock(spaex_version="4", generation_id="", molecules=())
+        return InstallLock.from_json(lock_path.read_bytes())
+
+    first_id = second_id = ""
+    for _attempt in range(2):
+        lock = _read_lock()
+        first_id = lock.generation_id
+        result = build(lock)
+        second_id = _read_lock().generation_id
+        if second_id == first_id:
+            return result
+
+    raise InstallLockGenerationInconsistentError(
+        message=(
+            "install.lock's generation changed while reading it, even after "
+            f"one retry: observed {first_id!r} then {second_id!r}"
+        ),
+        context={"first_generation_id": first_id, "second_generation_id": second_id},
+    )
 
 
 def _parse_molecules(raw: Any) -> tuple[MoleculeEntry, ...]:

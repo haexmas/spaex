@@ -33,7 +33,7 @@ from spaex.behavior.stale import STALE_FILENAME
 from spaex.cli.install import _load_consumer_manifest
 from spaex.constitution.resolve import ResolvedMolecule, resolve_install_inputs
 from spaex.io.state import default_state_root
-from spaex.model.consumer_manifest import ConsumerManifest
+from spaex.model.consumer_manifest import ConsumerManifest, flatten_compound_pins
 from spaex.paths import composed_constitution_path, manifest_path
 from spaex.util import exit_codes
 from spaex.util.errors import HaexError
@@ -497,11 +497,7 @@ def _load_molecule_pins(repo_root: Path) -> dict[str, tuple[str, str]]:
         manifest = ConsumerManifest.from_json(path.read_bytes())
     except (OSError, ValueError, KeyError):
         return {}
-    pins: dict[str, tuple[str, str]] = {}
-    for compound in manifest.compounds:
-        for molecule_id in compound.molecules:
-            pins[molecule_id] = (compound.source, compound.revision)
-    return pins
+    return flatten_compound_pins(manifest)
 
 
 def _manifest_display_path(repo_root: Path) -> str:
