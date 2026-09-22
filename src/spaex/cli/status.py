@@ -117,8 +117,16 @@ def _render_molecules_text(molecules: object) -> list[str]:
     installed_count = sum(1 for m in molecules if m["installed"] is not None)
     lines = [f"Molecules ({pinned_count} pinned, {installed_count} installed):"]
     for molecule in molecules:
-        revision_source = molecule["installed"] or molecule["pinned"]
-        revision = f"@{revision_source['revision'][:8]}" if revision_source else ""
+        pinned = molecule["pinned"]
+        installed = molecule["installed"]
+        if pinned and installed and pinned["revision"] != installed["revision"]:
+            revision = (
+                f"@{installed['revision'][:8]} "
+                f"(pinned @{pinned['revision'][:8]})"
+            )
+        else:
+            revision_source = installed or pinned
+            revision = f"@{revision_source['revision'][:8]}" if revision_source else ""
         phrase = _INSTALL_STATE_PHRASE[molecule["install_state"]]
         lines.append(f"  {molecule['molecule_id']}{revision} — {phrase}")
         atoms = molecule["atoms"]

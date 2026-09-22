@@ -28,6 +28,7 @@ def check_constitution_staleness(repo_root: Path) -> bool:
     """
     constitution_d = repo_root / SPAEX_DIRNAME / CONSTITUTION_D_DIRNAME
     fragments: list[BehaviorFragment] = []
+    invalid_fragment = False
     if constitution_d.is_dir():
         for scope_dir in sorted(p for p in constitution_d.iterdir() if p.is_dir()):
             for fragment_path in sorted(scope_dir.glob("*.md")):
@@ -35,8 +36,11 @@ def check_constitution_staleness(repo_root: Path) -> bool:
                     fragments.append(
                         BehaviorFragment.from_file(fragment_path, molecule_id=scope_dir.name)
                     )
-                except (OSError, FragmentValidationError):
-                    continue
+                except (OSError, UnicodeError, FragmentValidationError):
+                    invalid_fragment = True
+
+    if invalid_fragment:
+        return True
 
     if not fragments:
         return composed_constitution_path(repo_root).exists()

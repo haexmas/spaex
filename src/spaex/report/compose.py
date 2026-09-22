@@ -123,7 +123,13 @@ def build_constitution_summary(
     """Summarize the composed constitution, or `None` when there isn't one."""
     constitution_d = repo_root / SPAEX_DIRNAME / CONSTITUTION_D_DIRNAME
     contributing_molecules = (
-        sorted(p.name for p in constitution_d.iterdir() if p.is_dir() and p.name != PROJECT_SCOPE)
+        sorted(
+            p.name
+            for p in constitution_d.iterdir()
+            if p.is_dir()
+            and p.name != PROJECT_SCOPE
+            and any(p.glob("*.md"))
+        )
         if constitution_d.is_dir()
         else []
     )
@@ -151,10 +157,9 @@ def build_constitution_summary(
 
 def build_composition_report(repo_root: Path) -> CompositionReport:
     """Build the full `spaex status` report from on-disk `.spaex/` state (FR-002, FR-015)."""
-    manifest = _load_consumer_manifest(repo_root)
-    pinned_map = flatten_compound_pins(manifest)
-
     def _build(lock: InstallLock) -> CompositionReport:
+        manifest = _load_consumer_manifest(repo_root)
+        pinned_map = flatten_compound_pins(manifest)
         installed_map = {molecule.id: molecule for molecule in lock.molecules}
         molecule_ids = sorted(set(pinned_map) | set(installed_map))
 

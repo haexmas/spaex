@@ -70,6 +70,18 @@ def test_header_fragment_mismatch_is_stale(tmp_path: Path) -> None:
     assert check_constitution_staleness(tmp_path) is True
 
 
+def test_invalid_existing_fragment_is_stale(tmp_path: Path) -> None:
+    """An invalid fragment must not be silently omitted from freshness checks."""
+    fragment = _write_fragment(tmp_path)
+    _write_matching_header(tmp_path, fragment)
+    invalid_path = (
+        tmp_path / ".spaex" / "constitution.d" / _MOLECULE_ID / "invalid.md"
+    )
+    invalid_path.write_text("not a constitution fragment\n", encoding="utf-8")
+
+    assert check_constitution_staleness(tmp_path) is True
+
+
 def test_missing_header_with_fragments_present_is_stale(tmp_path: Path) -> None:
     """Fragments present but no composed constitution header at all is stale."""
     _write_fragment(tmp_path)
