@@ -27,10 +27,10 @@ Single existing project (`src/spaex/`, `tests/`), per plan.md's Project Structur
 
 ## Phase 1: Setup
 
-- [ ] T001 [P] Create `src/spaex/report/__init__.py` as an empty package init.
-- [ ] T002 [P] Create `src/spaex/report/compose.py` as an empty module with a module-level docstring describing its role (builds `CompositionReport` — data-model.md) per plan.md's Project Structure.
-- [ ] T003 [P] Create `src/spaex/report/trace.py` as an empty module with a module-level docstring describing its role (builds `FileAttribution` — data-model.md) per plan.md's Project Structure.
-- [ ] T004 [P] Create `src/spaex/report/staleness.py` as an empty module with a module-level docstring describing its role (local-only constitution freshness recomputation — research.md R4) per plan.md's Project Structure.
+- [x] T001 [P] Create `src/spaex/report/__init__.py` as an empty package init.
+- [x] T002 [P] Create `src/spaex/report/compose.py` as an empty module with a module-level docstring describing its role (builds `CompositionReport` — data-model.md) per plan.md's Project Structure.
+- [x] T003 [P] Create `src/spaex/report/trace.py` as an empty module with a module-level docstring describing its role (builds `FileAttribution` — data-model.md) per plan.md's Project Structure.
+- [x] T004 [P] Create `src/spaex/report/staleness.py` as an empty module with a module-level docstring describing its role (local-only constitution freshness recomputation — research.md R4) per plan.md's Project Structure.
 
 ---
 
