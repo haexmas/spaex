@@ -113,7 +113,7 @@ src/spaex/
 │                                 # top-level subparsers and their dispatch, alongside
 │                                 # `constitution`/`install`/`add`/`remove`.
 └── util/exit_codes.py           # Existing registry — no new codes (research.md R7 reuses
-                                  # `SUCCESS`, `VALIDATION_REFUSE`, `SYSTEM_REFUSE`, `USAGE`,
+                                  # `SUCCESS`, `VALIDATION_REFUSE`, `INCOMPLETE_TRANSACTION`, `USAGE`,
                                   # and the bare `1` "no match" convention already used by
                                   # `constitution trace`).
 
