@@ -372,6 +372,7 @@ def _emit_trace_result(
     molecule_pins: dict[str, tuple[str, str]] | None = None,
     repo_root: Path | None = None,
 ) -> int:
+    """Write matching clauses in the requested format and return the trace exit code."""
     if not matches:
         if fmt == "json":
             sys.stdout.write(
@@ -403,6 +404,7 @@ def _render_clause(
     repo_root: Path,
     molecule_pins: dict[str, tuple[str, str]],
 ) -> dict[str, object]:
+    """Build a provenance record for a composed constitution clause."""
     sources: list[dict[str, object]] = []
     for scoped_id in clause.provenance:
         molecule_id, _, fragment_id = scoped_id.partition("/")
