@@ -9,6 +9,7 @@ mirroring `test_provenance_trace.py`'s style.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from spaex.behavior.composer.clarifications import ClarificationsStore
@@ -159,6 +160,25 @@ def test_status_text_format(tmp_path: Path, capsys) -> None:
     assert _snapshot(repo) == before
 
 
+def test_status_text_shows_both_revisions_on_mismatch(tmp_path: Path, capsys) -> None:
+    repo = _make_full_fixture(tmp_path)
+    lock = InstallLock.from_json((repo / ".spaex/install.lock").read_bytes())
+    installed_revision = "2" * 40
+    changed_molecule = replace(lock.molecules[0], revision=installed_revision)
+    (repo / ".spaex/install.lock").write_bytes(
+        replace(lock, molecules=(changed_molecule, *lock.molecules[1:])).to_json_bytes()
+    )
+
+    rc = main(["--repo-root", str(repo), "status"])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert (
+        f"{_MOL_BEHAVIOR}@{installed_revision[:8]} "
+        f"(pinned @{_REV[:8]}) — installed"
+    ) in out
+
+
 def test_status_json_format(tmp_path: Path, capsys) -> None:
     repo = _make_full_fixture(tmp_path)
     before = _snapshot(repo)
@@ -268,6 +288,7 @@ def test_status_no_molecule_contributes_behavior(tmp_path: Path, capsys) -> None
     )
     (repo / ".spaex").mkdir(exist_ok=True)
     (repo / ".spaex/install.lock").write_bytes(lock.to_json_bytes())
+    (repo / ".spaex/constitution.d" / _MOL_FILE).mkdir(parents=True)
 
     rc = main(["--repo-root", str(repo), "status", "--format", "json"])
     out = capsys.readouterr().out
