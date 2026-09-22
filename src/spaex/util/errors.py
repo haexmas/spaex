@@ -215,6 +215,17 @@ class InstallLockSchemaInvalidError(HaexError):
 
 
 @dataclass
+class InstallLockGenerationInconsistentError(HaexError):
+    """A read bracketed by `install.lock`'s `generation_id` still disagreed
+    after one retry (research.md R9, FR-015): a concurrent `spaex install`
+    kept publishing new generations faster than the read could complete."""
+
+    diagnostic_key: str = "install-lock-generation-inconsistent"
+    exit_code: int = exit_codes.IO_REFUSE
+    hint: str = "Re-run the command; this is caused by a concurrent `spaex install`."
+
+
+@dataclass
 class PublisherCloneUnavailableError(HaexError):
     diagnostic_key: str = "publisher-clone-unavailable"
     exit_code: int = exit_codes.IO_REFUSE

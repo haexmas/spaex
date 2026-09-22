@@ -173,3 +173,16 @@ class ConsumerManifest:
                 "local_fragments": [thaw_json(e) for e in self.local_fragments]
             }
         return json_deterministic.dumps(obj)
+
+
+def flatten_compound_pins(manifest: ConsumerManifest) -> dict[str, tuple[str, str]]:
+    """Flatten `compounds[].molecules[]` into `molecule_id -> (source, revision)`.
+
+    Iterates compounds in manifest order; when the same molecule id appears
+    in more than one compound, the later compound's pin wins.
+    """
+    pins: dict[str, tuple[str, str]] = {}
+    for compound in manifest.compounds:
+        for molecule_id in compound.molecules:
+            pins[molecule_id] = (compound.source, compound.revision)
+    return pins
