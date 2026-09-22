@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import shutil
 import sys
 from collections.abc import Sequence
@@ -20,6 +19,7 @@ from tempfile import TemporaryDirectory
 
 from spaex.behavior import bootstrap
 from spaex.behavior import orchestrate as behavior_orchestrate
+from spaex.behavior.clauses import TracedClause, parse_clauses
 from spaex.behavior.composer.clarifications import CLARIFICATIONS_FILENAME
 from spaex.behavior.composer.invoke import COMPOSER_LOG_ENV, DEFAULT_COMPOSER_LOG
 from spaex.behavior.emit import read_header_hashes
@@ -307,62 +307,6 @@ def _report_constitution_build(outcome: behavior_orchestrate.BehaviorOutcome) ->
         )
 
 
-_MODALITY_ORDER: tuple[str, ...] = (
-    "MUST",
-    "MUST_NOT",
-    "SHOULD",
-    "SHOULD_NOT",
-    "MAY",
-    "MAY_NOT",
-)
-_SECTION_HEADER_RE = re.compile(r"^## (?P<modality>[A-Z_]+)\s*$")
-_CLAUSE_RE = re.compile(
-    r"^- (?P<text>.+?)\. _\[from (?P<provenance>`[^`]+`(?:, `[^`]+`)*)\]_$"
-)
-_PROVENANCE_ID_RE = re.compile(r"`([^`]+)`")
-
-
-@dataclass(frozen=True)
-class _TracedClause:
-    """One `.spaex/constitution.md` clause parsed for `spaex constitution trace`."""
-
-    modality: str
-    text: str
-    provenance: tuple[str, ...]
-
-
-def _parse_clauses(body: str) -> list[_TracedClause]:
-    """Parse every clause in a composed `.spaex/constitution.md` body.
-
-    Follows contracts/spaex-md-format.md's stable clause regex under each
-    `##` modality section header; lines outside a recognized section (the
-    title and italic notice lines) are ignored.
-    """
-    clauses: list[_TracedClause] = []
-    current_modality: str | None = None
-    for line in body.splitlines():
-        section_match = _SECTION_HEADER_RE.match(line)
-        if section_match and section_match.group("modality") in _MODALITY_ORDER:
-            current_modality = section_match.group("modality")
-            continue
-        if current_modality is None:
-            continue
-        clause_match = _CLAUSE_RE.match(line)
-        if clause_match is None:
-            continue
-        provenance = tuple(
-            _PROVENANCE_ID_RE.findall(clause_match.group("provenance"))
-        )
-        clauses.append(
-            _TracedClause(
-                modality=current_modality,
-                text=clause_match.group("text"),
-                provenance=provenance,
-            )
-        )
-    return clauses
-
-
 def run_constitution_trace(args: argparse.Namespace) -> int:
     """`spaex constitution trace <query>` (T056, FR-022,
     contracts/cli-surface.md §"spaex constitution trace").
@@ -389,7 +333,7 @@ def run_constitution_trace(args: argparse.Namespace) -> int:
         )
 
     body = spaex_md_path.read_text(encoding="utf-8")
-    clauses = _parse_clauses(body)
+    clauses = parse_clauses(body)
     scoped_ids = {scoped_id for clause in clauses for scoped_id in clause.provenance}
     fragment_ids = {
         scoped_id.split("/", 1)[1] for scoped_id in scoped_ids if "/" in scoped_id
@@ -423,7 +367,7 @@ def run_constitution_trace(args: argparse.Namespace) -> int:
 def _emit_trace_result(
     fmt: str,
     *,
-    matches: tuple[_TracedClause, ...],
+    matches: tuple[TracedClause, ...],
     error: str | None = None,
     molecule_pins: dict[str, tuple[str, str]] | None = None,
     repo_root: Path | None = None,
@@ -454,7 +398,7 @@ def _emit_trace_result(
 
 
 def _render_clause(
-    clause: _TracedClause,
+    clause: TracedClause,
     *,
     repo_root: Path,
     molecule_pins: dict[str, tuple[str, str]],
