@@ -198,6 +198,17 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    status = subparsers.add_parser(
+        "status",
+        help="summarize the repository's active spaex composition (Spec 028)",
+    )
+    status.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="output format (default: text)",
+    )
+
     from spaex.cli import add as add_cli
 
     add_parser = subparsers.add_parser(
@@ -269,6 +280,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             from spaex.cli import install as install_cli
 
             return install_cli.run(args)
+        if args.command == "status":
+            from spaex.cli import status as status_cli
+
+            return status_cli.run_status(args)
         if args.command == "add":
             from spaex.cli import add as add_cli
 

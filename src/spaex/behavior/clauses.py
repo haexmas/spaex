@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-_MODALITY_ORDER: tuple[str, ...] = (
+MODALITY_ORDER: tuple[str, ...] = (
     "MUST",
     "MUST_NOT",
     "SHOULD",
@@ -46,7 +46,7 @@ def parse_clauses(body: str) -> list[TracedClause]:
     current_modality: str | None = None
     for line in body.splitlines():
         section_match = _SECTION_HEADER_RE.match(line)
-        if section_match and section_match.group("modality") in _MODALITY_ORDER:
+        if section_match and section_match.group("modality") in MODALITY_ORDER:
             current_modality = section_match.group("modality")
             continue
         if current_modality is None:
