@@ -6,10 +6,9 @@
 
 **Target spaex versions**: originally 4.2.0 through 5.4.0 (see Phasing); indicative only, see the implementation status below. Skills externalization (Phase A) is a breaking change to the molecule ontology and drove the 5.0.0 MAJOR bump.
 
-**Implementation status (2026-09-21)**: Phase A is only partly delivered, Phases B-E have not been started, and the spec slots 019-022 are still unassigned (`specs/` has no directories for them).
+**Implementation status (2026-09-23)**: Phase A's molecule-side contract is implemented in PR [#172](https://github.com/haexmas/spaex/pull/172); its consumer-controlled installation half remains pending. Phases B-E have not been started, and the spec slots 019-022 are still unassigned (`specs/` has no directories for them).
 
-- **Phase A, shipped in 5.0.0 (PR [#123](https://github.com/haexmas/spaex/pull/123))**: the molecule side. `external_skills` structured references (repository, full revision SHA, repository-relative path) are part of the molecule manifest v4 schema, and the `skill` and `skills` atom categories are rejected there.
-- **Phase A, not shipped**: the consumer-controlled half that the 2026-09-14 clarification of [Spec 018](../../specs/018-skills-externalization/) introduced (Decision 2). The consumer manifest schema has no `skill_installation` policy and the CLI has no `spaex skills install`. `specs/018-skills-externalization/tasks.md` shows 2 of 21 tasks ticked although `tests/unit/test_external_skills_parser.py` exists, so its checkboxes lag behind the code. [ADR 0021](../adr/0021-external-skills-delegated-to-hooks.md) still records the earlier hook-based design, with the consumer-controlled amendment only proposed (PR [#125](https://github.com/haexmas/spaex/pull/125)).
+- **Phase A, molecule-side implemented in PR [#172](https://github.com/haexmas/spaex/pull/172)**: `external_skills` structured references (repository, full revision SHA, repository-relative path) are part of the molecule manifest v4 schema, and the `skill` and `skills` atom categories are rejected there. The consumer-controlled half remains pending: the consumer manifest schema has no `skill_installation` policy and the CLI has no `spaex skills install`. `specs/018-skills-externalization/tasks.md` records the 12 completed molecule-side tasks; User Story 3 and the final validation tasks remain open. [ADR 0021](../adr/0021-external-skills-delegated-to-hooks.md) records the accepted consumer-controlled decision.
 - **Landed outside this roadmap's phasing**: install hooks and the molecule store (Specs 016, 017; 4.1.0), the behavior harness (Spec 023) and the declarative Spec Kit integration installer (Spec 024) (4.2.0), forced multi-agent Spec Kit installs (4.3.0), map-reduce fragment composition (Spec 026) and generic atom-category delivery (Spec 027) (5.1.0), and release automation through release-please (PR [#155](https://github.com/haexmas/spaex/pull/155)).
 - **Version targets**: since release-please, the version follows the Conventional-Commit types on `main`. 5.0.0 and 5.1.0 were consumed by Phase A (partly) and by Specs 026 and 027, so the version numbers in the Phasing section below are historical; Phase B is the next candidate for a MINOR bump, not for a fixed number.
 - **File name**: this document says `.spaex.json`. The consumer manifest is `.spaex/manifest.json` today (schema v4); read `.spaex.json` below as that file.
@@ -17,9 +16,9 @@
 - **Phase B is mostly spent**: its behavior-fragment machinery shipped as Spec 023 (see the [behavior harness design](2026-09-10-behavior-harness-and-plugin-alignment-design.md)), and the presets are gone. What remains is the category cleanup of Decision 3, which Spec 027 partly overtook: non-behavior atom categories are now open-ended (any category name outside the reserved ones is delivered to repo-root paths and removed with its molecule). Decide whether a slot 019 is needed at all before running `/speckit-specify`. Phase C no longer depends on it.
 
 **Related**:
-- [Scope Realignment (2026-09-03)](2026-09-03-scope-realignment-design.md): Section "Agent Skills is a format standard, not a package manager" already found that skills.sh and agentskills.io own the skill distribution problem. This roadmap acts on that finding by removing skills from spaex/atoms entirely.
-- [Spec 016 install-hooks](2026-09-08-spec-016-molecule-install-hooks-design.md): The `install_hook` machinery is the natural carrier for "install these skills from skills.sh" as a molecule side effect (see Phase A).
-- Atoms publisher v4 (memory `atoms_publisher_v4`): current publishers of skill atoms (`graphify-first-authoring`, `speckit-session-hopper`) migrate out of atoms as part of Phase A.
+- [Scope Realignment (2026-09-03)](2026-09-03-scope-realignment-design.md): Section "Agent Skills is a format standard, not a package manager" already found that skills.sh and agentskills.io own the skill distribution problem. This roadmap acts on that finding by removing skills from spaex-delivered atom categories; their source may remain co-located in the publisher repository.
+- [Spec 016 install-hooks](2026-09-08-spec-016-molecule-install-hooks-design.md): The `install_hook` machinery remains available for unrelated provider side effects; it is not the external-skill installation mechanism.
+- Atoms publisher v4 (memory `atoms_publisher_v4`): current publishers of skill atoms (`graphify-first-authoring`, `speckit-session-hopper`) migrate their molecule declarations as part of Phase A; the source directories need not move.
 - DeepSeek Harness reference screenshots captured 2026-09-08 (session scratchpad, not committed).
 
 ---
@@ -155,7 +154,7 @@ Each phase corresponds to one Speckit spec. Phase A is a breaking change and dro
 
 | Phase | Slot | Status (2026-09-21) |
 |---|---|---|
-| A | 018 | Partly shipped (5.0.0): molecule-side `external_skills`; consumer-controlled installation not implemented |
+| A | 018 | Molecule-side `external_skills` implemented in PR #172; consumer-controlled installation not implemented |
 | B | 019 | Mostly spent: behavior fragments shipped as Spec 023, presets dropped; only the Decision 3 category cleanup remains, partly overtaken by Spec 027 |
 | C | 020 | Not started; next candidate, no longer gated by Phase B |
 | D | 021 | Not started; without the preset selector |
