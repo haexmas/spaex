@@ -102,10 +102,10 @@ Single existing project (`src/spaex/`, `tests/`), per plan.md's Project Structur
 
 ### Tests for User Story 3
 
-- [ ] T030 [P] [US3] Integration test in `tests/behavior/integration/test_status.py`: run `spaex status --format json` twice against an unchanged fixture repository, assert the two stdout captures are byte-identical (SC-004). Depends on T021.
-- [ ] T031 [P] [US3] Integration test in `tests/behavior/integration/test_trace_path.py`: run `spaex trace <path> --format json` twice against an unchanged fixture repository, assert byte-identical output (SC-004). Depends on T029.
-- [ ] T032 [P] [US3] Integration test covering both commands: assert neither command's JSON output contains an absolute path, a `~`-prefixed path, a timestamp-shaped string, or a host/user name, for representative fixtures already built in T021/T029 (FR-013). Depends on T021, T029.
-- [ ] T033 [P] [US3] Integration test covering both commands: assert every JSON output includes `"format_version": 1`, and that every list field data-model.md marks "Sorted" (`AtomGrouping`'s three lists, `ConstitutionSummary.contributing_molecules`/`.project_local_fragment_ids`, `CompositionReport.molecules`, `FileAttribution.matches`) is actually sorted in the rendered output (FR-013). Depends on T021, T029.
+- [x] T030 [P] [US3] Integration test in `tests/behavior/integration/test_status.py`: run `spaex status --format json` twice against an unchanged fixture repository, assert the two stdout captures are byte-identical (SC-004). Depends on T021.
+- [x] T031 [P] [US3] Integration test in `tests/behavior/integration/test_trace_path.py`: run `spaex trace <path> --format json` twice against an unchanged fixture repository, assert byte-identical output (SC-004). Depends on T029.
+- [x] T032 [P] [US3] Integration test covering both commands: assert neither command's JSON output contains an absolute path, a `~`-prefixed path, a timestamp-shaped string, or a host/user name, for representative fixtures already built in T021/T029 (FR-013). Depends on T021, T029.
+- [x] T033 [P] [US3] Integration test covering both commands: assert every JSON output includes `"format_version": 1`, and that every list field data-model.md marks "Sorted" (`AtomGrouping`'s three lists, `ConstitutionSummary.contributing_molecules`/`.project_local_fragment_ids`, `CompositionReport.molecules`, `FileAttribution.matches`) is actually sorted in the rendered output (FR-013). Depends on T021, T029.
 
 **Checkpoint**: Both commands' JSON determinism and portability guarantees are machine-verified, not just asserted in the contract.
 
