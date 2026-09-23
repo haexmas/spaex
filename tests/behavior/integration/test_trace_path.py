@@ -74,7 +74,7 @@ def test_single_owner_file_text(tmp_path: Path, capsys) -> None:
     assert "Path: flake.nix" in out
     assert "Owner:" in out
     assert f"com.example.atoms.nix-python@{_REV_NIX_PYTHON[:8]}" in out
-    assert "(pinned in .spaex/manifest.json)" in out
+    assert "(recorded in .spaex/install.lock)" in out
 
 
 def test_shared_constitution_path_text(tmp_path: Path, capsys) -> None:
@@ -113,6 +113,22 @@ def test_directory_query(tmp_path: Path, capsys) -> None:
     payload = json.loads(out)
     assert payload["kind"] == "directory"
     assert [m["path"] for m in payload["matches"]] == [".spaex/docs/one.md", ".spaex/docs/two.md"]
+
+
+def test_repository_root_queries_match_all_recorded_paths(tmp_path: Path, capsys) -> None:
+    repo = _make_fixture(tmp_path)
+
+    for query in (".", str(repo)):
+        rc = main(["--repo-root", str(repo), "trace", query, "--format", "json"])
+        out = capsys.readouterr().out
+        assert rc == 0, f"query {query!r} failed: {out}"
+        payload = json.loads(out)
+        assert payload["query"] == "."
+        assert payload["kind"] == "directory"
+        assert [match["path"] for match in payload["matches"]] == [
+            ".spaex/constitution.md",
+            "flake.nix",
+        ]
 
 
 def test_no_match_text(tmp_path: Path, capsys) -> None:
