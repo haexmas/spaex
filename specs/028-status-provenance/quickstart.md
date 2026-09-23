@@ -38,7 +38,7 @@ spaex trace flake.nix
 ```text
 Path: flake.nix
 Owner:
-  com.github.haexmas.atoms.nix-devshell-base@<revision> (pinned in .spaex/manifest.json)
+  com.github.haexmas.atoms.nix-devshell-base@<revision> (recorded in .spaex/install.lock)
 ```
 
 ```sh

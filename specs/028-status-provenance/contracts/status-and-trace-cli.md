@@ -106,7 +106,7 @@ A missing `.spaex/install.lock` (manifest present, nothing installed yet) is not
 ```text
 Path: flake.nix
 Owner:
-  com.github.haexmas.atoms.nix-python@a1b2c3d4 (pinned in .spaex/manifest.json)
+  com.github.haexmas.atoms.nix-python@a1b2c3d4 (recorded in .spaex/install.lock)
 ```
 
 **Sample output** (`--format text`, shared path):
