@@ -110,11 +110,11 @@ references.
 
 ### Tests for User Story 3
 
-- [ ] T014 [P] [US3] Add consumer-manifest contract tests in
+- [x] T014 [P] [US3] Add consumer-manifest contract tests in
   `tests/contract/test_consumer_manifest_skill_installation.py` for policy
   modes, required managed fields, adapter/scope/agent validation, unknown fields,
   and absent-policy behavior.
-- [ ] T015 [US3] Add CLI integration tests in
+- [x] T015 [US3] Add CLI integration tests in
   `tests/integration/test_skill_installation_commands.py` proving that normal
   `spaex install` reports pending references without installing and that the
   explicit command persists the consumer policy. Cover disabled mode, prompt
@@ -123,17 +123,17 @@ references.
 
 ### Implementation for User Story 3
 
-- [ ] T016 [US3] Extend `src/spaex/schema/data/consumer-manifest.v4.schema.json`
+- [x] T016 [US3] Extend `src/spaex/schema/data/consumer-manifest.v4.schema.json`
   and `src/spaex/model/consumer_manifest.py` with the consumer-owned
   `skill_installation` policy.
-- [ ] T017 [US3] Add explicit `spaex skills install` and
+- [x] T017 [US3] Add explicit `spaex skills install` and
   `spaex skills configure` command handling in `src/spaex/cli/skills.py`;
   first install prompts only in an interactive session and later configuration
   changes do not remove installed skills implicitly.
-- [ ] T018 [US3] Add a consumer-selected adapter boundary in
+- [x] T018 [US3] Add a consumer-selected adapter boundary in
   `src/spaex/skills/installer.py`; keep `skillsmd`, the Vercel CLI, and manual
   installation as adapter choices rather than provider behavior.
-- [ ] T019 [US3] Pass `SPAEX_MOLECULE_MANIFEST` to the selected adapter in
+- [x] T019 [US3] Pass `SPAEX_MOLECULE_MANIFEST` to the selected adapter in
   `src/spaex/skills/installer.py`, pointing to the original pinned manifest.
   Test this in `tests/integration/test_skill_installation_commands.py` without
   a serialized reference copy. Preserve unrelated Spec 016 hook behavior.
@@ -145,16 +145,37 @@ the real adapter command remains a consumer-selected choice.
 
 **Purpose**: Validate the clarified design and leave the task state accurate.
 
-- [ ] T020 [P] Update `specs/018-skills-externalization/checklists/requirements.md`
+- [x] T020 [P] Update `specs/018-skills-externalization/checklists/requirements.md`
   and `specs/018-skills-externalization/quickstart.md` with the final
   structured-reference and manifest-path acceptance evidence.
-- [ ] T021 Run focused contract, parser, skill-command, and integration tests;
+- [x] T021 Run focused contract, parser, skill-command, and integration tests;
   then run the full pytest suite, Ruff, mypy, and `git diff --check`. Record
   the exact evidence in this file before marking the tasks complete.
-- [ ] T022 Review the final diff against `.spaex/constitution.md` and
+- [x] T022 Review the final diff against `.spaex/constitution.md` and
   `.specify/memory/constitution.md`, confirm no new runtime registry
   dependency was introduced, and update `specs/018-skills-externalization/tasks.md`
   checkboxes in the same commit as each completed task.
+
+## User Story 3 validation evidence (2026-09-23)
+
+- `uv run pytest -q tests/contract/test_consumer_manifest_skill_installation.py`:
+  24 passed.
+- `uv run pytest -q tests/integration/test_skill_installation_commands.py`:
+  13 passed.
+- `uv run pytest -q` (full suite): 831 passed, 1 skipped, 5 deselected.
+- `uv run ruff check .`: passed.
+- `uv run mypy src`: passed (88 source files).
+- `git diff --check`: passed.
+- Constitution review: `.specify/memory/constitution.md` Principles I-V are
+  satisfied (spec/plan/tasks/contracts stay consistent; every task maps to an
+  executable test). `.spaex/constitution.md`'s composed MUST/SHOULD clauses
+  were checked against the diff; none is contradicted. No new runtime
+  dependency was added: `src/spaex/skills/installer.py` and
+  `src/spaex/cli/skills.py` use only the Python standard library and existing
+  spaex internals (no registry client, no Node/uv/skillsmd dependency).
+- Repository-wide `uv run ruff format --check .` still reformats files
+  unrelated to this change (same pre-existing condition recorded in the
+  Phase 2-4 review, PR #125); no unrelated formatting applied here either.
 
 ## Dependencies and execution order
 

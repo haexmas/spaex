@@ -240,6 +240,23 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     remove_cli.add_arguments(remove_parser)
 
+    skills = subparsers.add_parser(
+        "skills",
+        help="consumer-controlled external skill installation (Spec 018)",
+    )
+    skills_sub = skills.add_subparsers(dest="skills_command", required=True)
+    skills_sub.add_parser(
+        "install",
+        help=(
+            "activate the persisted skill_installation policy, prompting once "
+            "if none is persisted; never invoked by normal `spaex install`"
+        ),
+    )
+    skills_sub.add_parser(
+        "configure",
+        help="change the persisted skill_installation policy without installing",
+    )
+
     return parser
 
 
@@ -311,6 +328,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             from spaex.cli import remove as remove_cli
 
             return remove_cli.run(args)
+        if args.command == "skills":
+            from spaex.cli import skills as skills_cli
+
+            if args.skills_command == "install":
+                return skills_cli.run_install(args)
+            if args.skills_command == "configure":
+                return skills_cli.run_configure(args)
     except HaexError as exc:
         emit_refuse(exc)
         return exc.exit_code

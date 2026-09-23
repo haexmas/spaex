@@ -14,6 +14,8 @@ spaex composes a coding harness for a single repo out of reusable pieces (MCPs, 
 - `spaex constitution show`: print the effective spaex constitution to stdout, assembled from adopted molecules per `install.lock`.
 - `spaex status`: summarize the repository's active composition — every pinned/installed molecule, what its atoms materialized into, the composed constitution, and any drift between the manifest, the install lock, and the constitution. Read-only.
 - `spaex trace <path>`: print which molecule(s) wrote a given file, or every recorded file under a directory. Read-only.
+- `spaex skills install`: activate the consumer's `skill_installation` policy for pending `external_skills` references, prompting once (interactively) if none is persisted yet, then running the selected adapter. `spaex install` never does this on its own.
+- `spaex skills configure`: change the persisted `skill_installation` policy (mode, adapter, scope, agents) without installing anything or removing already-installed skills.
 
 ## Molecule install-hooks
 
@@ -105,12 +107,14 @@ No `install_hook` is required or used for skill installation.
 ```
 
 Normal `spaex install` never installs or materializes a referenced skill; its
-structured declaration remains in the pinned molecule manifest as metadata.
-Installation is a separate, explicit,
-consumer-selected operation — see the
-[Spec 018 design](specs/018-skills-externalization/spec.md) for the planned
-`spaex skills install` / `spaex skills configure` commands and the consumer's
-`skill_installation` policy, which are not implemented yet.
+structured declaration remains in the pinned molecule manifest as metadata,
+reported as pending. Installation is a separate, explicit, consumer-selected
+operation: run `spaex skills install` to choose a mode, adapter, scope, and
+agents (persisted under `skill_installation` in `.spaex/manifest.json`) and
+invoke the adapter, or `spaex skills configure` to change that policy without
+installing. See the [Spec 018 design](specs/018-skills-externalization/spec.md)
+and its [consumer policy contract](specs/018-skills-externalization/contracts/consumer-manifest-skill-installation.v1.md)
+for the full command and policy semantics.
 
 After `spaex install` completes, `.spaex/install.lock` is present and byte-identical across two consecutive runs.
 

@@ -1,6 +1,6 @@
 # ADR 0021: Delegate external skill installation to consumer-selected adapters
 
-**Status**: Accepted; molecule-side contract implemented in PR #172, consumer-controlled installation remains pending
+**Status**: Accepted and implemented: molecule-side contract in PR #172, consumer-controlled `skill_installation` policy and `spaex skills install`/`configure` commands in the follow-on change
 **Date**: 2026-09-14
 
 ## Context

@@ -31,6 +31,19 @@ Implementation tasks remain open in `tasks.md`.
 ## Review gate
 
 - [x] The clarified design and review fixes are submitted through PR #125.
-- [ ] Operator reviews and merges the clarified design before implementation.
-- [ ] The structured schema/model, policy, and command implementation follows
-  in a separate change; it is not included in this design-only PR.
+- [x] Operator reviews and merges the clarified design before implementation.
+- [x] The structured schema/model (PR #172) and the consumer policy, adapter
+  boundary, and `spaex skills install`/`configure` commands (this change)
+  land as separate implementation changes, not the design-only PR.
+
+## Runtime evidence (User Story 3)
+
+- [x] `skill_installation` policy modes, required-field, and identifier
+  validation are covered in
+  `tests/contract/test_consumer_manifest_skill_installation.py`.
+- [x] `spaex install` reports pending `external_skills` without installing
+  or persisting a policy (`tests/integration/test_skill_installation_commands.py`).
+- [x] `spaex skills install`/`configure` cover disabled mode, prompt
+  cancellation/EOF, non-interactive refusal, managed execution (including
+  `SPAEX_MOLECULE_MANIFEST` content), persistence failure before adapter
+  launch, configure without removal, and adapter failure.

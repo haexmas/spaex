@@ -48,6 +48,10 @@
         }
       },
       "description": "Spec 023 project-local additions to the composed constitution."
+    },
+    "skill_installation": {
+      "$ref": "#/$defs/skillInstallationPolicy",
+      "description": "Spec 018 consumer-owned policy for the explicit `spaex skills install`/`spaex skills configure` commands. Never read from or defaulted by provider molecule manifests."
     }
   },
   "$defs": {
@@ -171,6 +175,47 @@
       "oneOf": [
         { "$ref": "#/$defs/inlineLocalFragment" },
         { "$ref": "#/$defs/fileReferenceLocalFragment" }
+      ]
+    },
+    "skillIdentifier": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?=.*\\S)[^\\u0000-\\u001F\\u007F\\r\\n]+$",
+      "description": "Non-blank consumer-chosen identifier without control characters."
+    },
+    "skillInstallationPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": {
+          "enum": ["prompt", "managed", "disabled"],
+          "description": "Consumer-owned installation mode."
+        },
+        "adapter": {
+          "$ref": "#/$defs/skillIdentifier",
+          "description": "Consumer-selected installer identifier. Not read from provider molecule manifests."
+        },
+        "scope": {
+          "enum": ["project", "global"],
+          "description": "Consumer-selected installation scope."
+        },
+        "agents": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/skillIdentifier" },
+          "description": "Consumer-selected target agent identifiers."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "mode": { "const": "managed" } },
+            "required": ["mode"]
+          },
+          "then": { "required": ["adapter", "scope", "agents"] }
+        }
       ]
     }
   }

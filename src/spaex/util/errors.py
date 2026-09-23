@@ -443,3 +443,36 @@ class ManifestRollbackFailedError(HaexError):
     hint: str = (
         "Restore `.spaex/manifest.json` from version control, then run `spaex install` again."
     )
+
+
+# --- Spec 018 US3: consumer-controlled skill installation -------------------
+
+
+@dataclass
+class SkillInstallationCancelledError(HaexError):
+    diagnostic_key: str = "skill-installation-cancelled"
+    exit_code: int = exit_codes.INPUT_REFUSE
+    hint: str = "Re-run `spaex skills install` or `spaex skills configure` and answer every prompt."
+
+
+@dataclass
+class SkillInstallationPersistError(HaexError):
+    diagnostic_key: str = "skill-installation-persist-failed"
+    exit_code: int = exit_codes.IO_REFUSE
+    hint: str = "Check `.spaex/manifest.json` permissions and retry; no adapter was invoked."
+
+
+@dataclass
+class SkillAdapterUnavailableError(HaexError):
+    diagnostic_key: str = "skill-adapter-unavailable"
+    exit_code: int = exit_codes.INPUT_REFUSE
+    hint: str = (
+        "Install the configured adapter on PATH, or `spaex skills configure` a different one."
+    )
+
+
+@dataclass
+class SkillAdapterFailedError(HaexError):
+    diagnostic_key: str = "skill-adapter-failed"
+    exit_code: int = exit_codes.INPUT_REFUSE
+    hint: str = "The adapter exited with an error; atom files and install.lock are unaffected."

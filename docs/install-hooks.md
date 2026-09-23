@@ -7,10 +7,10 @@ A molecule may declare an optional `install_hook` in its `manifest.json`. `spaex
 
 External skill installation is separate from this hook lifecycle. Structured
 `external_skills` references are metadata only; they do not require a hook and
-are not materialized during normal installation. The future explicit
-consumer-selected adapter will receive `SPAEX_MOLECULE_MANIFEST` when the
-skill-management commands are implemented. Unrelated provider hooks retain
-the execution and failure semantics documented below.
+are not materialized during normal installation. The consumer-selected
+adapter, run through `spaex skills install`/`spaex skills configure`
+(Spec 018 US3), receives `SPAEX_MOLECULE_MANIFEST` instead. Unrelated
+provider hooks retain the execution and failure semantics documented below.
 
 ## Declaring a hook
 

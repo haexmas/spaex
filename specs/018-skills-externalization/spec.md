@@ -2,7 +2,7 @@
 
 **Feature Branch**: `018-skills-externalization`
 **Created**: 2026-09-14
-**Status**: Draft — awaiting operator review
+**Status**: Implemented (reviewed and accepted via PR #125; molecule-side contract in PR #172; consumer-controlled policy and commands in the follow-on change)
 **Input**: Phase A of the composition UI and skills externalization roadmap
 
 ## Clarifications
