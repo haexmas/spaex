@@ -7,7 +7,10 @@ fixtures are hand-written, mirroring `test_provenance_trace.py`'s style.
 
 from __future__ import annotations
 
+import getpass
 import json
+import re
+import socket
 from pathlib import Path
 
 from spaex.cli.main import main
@@ -193,3 +196,59 @@ def test_json_format_shape(tmp_path: Path, capsys) -> None:
         "source": _SOURCE,
         "revision": _REV_NIX_PYTHON,
     }
+
+
+def test_trace_json_is_byte_identical_across_runs(tmp_path: Path, capsys) -> None:
+    """SC-004: `--format json` is a deterministic, reproducible contract."""
+    repo = _make_fixture(tmp_path)
+
+    main(["--repo-root", str(repo), "trace", "flake.nix", "--format", "json"])
+    first = capsys.readouterr().out
+    main(["--repo-root", str(repo), "trace", "flake.nix", "--format", "json"])
+    second = capsys.readouterr().out
+
+    assert first == second
+
+
+def test_trace_json_has_no_machine_specific_values(tmp_path: Path, capsys) -> None:
+    """FR-013: no absolute path, `~`-path, timestamp, or host/user name leaks."""
+    repo = _make_fixture(tmp_path)
+
+    main(["--repo-root", str(repo), "trace", ".spaex/constitution.md", "--format", "json"])
+    out = capsys.readouterr().out
+
+    assert str(repo) not in out
+    assert "~" not in out
+    assert not re.search(r"\d{4}-\d{2}-\d{2}", out)
+    assert not re.search(r"\d{8}T\d{6}Z", out)
+    assert socket.gethostname() not in out
+    assert getpass.getuser() not in out
+
+
+def test_trace_json_is_versioned_and_matches_sorted_by_path(tmp_path: Path, capsys) -> None:
+    """FR-013: `format_version` is present and a directory query's matches are sorted."""
+    repo = tmp_path / "consumer"
+    repo.mkdir()
+    _write_manifest(repo)
+    lock = InstallLock(
+        "4",
+        "g_20260101T000000Z_0000",
+        (
+            MoleculeEntry(
+                id="com.example.atoms.docs",
+                source=_SOURCE,
+                revision=_REV_NIX_PYTHON,
+                paths=(".spaex/docs/one.md", ".spaex/docs/two.md", ".spaex/docs/zzz.md"),
+            ),
+        ),
+    )
+    (repo / ".spaex/install.lock").write_bytes(lock.to_json_bytes())
+
+    rc = main(["--repo-root", str(repo), "trace", ".spaex/docs", "--format", "json"])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    payload = json.loads(out)
+    assert payload["format_version"] == 1
+    paths = [m["path"] for m in payload["matches"]]
+    assert paths == sorted(paths)

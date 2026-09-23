@@ -8,7 +8,10 @@ mirroring `test_provenance_trace.py`'s style.
 
 from __future__ import annotations
 
+import getpass
 import json
+import re
+import socket
 from dataclasses import replace
 from pathlib import Path
 
@@ -345,3 +348,54 @@ def test_status_empty_atom_buckets_reported_explicitly(tmp_path: Path, capsys) -
         "composed_artifacts": [],
         "files": [],
     }
+
+
+def test_status_json_is_byte_identical_across_runs(tmp_path: Path, capsys) -> None:
+    """SC-004: `--format json` is a deterministic, reproducible contract."""
+    repo = _make_full_fixture(tmp_path)
+
+    main(["--repo-root", str(repo), "status", "--format", "json"])
+    first = capsys.readouterr().out
+    main(["--repo-root", str(repo), "status", "--format", "json"])
+    second = capsys.readouterr().out
+
+    assert first == second
+
+
+def test_status_json_has_no_machine_specific_values(tmp_path: Path, capsys) -> None:
+    """FR-013: no absolute path, `~`-path, timestamp, or host/user name leaks."""
+    repo = _make_full_fixture(tmp_path)
+
+    main(["--repo-root", str(repo), "status", "--format", "json"])
+    out = capsys.readouterr().out
+
+    assert str(repo) not in out
+    assert "~" not in out
+    assert not re.search(r"\d{4}-\d{2}-\d{2}", out)
+    assert not re.search(r"\d{8}T\d{6}Z", out)
+    assert socket.gethostname() not in out
+    assert getpass.getuser() not in out
+
+
+def test_status_json_is_versioned_and_sorted(tmp_path: Path, capsys) -> None:
+    """FR-013: `format_version` is present and every documented list is sorted."""
+    repo = _make_full_fixture(tmp_path)
+
+    main(["--repo-root", str(repo), "status", "--format", "json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["format_version"] == 1
+
+    molecule_ids = [m["molecule_id"] for m in payload["molecules"]]
+    assert molecule_ids == sorted(molecule_ids)
+    for molecule in payload["molecules"]:
+        atoms = molecule["atoms"]
+        assert atoms["behavior_fragments"] == sorted(atoms["behavior_fragments"])
+        assert atoms["composed_artifacts"] == sorted(atoms["composed_artifacts"])
+        assert atoms["files"] == sorted(atoms["files"])
+
+    constitution = payload["constitution"]
+    assert constitution["contributing_molecules"] == sorted(constitution["contributing_molecules"])
+    assert constitution["project_local_fragment_ids"] == sorted(
+        constitution["project_local_fragment_ids"]
+    )
