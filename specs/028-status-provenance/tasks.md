@@ -132,7 +132,7 @@ Single existing project (`src/spaex/`, `tests/`), per plan.md's Project Structur
 - [x] T037 [P] Fix the stale `SYSTEM_REFUSE` (5) comment in `src/spaex/util/exit_codes.py` (claims "missing `.spaex/manifest.json` or version mismatch") to match actual usage (`VersionBelowMinError`'s `spaex_min_version` gate and `SpeckitCliMissingError`), discovered while resolving research.md R7. Comment-only change; no behavior change.
 - [x] T038 [P] Add `spaex status` and `spaex trace <path>` to README.md's "What you can do today" bullet list, matching its existing one-line-per-command style.
 - [x] T039 Run quickstart.md's walkthrough end-to-end against the built implementation in a scratch repository; confirm every command and every assertion in it matches.
-- [x] T040 Run the project's formatter, linter (`ruff`), type checker (`mypy`), and the full test suite; confirm SC-001 (`spaex status` completes in under 5 seconds on this repository's 9 molecules) by timing a real run.
+- [x] T040 Run the project's formatter, linter (`ruff`), type checker (`mypy`), and the full test suite; confirm SC-001 (`spaex status` completes in under 5 seconds on this repository's current 8-molecule composition) by timing a real run.
 
 ---
 
