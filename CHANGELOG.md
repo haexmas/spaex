@@ -1,5 +1,35 @@
 # Changelog
 
+## [5.2.0](https://github.com/haexmas/spaex/compare/v5.1.2...v5.2.0) (2026-09-23)
+
+
+### Features
+
+* **spec-018:** consumer-controlled skill_installation and spaex skills commands ([ff2277f](https://github.com/haexmas/spaex/commit/ff2277fbcb6cda14cc7f56e0366f473be09c3342))
+* **spec-018:** structured external skill references (Phases 2-4) ([422718b](https://github.com/haexmas/spaex/commit/422718ba2f9df50fa7d89e14cf372652070dbfe9))
+* **spec-028:** foundational pin-flattening, path-ownership and generation-consistency helpers ([78070c8](https://github.com/haexmas/spaex/commit/78070c8aad65cde1989e700e0176d1926c1d9b3b))
+* **spec-028:** implement spaex status (Phase 3, User Story 1) ([5793fd8](https://github.com/haexmas/spaex/commit/5793fd863754edc07cc96d83d1c450817cad6100))
+* **spec-028:** implement spaex trace path resolution and CLI (T023-T028) ([9c3b541](https://github.com/haexmas/spaex/commit/9c3b541cd060a47fe2d589d28fdbf283e6015ae0))
+* **spec-028:** populate spaex status drift detection (Phase 6, US4) ([fa990e4](https://github.com/haexmas/spaex/commit/fa990e4f8201b68b8818f8b3a55fc788cc7354bf))
+
+
+### Bug Fixes
+
+* **ci:** keep uv lockfile synchronized ([4b487f1](https://github.com/haexmas/spaex/commit/4b487f1d26f3e28d0282b71c7ba8aa170a899d0b))
+* **spec-028:** address status review findings ([578a754](https://github.com/haexmas/spaex/commit/578a75489275f5228c7199ead018965f6bd4ede5))
+* **spec-028:** address trace review findings ([ab93759](https://github.com/haexmas/spaex/commit/ab9375982679a721d87773bea6e8c32b3859c6c1))
+
+
+### Documentation
+
+* add docstrings to behavior trace, install lock, and test helpers ([eb57e74](https://github.com/haexmas/spaex/commit/eb57e748b4ce75e454cdf866923dc1fe8ebe2320))
+* close roadmap Phase B without a spec, record Phase C's actual spec number ([f193576](https://github.com/haexmas/spaex/commit/f1935768e8f8cbab0e73444200925738af8e7ff5))
+* remove roadmap Phase E, no longer wait for Phase D to decide ([2366d92](https://github.com/haexmas/spaex/commit/2366d9251029fe2bd5ce7d0eb5bf3bbdecc017ae))
+* **spec-018:** align external skill documentation ([2c84eee](https://github.com/haexmas/spaex/commit/2c84eeea05b3261a7bb3cdc3208198d8bf4b6452))
+* **spec-028:** address PR review findings ([7ce56bd](https://github.com/haexmas/spaex/commit/7ce56bdb0f03d151e0cae55c1311a402a71998c0))
+* **spec-028:** polish and close out composition status and provenance query ([5795844](https://github.com/haexmas/spaex/commit/579584434202d8c6416cc78adcf77bd28ed34776))
+* **spec-028:** spec, plan, and tasks for composition status and provenance query ([269a6e1](https://github.com/haexmas/spaex/commit/269a6e14c270470f6c1e398a123a41b4de790386))
+
 ## [5.1.2](https://github.com/haexmas/spaex/compare/v5.1.1...v5.1.2) (2026-09-21)
 
 
