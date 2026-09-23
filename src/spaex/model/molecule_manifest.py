@@ -5,7 +5,10 @@ replaced by the v3 `atoms` category map: category name -> non-empty list of
 molecule-directory-relative delivered files. No delivered path may appear in
 more than one category (data-model.md "Cross-category path overlap is
 refused"); a violation refuses with `atoms-category-overlap`. External skill
-references live in `external_skills` and are not delivered file paths.
+references live in `external_skills` as structured
+(repository, revision, path) metadata (Spec 018) and are not delivered file
+paths; they require no `install_hook` and are installed only through an
+explicit, consumer-selected `spaex skills install` adapter.
 """
 
 from __future__ import annotations
@@ -25,6 +28,20 @@ from spaex.util.errors import MoleculeAtomsCategoryOverlapError
 
 class SpeckitDeclarationParseError(ValueError):
     """A structurally valid manifest with an invalid Spec Kit declaration."""
+
+
+@dataclass(frozen=True)
+class ExternalSkillReference:
+    """A provider-declared Agent Skill source (Spec 018), metadata only.
+
+    Never a delivered file path: not materialized by spaex and never added
+    to `install.lock`. Installation is a separate, explicit consumer-selected
+    operation (`spaex skills install`); the reference carries no installer.
+    """
+
+    repository: str
+    revision: str
+    path: str
 
 
 @dataclass(frozen=True)
@@ -65,7 +82,7 @@ class MoleculeManifest:
     version: str
     priority: int
     atoms: Mapping[str, tuple[str, ...]]
-    external_skills: tuple[str, ...] = ()
+    external_skills: tuple[ExternalSkillReference, ...] = ()
     defaults: Mapping[str, Any] = field(default_factory=dict)
     config_schema: str | None = None
     install_hook: InstallHook | None = None
@@ -108,11 +125,7 @@ class MoleculeManifest:
             )
 
         install_hook = _parse_install_hook(data.get("install_hook"))
-        external_skills = tuple(data.get("external_skills", ()))
-        if external_skills and install_hook is None:
-            raise ValueError(
-                f"molecule {data['id']!r} external_skills requires install_hook"
-            )
+        external_skills = _parse_external_skills(data.get("external_skills", ()))
         speckit = _parse_speckit(data.get("speckit"))
 
         constitution_fragments = _freeze_constitution_fragments(
@@ -145,6 +158,26 @@ def _parse_install_hook(raw: Any) -> InstallHook | None:
         args=tuple(args_raw),
         on_failure=raw.get("on_failure", "abort"),
     )
+
+
+def _parse_external_skills(raw: Any) -> tuple[ExternalSkillReference, ...]:
+    """Parse structured external skill references (Spec 018), preserving order.
+
+    `path` is validated the same way as a delivered atom path
+    (`RepoRelativePath`), even though it is never materialized: it is still a
+    repository-relative path into the referenced source tree.
+    """
+    references: list[ExternalSkillReference] = []
+    for entry in raw:
+        RepoRelativePath.validate(entry["path"])
+        references.append(
+            ExternalSkillReference(
+                repository=entry["repository"],
+                revision=entry["revision"],
+                path=entry["path"],
+            )
+        )
+    return tuple(references)
 
 
 def _parse_speckit(raw: Any) -> SpeckitDeclaration | None:

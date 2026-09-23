@@ -1,6 +1,6 @@
 # spaex — reproducible coding harnesses for any repo and development environment
 
-**Status**: `5.0.0` (external skills remain standard skill content but are delegated to upstream installers through molecule hooks; see [Spec 018](specs/018-skills-externalization/)). Portmanteau of `spec` and `haex`. See [docs/adr/0011-rename-to-spaex.md](docs/adr/0011-rename-to-spaex.md) for the rename decision and [specs/014-rename-to-spaex/](specs/014-rename-to-spaex/) for the full spec.
+**Status**: `5.0.0` (external skills remain standard skill content, declared as structured `external_skills` metadata and installed through an explicit consumer-selected adapter, not a molecule hook; see [Spec 018](specs/018-skills-externalization/)). Portmanteau of `spec` and `haex`. See [docs/adr/0011-rename-to-spaex.md](docs/adr/0011-rename-to-spaex.md) for the rename decision and [specs/014-rename-to-spaex/](specs/014-rename-to-spaex/) for the full spec.
 
 ## What it is
 
@@ -23,7 +23,7 @@ A molecule may declare an optional `install_hook` in its `manifest.json`. `spaex
 
 The v4 molecule-manifest schema treats `atoms{}` as an open `Dict[str, List[str]]` map. Publishers pick category names by convention. Common categories today: `behavior`, `slash_commands`, `agents`, `mcps`. The legacy `constitution` category remains readable for older molecules but is not the canonical way to contribute policy.
 
-**Environment-config files** (`flake.nix`, `Dockerfile`, `devcontainer.json`, `.envrc`, `shell.nix`, etc.) can be declared under any category name a publisher chooses. The retired `skill` and `skills` categories are the one exception: a skill may still live in the publisher repository, but is declared as an `external_skills` reference and installed by the molecule's `install_hook`. Spec 014 makes no other naming commitment here; multi-environment vocabulary (dev/staging/prod), consumer-side selection, and orchestration verbs are the scope of Spec 015 (planned; see [docs/plans/2026-09-07-slot-015-multi-environment-placeholder.md](docs/plans/2026-09-07-slot-015-multi-environment-placeholder.md)).
+**Environment-config files** (`flake.nix`, `Dockerfile`, `devcontainer.json`, `.envrc`, `shell.nix`, etc.) can be declared under any category name a publisher chooses. The retired `skill` and `skills` categories are the one exception: a skill may still live in the publisher repository, but is declared as a structured `external_skills` reference and installed only through an explicit, consumer-selected adapter (`spaex skills install`), never a molecule `install_hook`. Spec 014 makes no other naming commitment here; multi-environment vocabulary (dev/staging/prod), consumer-side selection, and orchestration verbs are the scope of Spec 015 (planned; see [docs/plans/2026-09-07-slot-015-multi-environment-placeholder.md](docs/plans/2026-09-07-slot-015-multi-environment-placeholder.md)).
 
 ### Activating an adopted Nix devShell
 
@@ -89,12 +89,27 @@ runtime dependencies.
 
 Molecules may keep standard `SKILL.md` directories in the publisher
 repository, including `haexmas/atoms`. They are not copied by spaex's atom
-materializer. The current `5.0.0` implementation uses opaque `external_skills` references
-and molecule hooks. The [Spec 018 design update](specs/018-skills-externalization/spec.md)
-proposes structured source metadata and explicit `spaex skills install` /
-`spaex skills configure` commands with consumer-selected installer, agent, and
-scope. Those commands and the `skill_installation` policy are not implemented
-yet; the update is documentation-only.
+materializer. A molecule declares them as structured `external_skills`
+metadata: a repository, a full 40-character revision SHA, and a
+repository-relative skill path (co-located with the molecule or elsewhere).
+No `install_hook` is required or used for skill installation.
+
+```json
+"external_skills": [
+  {
+    "repository": "https://github.com/haexmas/atoms",
+    "revision": "0123456789abcdef0123456789abcdef01234567",
+    "path": "skills/example-skill"
+  }
+]
+```
+
+Normal `spaex install` never installs a referenced skill; it only records the
+reference as metadata. Installation is a separate, explicit,
+consumer-selected operation — see the
+[Spec 018 design](specs/018-skills-externalization/spec.md) for the planned
+`spaex skills install` / `spaex skills configure` commands and the consumer's
+`skill_installation` policy, which are not implemented yet.
 
 After `spaex install` completes, `.spaex/install.lock` is present and byte-identical across two consecutive runs.
 

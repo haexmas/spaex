@@ -44,14 +44,23 @@
       "minItems": 1,
       "uniqueItems": true,
       "items": {
-        "type": "string",
-        "minLength": 1,
-        "allOf": [
-          { "pattern": "^[^\\u0000-\\u001F\\u007F\\r\\n]+$" },
-          { "pattern": ".*\\S.*" }
-        ]
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["repository", "revision", "path"],
+        "properties": {
+          "repository": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?=.*\\S)[^\\u0000-\\u001F\\u007F\\r\\n]+$"
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "path": { "$ref": "#/$defs/repoRelativePath" }
+        }
       },
-      "description": "Opaque skills.sh or agentskills.io references. These are metadata, not delivered file paths; a molecule declaring them must provide an install_hook that delegates to the upstream installer."
+      "description": "Structured external Agent Skill references (repository, full revision SHA, repository-relative path). Metadata only, not delivered file paths and never materialized or added to install.lock. No install_hook requirement; installation is a separate, explicit consumer-selected operation (spaex skills install), not a provider-selected one."
     },
     "defaults": {
       "type": "object",
@@ -156,15 +165,6 @@
           { "required": ["install_hook"] }
         ]
       }
-    },
-    {
-      "if": {
-        "required": ["external_skills"],
-        "properties": {
-          "external_skills": { "minItems": 1 }
-        }
-      },
-      "then": { "required": ["install_hook"] }
     }
   ],
   "$defs": {
