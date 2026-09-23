@@ -65,6 +65,7 @@ from spaex.paths import (
     composed_constitution_path,
     manifest_path,
 )
+from spaex.skills.installer import pending_external_skill_molecules
 from spaex.util import exit_codes
 from spaex.util.errors import ConstitutionAlreadyAdoptedError, HaexError
 
@@ -94,6 +95,21 @@ def _load_consumer_manifest(repo_root: Path) -> ConsumerManifest:
                 "Repair `.spaex/manifest.json` and retry."
             ),
         ) from exc
+
+
+def _report_pending_external_skills(resolved: Sequence[ResolvedMolecule]) -> None:
+    """FR-011: report `external_skills` as pending; never install them here."""
+    pending = pending_external_skill_molecules(resolved)
+    if not pending:
+        return
+    count = 0
+    for record in pending:
+        assert record.molecule_manifest is not None
+        count += len(record.molecule_manifest.external_skills)
+    sys.stdout.write(
+        f"{count} external skill reference(s) pending across {len(pending)} molecule(s); "
+        "run `spaex skills install` to install them\n"
+    )
 
 
 def _live_generation_id(repo_root: Path) -> str | None:
@@ -249,6 +265,7 @@ def run(
                 repo_root, getattr(manifest, "local_fragments", ())
             )
             contributions, resolved = resolve_install_inputs(manifest, state_root)
+            _report_pending_external_skills(resolved)
             delivered_files = collect_exclusive_atoms(resolved, repo_root=repo_root)
             composed_packages = compose_nix_packages(collect_package_fragments(resolved))
             extra_spaex_files = (

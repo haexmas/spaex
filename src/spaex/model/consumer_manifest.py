@@ -39,6 +39,20 @@ class CompoundEntry:
 
 
 @dataclass(frozen=True)
+class SkillInstallationPolicy:
+    """Spec 018 consumer-owned `skill_installation` policy.
+
+    Never derived from provider molecule manifests; see
+    contracts/consumer-manifest-skill-installation.v1.md.
+    """
+
+    mode: str
+    adapter: str | None = None
+    scope: str | None = None
+    agents: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class ConsumerManifest:
     spaex_version: str
     identity: str
@@ -48,6 +62,7 @@ class ConsumerManifest:
     active_feature: str | None = None
     identity_note: str | None = None
     local_fragments: tuple[Mapping[str, Any], ...] = ()
+    skill_installation: SkillInstallationPolicy | None = None
 
     @staticmethod
     def from_json(raw: bytes) -> ConsumerManifest:
@@ -113,6 +128,16 @@ class ConsumerManifest:
             for entry in data.get("constitution", {}).get("local_fragments", [])
         )
 
+        skill_installation = None
+        if "skill_installation" in data:
+            raw_policy = data["skill_installation"]
+            skill_installation = SkillInstallationPolicy(
+                mode=raw_policy["mode"],
+                adapter=raw_policy.get("adapter"),
+                scope=raw_policy.get("scope"),
+                agents=tuple(raw_policy.get("agents", ())),
+            )
+
         return ConsumerManifest(
             spaex_version=data["spaex_version"],
             identity=data["identity"],
@@ -122,6 +147,7 @@ class ConsumerManifest:
             active_feature=data.get("active_feature"),
             identity_note=data.get("identity_note"),
             local_fragments=local_fragments,
+            skill_installation=skill_installation,
         )
 
     def to_json_bytes(self) -> bytes:
@@ -172,6 +198,16 @@ class ConsumerManifest:
             obj["constitution"] = {
                 "local_fragments": [thaw_json(e) for e in self.local_fragments]
             }
+        if self.skill_installation is not None:
+            policy = self.skill_installation
+            policy_obj: dict[str, Any] = {"mode": policy.mode}
+            if policy.adapter is not None:
+                policy_obj["adapter"] = policy.adapter
+            if policy.scope is not None:
+                policy_obj["scope"] = policy.scope
+            if policy.agents:
+                policy_obj["agents"] = list(policy.agents)
+            obj["skill_installation"] = policy_obj
         return json_deterministic.dumps(obj)
 
 
