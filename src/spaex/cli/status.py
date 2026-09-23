@@ -15,6 +15,7 @@ from spaex.report.compose import (
     MoleculeRecord,
     build_composition_report,
 )
+from spaex.report.trace import FileAttribution, MoleculeOwner, PathOwnership, resolve_trace_query
 from spaex.util import exit_codes
 
 _INSTALL_STATE_PHRASE = {
@@ -179,3 +180,74 @@ def _render_drift_text(drift: list[object]) -> list[str]:
             lines.append(f"  {finding['molecule_id']}: {_DRIFT_PHRASE[kind]}")
     lines.append("  → run `spaex install` to reconcile")
     return lines
+
+
+def run_trace(args: argparse.Namespace) -> int:
+    """`spaex trace <path>` (contracts/status-and-trace-cli.md §"spaex trace")."""
+    repo_root = Path(args.repo_root).resolve()
+    fmt = getattr(args, "format", None) or "text"
+
+    attribution = resolve_trace_query(repo_root, str(args.path))
+    record = _build_trace_record(attribution)
+
+    if fmt == "json":
+        sys.stdout.write(json.dumps(record, indent=2, sort_keys=True) + "\n")
+    else:
+        sys.stdout.write(_render_trace_text(record))
+    return exit_codes.SUCCESS if attribution.matches else 1
+
+
+def _render_owner(owner: MoleculeOwner) -> dict[str, object]:
+    return {"molecule_id": owner.molecule_id, "source": owner.source, "revision": owner.revision}
+
+
+def _render_path_ownership(match: PathOwnership) -> dict[str, object]:
+    return {
+        "path": match.path,
+        "owners": [_render_owner(owner) for owner in match.owners],
+        "constitution_trace_hint": match.constitution_trace_hint,
+    }
+
+
+def _build_trace_record(attribution: FileAttribution) -> dict[str, object]:
+    return {
+        "format_version": 1,
+        "query": attribution.query,
+        "kind": attribution.kind,
+        "matches": [_render_path_ownership(m) for m in attribution.matches],
+        "error": attribution.error,
+    }
+
+
+def _render_trace_text(record: dict[str, object]) -> str:
+    if record["error"] is not None:
+        return (
+            f"No molecule is recorded for {record['query']}.\n"
+            "Hand-written files and files created by a molecule's install_hook "
+            "are not\ntracked by spaex.\n"
+        )
+    matches = record["matches"]
+    assert isinstance(matches, list)
+    blocks = [_render_path_ownership_text(match) for match in matches]
+    return "\n\n".join(blocks) + "\n"
+
+
+def _render_path_ownership_text(match: object) -> str:
+    assert isinstance(match, dict)
+    owners = match["owners"]
+    lines = [f"Path: {match['path']}"]
+    if len(owners) == 1:
+        owner = owners[0]
+        lines.append("Owner:")
+        lines.append(
+            f"  {owner['molecule_id']}@{owner['revision'][:8]} "
+            "(pinned in .spaex/manifest.json)"
+        )
+    else:
+        lines.append(f"Owners ({len(owners)}):")
+        for owner in owners:
+            lines.append(f"  {owner['molecule_id']}@{owner['revision'][:8]}")
+    if match["constitution_trace_hint"]:
+        lines.append("")
+        lines.append("For clause-level provenance, run `spaex constitution trace <query>`.")
+    return "\n".join(lines)

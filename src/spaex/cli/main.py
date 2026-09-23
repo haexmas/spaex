@@ -209,6 +209,21 @@ def _build_parser() -> argparse.ArgumentParser:
         help="output format (default: text)",
     )
 
+    trace_path = subparsers.add_parser(
+        "trace",
+        help="print which molecule(s) wrote a file or directory (Spec 028)",
+    )
+    trace_path.add_argument(
+        "path",
+        help="a repo-relative or absolute file/directory path",
+    )
+    trace_path.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="output format (default: text)",
+    )
+
     from spaex.cli import add as add_cli
 
     add_parser = subparsers.add_parser(
@@ -284,6 +299,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             from spaex.cli import status as status_cli
 
             return status_cli.run_status(args)
+        if args.command == "trace":
+            from spaex.cli import status as status_cli
+
+            return status_cli.run_trace(args)
         if args.command == "add":
             from spaex.cli import add as add_cli
 
