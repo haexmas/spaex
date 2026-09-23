@@ -132,7 +132,7 @@ An operator has edited `.spaex/manifest.json` (added a molecule, bumped a revisi
 
 ### Measurable Outcomes
 
-- **SC-001**: An operator can find out which molecules are active and at which revisions with one command; on this repository (9 molecules) the report is produced in under 5 seconds.
+- **SC-001**: An operator can find out which molecules are active and at which revisions with one command; on this repository's current 8-molecule composition the report is produced in under 5 seconds.
 - **SC-002**: For 100% of the paths recorded in this repository's install lock, `spaex trace` names exactly the molecule(s) the lock records.
 - **SC-003**: After running either command, a byte-level comparison of the repository, the local molecule cache and the user configuration shows zero changed files.
 - **SC-004**: For an unchanged repository, the JSON output of each command is byte-identical across repeated runs and across Linux, macOS and WSL2, and every output carries a format version.
