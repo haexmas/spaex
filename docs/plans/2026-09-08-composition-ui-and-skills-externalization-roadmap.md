@@ -6,14 +6,15 @@
 
 **Target spaex versions**: originally 4.2.0 through 5.4.0 (see Phasing); indicative only, see the implementation status below. Skills externalization (Phase A) is a breaking change to the molecule ontology and drove the 5.0.0 MAJOR bump.
 
-**Implementation status (2026-09-23)**: Phase A (Spec 018) is fully implemented: the molecule-side `external_skills` contract (PR [#172](https://github.com/haexmas/spaex/pull/172)) and the consumer-controlled `skill_installation` policy plus `spaex skills install`/`configure` commands. Phases B-E have not been started, and the spec slots 019-022 are still unassigned (`specs/` has no directories for them).
+**Implementation status (2026-09-23)**: Phases A, B, and C are done (B closed without a dedicated spec; C shipped as Spec 028, not the reserved 020 slot; see their entries below). Phases D and E have not been started, and the spec slots 019, 021, and 022 are unused/unassigned (`specs/` has no directories for them).
 
 - **Phase A, complete**: `external_skills` structured references (repository, full revision SHA, repository-relative path) are part of the molecule manifest v4 schema, and the `skill` and `skills` atom categories are rejected there (PR [#172](https://github.com/haexmas/spaex/pull/172)). The consumer manifest schema now carries a `skill_installation` policy (`mode`: prompt/managed/disabled, plus adapter/scope/agents), and `spaex skills install`/`spaex skills configure` implement User Story 3: normal `spaex install` only reports pending references, the explicit commands persist the policy and invoke the consumer-selected adapter with `SPAEX_MOLECULE_MANIFEST`. `specs/018-skills-externalization/tasks.md` records every task as done. [ADR 0021](../adr/0021-external-skills-delegated-to-hooks.md) records the accepted consumer-controlled decision.
+- **Phase B, closed without a spec (2026-09-23)**: Decision 3's category-naming cleanup is superseded, not merely partly overtaken, by Spec 027's generic atom-category delivery: `src/spaex/model/atom_category.py` treats every category name outside `behavior`/`constitution`/`skill`/`skills`/`nix_packages` as exclusive-delivered verbatim, so publishers already choose category names freely (the shipped conventions are `slash_commands`, `agents`, `mcps`, not Decision 3's guessed `atoms.command`/`atoms.mcp`). `speckit` and `install_hook` also shipped as top-level structured manifest fields (Specs 016/024), not as atoms categories the way Decision 3 assumed. There is nothing left for a slot-019 spec to settle; see Decision 3 below.
+- **Phase C, complete (as Spec 028, not the reserved slot 020)**: `spaex status` and `spaex trace <path>` shipped across PRs [#166](https://github.com/haexmas/spaex/pull/166)-[#171](https://github.com/haexmas/spaex/pull/171). Both commands support `--format json` for the future Phase D GUI. See [specs/028-status-provenance/](../../specs/028-status-provenance/).
 - **Landed outside this roadmap's phasing**: install hooks and the molecule store (Specs 016, 017; 4.1.0), the behavior harness (Spec 023) and the declarative Spec Kit integration installer (Spec 024) (4.2.0), forced multi-agent Spec Kit installs (4.3.0), map-reduce fragment composition (Spec 026) and generic atom-category delivery (Spec 027) (5.1.0), and release automation through release-please (PR [#155](https://github.com/haexmas/spaex/pull/155)).
-- **Version targets**: since release-please, the version follows the Conventional-Commit types on `main`. 5.0.0 and 5.1.0 were consumed by Phase A and by Specs 026 and 027, so the version numbers in the Phasing section below are historical; Phase B is the next candidate for a MINOR bump, not for a fixed number.
+- **Version targets**: since release-please, the version follows the Conventional-Commit types on `main`. 5.0.0 and 5.1.0 were consumed by Phase A and by Specs 026 and 027, so the version numbers in the Phasing section below are historical; Phase D is the next candidate for a MINOR bump, not for a fixed number.
 - **File name**: this document says `.spaex.json`. The consumer manifest is `.spaex/manifest.json` today (schema v4); read `.spaex.json` below as that file.
 - **Presets dropped (2026-09-21)**: Decision 4 is withdrawn. Molecules already combine atoms, and the atoms repository already publishes composed molecules for individual projects, so a preset would be a second way to say the same thing. The preset selector, the preset field in provenance and the preset target of the Creator flow fall away with it (see Decisions 7 and 8 and Phases B to E).
-- **Phase B is mostly spent**: its behavior-fragment machinery shipped as Spec 023 (see the [behavior harness design](2026-09-10-behavior-harness-and-plugin-alignment-design.md)), and the presets are gone. What remains is the category cleanup of Decision 3, which Spec 027 partly overtook: non-behavior atom categories are now open-ended (any category name outside the reserved ones is delivered to repo-root paths and removed with its molecule). Decide whether a slot 019 is needed at all before running `/speckit-specify`. Phase C no longer depends on it.
 
 **Related**:
 - [Scope Realignment (2026-09-03)](2026-09-03-scope-realignment-design.md): Section "Agent Skills is a format standard, not a package manager" already found that skills.sh and agentskills.io own the skill distribution problem. This roadmap acts on that finding by removing skills from spaex-delivered atom categories; their source may remain co-located in the publisher repository.
@@ -92,19 +93,27 @@ skill installer. Unrelated Spec 016 hooks remain unchanged.
 or its destination. The explicit adapter reads the original pinned manifest
 through `SPAEX_MOLECULE_MANIFEST`; no second reference payload is generated.
 
-### Decision 3: Molecule ontology after Decision 1
+### Decision 3: Molecule ontology after Decision 1 (resolved 2026-09-23, no Phase B spec needed)
 
-Post-Phase A the molecule categories are, tentatively:
-- `atoms.constitution` (unchanged)
-- `atoms.speckit_workflow` (unchanged)
-- `atoms.speckit_hooks` (unchanged)
-- `atoms.mcp` (NEW: declare MCP servers to register with the consumer's agent)
-- `atoms.command` (NEW: Claude Code slash commands, if not already covered)
-- `atoms.instruction` (NEW: CLAUDE.md / AGENTS.md fragments)
-- `external_skills` (NEW, replaces the `atoms.skill` category: list of external skill references, consumed by the explicit consumer adapter per Decision 2)
-- `atoms.install_hook` (from Spec 016, unchanged)
+This decision originally proposed settling on a fixed list of atom category
+names. That is superseded: Spec 027 made every atom category name outside a
+small reserved set (`behavior`, `constitution`, `skill`, `skills`,
+`nix_packages`) an open, publisher-chosen, exclusive-delivered category
+(`src/spaex/model/atom_category.py`). spaex does not need to "settle" names;
+publishers already pick them. What actually shipped, for reference:
+- `atoms.constitution` (unchanged, legacy)
+- `atoms.behavior` (Spec 023, specialized composition, not a generic category)
+- `slash_commands`, `agents`, `mcps` (open generic categories in current use;
+  README's "Atom-category conventions" section is authoritative)
+- `external_skills` (NEW, replaces the `atoms.skill`/`atoms.skills` categories:
+  structured external skill references, consumed by the explicit consumer
+  adapter per Decision 2; Spec 018)
+- `speckit` and `install_hook` shipped as top-level molecule-manifest fields
+  (Specs 024 and 016), not as `atoms.*` categories the way this decision
+  assumed
 
-The exact names are placeholders; Phase A settles them.
+No slot-019 spec is needed for this decision; Phase B is closed as satisfied
+by Specs 023 and 027.
 
 ### Decision 4: Presets ("molecule sets") become first-class (dropped 2026-09-21)
 
@@ -152,12 +161,12 @@ Not folded into Molecules or Presets. Because the constitution is spaex's USP (s
 
 Each phase corresponds to one Speckit spec. Phase A is a breaking change and drove spaex 5.0.0; the rest are MINOR bumps until proven otherwise (see the implementation status at the top for why the version numbers below are historical).
 
-| Phase | Slot | Status (2026-09-21) |
+| Phase | Slot | Status (2026-09-23) |
 |---|---|---|
 | A | 018 | Complete: molecule-side `external_skills` (PR #172) and consumer-controlled `skill_installation`/`spaex skills` commands |
-| B | 019 | Mostly spent: behavior fragments shipped as Spec 023, presets dropped; only the Decision 3 category cleanup remains, partly overtaken by Spec 027 |
-| C | 020 | Not started; next candidate, no longer gated by Phase B |
-| D | 021 | Not started; without the preset selector |
+| B | 019 (unused) | Closed without a spec: behavior fragments shipped as Spec 023, presets dropped, and Decision 3's category cleanup is superseded by Spec 027's open-ended categories |
+| C | 028 (not 020) | Complete: `spaex status`/`spaex trace` shipped as Spec 028, PRs #166-#171 |
+| D | 021 | Not started; next candidate; without the preset selector |
 | E | 022 | Open: defined around presets, needs redefinition or removal |
 
 ### Phase A: Skills externalization (proposed Spec 018 slot, spaex 5.0.0)
@@ -173,20 +182,20 @@ Each phase corresponds to one Speckit spec. Phase A is a breaking change and dro
 
 Depends on: Spec 016 landed (currently in `docs/plans/2026-09-08-spec-016-molecule-install-hooks-design.md`).
 
-### Phase B: Molecule ontology cleanup (proposed Spec 019 slot, spaex 5.1.0)
+### Phase B: Molecule ontology cleanup (closed 2026-09-23, no spec, slot 019 unused)
 
-- Rename / consolidate the remaining atom categories per Decision 3 (final names settled in the spec). Re-check against Spec 027 first, which made non-behavior categories open-ended.
+- ~~Rename / consolidate the remaining atom categories per Decision 3~~: superseded by Spec 027's open-ended generic atom categories; nothing left to settle (see Decision 3 above).
 - ~~Introduce named molecule presets and the `spaex preset` commands~~: dropped with Decision 4 (2026-09-21).
 
 Depends on: Phase A.
 
-### Phase C: `spaex status` CLI + provenance query (proposed Spec 020 slot, spaex 5.2.0)
+### Phase C: `spaex status` CLI + provenance query (shipped as Spec 028, not the reserved Spec 020 slot)
 
 - New CLI: `spaex status` prints a human-readable summary of the active composition (which molecules, which atoms per category, with provenance per atom).
-- New CLI: `spaex show <atom-id>` or `spaex trace <path>` for provenance lookup ("which molecule wrote this file").
-- No GUI yet. This phase makes the data available in a stable form the GUI will consume.
+- New CLI: `spaex trace <path>` for provenance lookup ("which molecule wrote this file"). The roadmap's originally proposed `spaex show <atom-id>` name was not adopted; see `specs/028-status-provenance/spec.md`'s "Command names" note.
+- No GUI yet. This phase makes the data available in a stable form (`--format json`) the GUI will consume.
 
-Depends on: Phase A. It used to depend on Phase B for the preset schema; with presets dropped, the category cleanup can happen before or after.
+Depends on: Phase A. It used to depend on Phase B for the preset schema; with presets dropped and Phase B closed, this had no further dependency.
 
 ### Phase D: GUI MVP (proposed Spec 021 slot, spaex 5.3.0)
 
