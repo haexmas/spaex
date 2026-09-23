@@ -138,15 +138,24 @@ def _install_args(consumer: Path) -> SimpleNamespace:
 
 
 def _write_fake_adapter(bin_dir: Path, name: str, *, exit_code: int, output_path: Path) -> None:
-    script = bin_dir / name
-    script.write_text(
-        "#!/usr/bin/env python3\n"
+    body = (
         "import json, os, sys\n"
         "from pathlib import Path\n"
         f"data = json.loads(Path(os.environ['SPAEX_MOLECULE_MANIFEST']).read_text())\n"
         f"Path({str(output_path)!r}).write_text(json.dumps(data.get('external_skills', [])))\n"
         f"sys.exit({exit_code})\n"
     )
+    if os.name == "nt":
+        py_script = bin_dir / f"{name}.py"
+        py_script.write_text(body)
+        (bin_dir / f"{name}.cmd").write_text(
+            f'@"{sys.executable}" "{py_script}" %*\r\n'
+            "exit /b %ERRORLEVEL%\r\n"
+        )
+        return
+
+    script = bin_dir / name
+    script.write_text(f"#!{sys.executable}\n" + body)
     script.chmod(script.stat().st_mode | stat.S_IEXEC)
 
 
