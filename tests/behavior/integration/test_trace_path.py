@@ -11,7 +11,7 @@ import getpass
 import json
 import re
 import socket
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from spaex.cli.main import main
 from spaex.model.install_lock import InstallLock, MoleculeEntry
@@ -20,6 +20,13 @@ _SOURCE = "https://github.com/example/atoms"
 _REV_NIX_PYTHON = "a" * 40
 _REV_AST_GREP = "b" * 40
 _REV_GENERAL_CODING = "c" * 40
+
+
+def _assert_repo_relative_posix_path(path: str) -> None:
+    assert not Path(path).is_absolute()
+    assert not PureWindowsPath(path).is_absolute()
+    assert not path.startswith("~")
+    assert "\\" not in path
 
 
 def _write_manifest(repo: Path) -> None:
@@ -202,27 +209,38 @@ def test_trace_json_is_byte_identical_across_runs(tmp_path: Path, capsys) -> Non
     """SC-004: `--format json` is a deterministic, reproducible contract."""
     repo = _make_fixture(tmp_path)
 
-    main(["--repo-root", str(repo), "trace", "flake.nix", "--format", "json"])
+    first_rc = main(["--repo-root", str(repo), "trace", "flake.nix", "--format", "json"])
     first = capsys.readouterr().out
-    main(["--repo-root", str(repo), "trace", "flake.nix", "--format", "json"])
+    second_rc = main(["--repo-root", str(repo), "trace", "flake.nix", "--format", "json"])
     second = capsys.readouterr().out
 
+    assert first_rc == second_rc == 0
+    json.loads(first)
+    json.loads(second)
     assert first == second
 
 
-def test_trace_json_has_no_machine_specific_values(tmp_path: Path, capsys) -> None:
+def test_trace_json_has_no_machine_specific_values(tmp_path: Path, capsys, monkeypatch) -> None:
     """FR-013: no absolute path, `~`-path, timestamp, or host/user name leaks."""
     repo = _make_fixture(tmp_path)
 
-    main(["--repo-root", str(repo), "trace", ".spaex/constitution.md", "--format", "json"])
+    monkeypatch.setattr(getpass, "getuser", lambda: "spaex-test-user")
+    monkeypatch.setattr(socket, "gethostname", lambda: "spaex-test-host")
+
+    rc = main(["--repo-root", str(repo), "trace", ".spaex/constitution.md", "--format", "json"])
     out = capsys.readouterr().out
 
+    assert rc == 0
     assert str(repo) not in out
-    assert "~" not in out
     assert not re.search(r"\d{4}-\d{2}-\d{2}", out)
     assert not re.search(r"\d{8}T\d{6}Z", out)
-    assert socket.gethostname() not in out
-    assert getpass.getuser() not in out
+    assert "spaex-test-user" not in out
+    assert "spaex-test-host" not in out
+
+    payload = json.loads(out)
+    _assert_repo_relative_posix_path(payload["query"])
+    for match in payload["matches"]:
+        _assert_repo_relative_posix_path(match["path"])
 
 
 def test_trace_json_is_versioned_and_matches_sorted_by_path(tmp_path: Path, capsys) -> None:
@@ -238,7 +256,7 @@ def test_trace_json_is_versioned_and_matches_sorted_by_path(tmp_path: Path, caps
                 id="com.example.atoms.docs",
                 source=_SOURCE,
                 revision=_REV_NIX_PYTHON,
-                paths=(".spaex/docs/one.md", ".spaex/docs/two.md", ".spaex/docs/zzz.md"),
+                paths=(".spaex/docs/zzz.md", ".spaex/docs/one.md", ".spaex/docs/two.md"),
             ),
         ),
     )

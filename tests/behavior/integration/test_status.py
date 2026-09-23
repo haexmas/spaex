@@ -13,7 +13,7 @@ import json
 import re
 import socket
 from dataclasses import replace
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from spaex.behavior.composer.clarifications import ClarificationsStore
 from spaex.behavior.composer.prompt import (
@@ -32,6 +32,13 @@ _MOL_ARTIFACT_B = "com.example.composed-artifact-b"
 _MOL_FILE = "com.example.plain-file"
 _SHARED_ARTIFACT_PATH = ".spaex/generated/nix-packages.json"
 _REV = "1" * 40
+
+
+def _assert_repo_relative_posix_path(path: str) -> None:
+    assert not Path(path).is_absolute()
+    assert not PureWindowsPath(path).is_absolute()
+    assert not path.startswith("~")
+    assert "\\" not in path
 
 
 def _write_manifest(repo: Path, *, compounds: list[dict[str, object]]) -> None:
@@ -354,27 +361,40 @@ def test_status_json_is_byte_identical_across_runs(tmp_path: Path, capsys) -> No
     """SC-004: `--format json` is a deterministic, reproducible contract."""
     repo = _make_full_fixture(tmp_path)
 
-    main(["--repo-root", str(repo), "status", "--format", "json"])
+    first_rc = main(["--repo-root", str(repo), "status", "--format", "json"])
     first = capsys.readouterr().out
-    main(["--repo-root", str(repo), "status", "--format", "json"])
+    second_rc = main(["--repo-root", str(repo), "status", "--format", "json"])
     second = capsys.readouterr().out
 
+    assert first_rc == second_rc == 0
+    json.loads(first)
+    json.loads(second)
     assert first == second
 
 
-def test_status_json_has_no_machine_specific_values(tmp_path: Path, capsys) -> None:
+def test_status_json_has_no_machine_specific_values(tmp_path: Path, capsys, monkeypatch) -> None:
     """FR-013: no absolute path, `~`-path, timestamp, or host/user name leaks."""
     repo = _make_full_fixture(tmp_path)
 
-    main(["--repo-root", str(repo), "status", "--format", "json"])
+    monkeypatch.setattr(getpass, "getuser", lambda: "spaex-test-user")
+    monkeypatch.setattr(socket, "gethostname", lambda: "spaex-test-host")
+
+    rc = main(["--repo-root", str(repo), "status", "--format", "json"])
     out = capsys.readouterr().out
 
+    assert rc == 0
     assert str(repo) not in out
-    assert "~" not in out
     assert not re.search(r"\d{4}-\d{2}-\d{2}", out)
     assert not re.search(r"\d{8}T\d{6}Z", out)
-    assert socket.gethostname() not in out
-    assert getpass.getuser() not in out
+    assert "spaex-test-user" not in out
+    assert "spaex-test-host" not in out
+
+    payload = json.loads(out)
+    for molecule in payload["molecules"]:
+        for path in molecule["atoms"]["composed_artifacts"]:
+            _assert_repo_relative_posix_path(path)
+        for path in molecule["atoms"]["files"]:
+            _assert_repo_relative_posix_path(path)
 
 
 def test_status_json_is_versioned_and_sorted(tmp_path: Path, capsys) -> None:
