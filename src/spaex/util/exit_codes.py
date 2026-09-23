@@ -19,7 +19,8 @@ IO_REFUSE = 3
 # 4 — validation refuse (corrupt install.lock in show).
 VALIDATION_REFUSE = 4
 
-# 5 — system refuse (missing `.spaex/manifest.json` or version mismatch).
+# 5 — system refuse (installed spaex below `spaex_min_version`, or the
+# Spec Kit CLI is missing).
 SYSTEM_REFUSE = 5
 
 # 6 — post-write validation failure (content integrity mismatch).

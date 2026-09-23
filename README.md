@@ -12,6 +12,8 @@ spaex composes a coding harness for a single repo out of reusable pieces (MCPs, 
 - `spaex remove <molecule-ids...>`: retract one or more molecules from `.spaex/manifest.json` and re-run install (files that only the retracted molecule contributed are deleted).
 - `spaex install`: publish adopted molecules atomically into their participating roots. Writes `.spaex/install.lock`.
 - `spaex constitution show`: print the effective spaex constitution to stdout, assembled from adopted molecules per `install.lock`.
+- `spaex status`: summarize the repository's active composition — every pinned/installed molecule, what its atoms materialized into, the composed constitution, and any drift between the manifest, the install lock, and the constitution. Read-only.
+- `spaex trace <path>`: print which molecule(s) wrote a given file, or every recorded file under a directory. Read-only.
 
 ## Molecule install-hooks
 
