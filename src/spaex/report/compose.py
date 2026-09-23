@@ -155,6 +155,53 @@ def build_constitution_summary(
     )
 
 
+def _build_drift_findings(
+    molecules: tuple[MoleculeRecord, ...], constitution: ConstitutionSummary | None
+) -> tuple[DriftFinding, ...]:
+    """Assemble drift findings from already-built molecule records and constitution summary
+    (research.md R3, R4)."""
+    findings: list[DriftFinding] = []
+    for molecule in molecules:
+        if molecule.install_state == "pinned_not_installed":
+            findings.append(
+                DriftFinding(
+                    kind="pinned_not_installed",
+                    molecule_id=molecule.molecule_id,
+                    pinned=molecule.pinned,
+                    installed=None,
+                )
+            )
+        elif molecule.install_state == "installed_not_pinned":
+            findings.append(
+                DriftFinding(
+                    kind="installed_not_pinned",
+                    molecule_id=molecule.molecule_id,
+                    pinned=None,
+                    installed=molecule.installed,
+                )
+            )
+        elif (
+            molecule.pinned is not None
+            and molecule.installed is not None
+            and molecule.pinned[1] != molecule.installed[1]
+        ):
+            findings.append(
+                DriftFinding(
+                    kind="revision_mismatch",
+                    molecule_id=molecule.molecule_id,
+                    pinned=molecule.pinned,
+                    installed=molecule.installed,
+                )
+            )
+    if constitution is not None and constitution.stale:
+        findings.append(
+            DriftFinding(
+                kind="constitution_stale", molecule_id=None, pinned=None, installed=None
+            )
+        )
+    return tuple(sorted(findings, key=lambda f: (f.molecule_id is None, f.molecule_id or "")))
+
+
 def build_composition_report(repo_root: Path) -> CompositionReport:
     """Build the full `spaex status` report from on-disk `.spaex/` state (FR-002, FR-015)."""
     def _build(lock: InstallLock) -> CompositionReport:
@@ -189,10 +236,12 @@ def build_composition_report(repo_root: Path) -> CompositionReport:
                 )
             )
 
+        molecules_tuple = tuple(molecules)
+        constitution = build_constitution_summary(repo_root, lock)
         return CompositionReport(
-            molecules=tuple(molecules),
-            constitution=build_constitution_summary(repo_root, lock),
-            drift=(),
+            molecules=molecules_tuple,
+            constitution=constitution,
+            drift=_build_drift_findings(molecules_tuple, constitution),
         )
 
     return read_with_consistent_generation(repo_root, _build)
