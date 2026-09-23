@@ -33,18 +33,18 @@ later UI phases.
 
 **Purpose**: Define the schema and runtime boundary shared by all user stories.
 
-- [ ] T003 [P] Add structured-reference contract tests in
+- [x] T003 [P] Add structured-reference contract tests in
   `tests/contract/test_molecule_manifest_external_skills.py` for repository,
   full revision SHA, repository-relative path, uniqueness, invalid values, the
   acceptance without a hook (including reference-only molecules), and retired `skill`/`skills` categories.
-- [ ] T004 [P] Add parser tests in `tests/unit/test_external_skills_parser.py`
+- [x] T004 [P] Add parser tests in `tests/unit/test_external_skills_parser.py`
   for immutable ordered `ExternalSkillReference` values and backwards
   compatibility when the field is absent.
-- [ ] T005 Extend
+- [x] T005 Extend
   `src/spaex/schema/data/molecule-manifest.v4.schema.json` with the structured
   `external_skills` object and validation rules while removing the existing
   hook requirement and preserving open atom categories.
-- [ ] T006 Extend `src/spaex/model/molecule_manifest.py` with a frozen
+- [x] T006 Extend `src/spaex/model/molecule_manifest.py` with a frozen
   `ExternalSkillReference` value object and immutable tuple parsing.
 
 **Checkpoint**: The manifest contract and parser expose structured references,
@@ -60,18 +60,18 @@ available in `MoleculeManifest.external_skills` and absent from atom paths.
 
 ### Tests for User Story 1
 
-- [ ] T007 [US1] Extend `tests/unit/test_external_skills_parser.py` with
+- [x] T007 [US1] Extend `tests/unit/test_external_skills_parser.py` with
   declaration-order and frozen-value assertions for multiple references.
-- [ ] T008 [US1] Add a regression fixture in
+- [x] T008 [US1] Add a regression fixture in
   `tests/integration/test_external_skill_materialization.py` proving that
   `external_skills` does not enter the materialized file list or
   `install.lock` paths.
 
 ### Implementation for User Story 1
 
-- [ ] T009 [US1] Update related resolver typing so structured references remain
+- [x] T009 [US1] Update related resolver typing so structured references remain
   metadata only and are not added to materialized paths or install-lock paths.
-- [ ] T010 [US1] Update `specs/018-skills-externalization/quickstart.md` and
+- [x] T010 [US1] Update `specs/018-skills-externalization/quickstart.md` and
   `README.md` with a co-located `haexmas/atoms` source example using a full
   revision SHA and repository-relative skill path.
 
@@ -88,10 +88,10 @@ continues accepting unrelated open category names.
 
 ### Tests and implementation for User Story 2
 
-- [ ] T011 [P] [US2] Keep the retired-category and open-category cases in
+- [x] T011 [P] [US2] Keep the retired-category and open-category cases in
   `tests/contract/test_molecule_manifest_external_skills.py` explicit and
   independently readable.
-- [ ] T012 [US2] Run the existing CLI, resolver, and orphan-deletion fixtures
+- [x] T012 [US2] Run the existing CLI, resolver, and orphan-deletion fixtures
   that previously used `atoms.skills`, preserving their generic-category
   intent in `tests/cli/`, `tests/unit/`, and `tests/integration/`.
 

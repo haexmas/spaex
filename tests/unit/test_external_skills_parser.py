@@ -1,12 +1,13 @@
-"""Parser tests for Spec 018 external skill references."""
+"""Parser tests for Spec 018 structured external skill references."""
 
 from __future__ import annotations
 
 import json
 
-import pytest
+from spaex.model.molecule_manifest import ExternalSkillReference, MoleculeManifest
 
-from spaex.model.molecule_manifest import MoleculeManifest
+_REV_A = "a" * 40
+_REV_B = "b" * 40
 
 
 def _base() -> dict:
@@ -22,16 +23,19 @@ def _base() -> dict:
 def test_external_skills_preserve_order_and_are_immutable() -> None:
     data = _base()
     data["external_skills"] = [
-        "example-org/first",
-        "https://agentskills.io/second",
+        {"repository": "https://github.com/example/first", "revision": _REV_A, "path": "skills/a"},
+        {"repository": "https://github.com/example/second", "revision": _REV_B, "path": "skills/b"},
     ]
-    data["install_hook"] = {"interpreter": "python3", "script": "install.py"}
 
     parsed = MoleculeManifest.from_json(json.dumps(data).encode())
 
     assert parsed.external_skills == (
-        "example-org/first",
-        "https://agentskills.io/second",
+        ExternalSkillReference(
+            repository="https://github.com/example/first", revision=_REV_A, path="skills/a"
+        ),
+        ExternalSkillReference(
+            repository="https://github.com/example/second", revision=_REV_B, path="skills/b"
+        ),
     )
     assert isinstance(parsed.external_skills, tuple)
 
@@ -41,9 +45,26 @@ def test_missing_external_skills_parses_to_empty_tuple() -> None:
     assert parsed.external_skills == ()
 
 
-def test_external_skills_without_hook_are_rejected_before_install() -> None:
+def test_external_skills_do_not_require_install_hook() -> None:
     data = _base()
-    data["external_skills"] = ["example-org/first"]
+    data["external_skills"] = [
+        {"repository": "https://github.com/example/first", "revision": _REV_A, "path": "skills/a"}
+    ]
 
-    with pytest.raises(ValueError, match="install_hook"):
-        MoleculeManifest.from_json(json.dumps(data).encode())
+    parsed = MoleculeManifest.from_json(json.dumps(data).encode())
+
+    assert parsed.install_hook is None
+    assert len(parsed.external_skills) == 1
+
+
+def test_reference_only_molecule_with_empty_atoms_parses() -> None:
+    data = _base()
+    data["atoms"] = {}
+    data["external_skills"] = [
+        {"repository": "https://github.com/example/first", "revision": _REV_A, "path": "skills/a"}
+    ]
+
+    parsed = MoleculeManifest.from_json(json.dumps(data).encode())
+
+    assert parsed.atoms == {}
+    assert len(parsed.external_skills) == 1

@@ -1,8 +1,11 @@
 # Quickstart: external skill references
 
-**Design preview**: These structured references and skill commands are planned
-and are not implemented by this documentation-only PR. The SHA below is a
-placeholder; replace it with the full commit SHA containing the skill.
+**Implementation status**: the structured `external_skills` reference below
+(molecule manifest side, User Stories 1-2) is implemented: it parses,
+validates, and requires no `install_hook`. The consumer-side
+`skill_installation` policy and the `spaex skills install`/`spaex skills
+configure` commands (User Story 3) are not implemented yet. The SHA below is
+a placeholder; replace it with the full commit SHA containing the skill.
 
 A publisher declares source metadata without an installation hook:
 
