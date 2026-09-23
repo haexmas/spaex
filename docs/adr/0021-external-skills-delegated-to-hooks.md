@@ -1,6 +1,6 @@
 # ADR 0021: Delegate external skill installation to consumer-selected adapters
 
-**Status**: Accepted original hook design; consumer-controlled amendment proposed in PR #125
+**Status**: Accepted; molecule-side contract implemented in PR #172, consumer-controlled installation remains pending
 **Date**: 2026-09-14
 
 ## Context

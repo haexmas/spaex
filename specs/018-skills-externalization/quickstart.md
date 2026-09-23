@@ -27,8 +27,9 @@ A publisher declares source metadata without an installation hook:
 ```
 
 The consumer-selected adapter reads the pinned molecule `manifest.json` via
-`SPAEX_MOLECULE_MANIFEST`. Normal `spaex install` only reports the reference as pending.
-The consumer explicitly runs `spaex skills install`, chooses an adapter,
+`SPAEX_MOLECULE_MANIFEST`. Normal `spaex install` does not materialize or
+install the reference. The consumer will explicitly run `spaex skills install`,
+choose an adapter,
 agent, and scope on first use, and spaex stores that choice in
 `.spaex/manifest.json`. Later changes use `spaex skills configure`.
 

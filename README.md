@@ -104,8 +104,9 @@ No `install_hook` is required or used for skill installation.
 ]
 ```
 
-Normal `spaex install` never installs a referenced skill; it only records the
-reference as metadata. Installation is a separate, explicit,
+Normal `spaex install` never installs or materializes a referenced skill; its
+structured declaration remains in the pinned molecule manifest as metadata.
+Installation is a separate, explicit,
 consumer-selected operation — see the
 [Spec 018 design](specs/018-skills-externalization/spec.md) for the planned
 `spaex skills install` / `spaex skills configure` commands and the consumer's
