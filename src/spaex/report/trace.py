@@ -73,7 +73,7 @@ def resolve_trace_query(repo_root: Path, query: str) -> FileAttribution:
             kind: Literal["file", "directory"] = "file"
             matched_paths = [normalized]
         else:
-            prefix = f"{normalized}/"
+            prefix = "" if normalized == "." else f"{normalized}/"
             matched_paths = sorted(p for p in owners_map if p.startswith(prefix))
             kind = "directory" if matched_paths else "file"
 

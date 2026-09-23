@@ -240,8 +240,7 @@ def _render_path_ownership_text(match: object) -> str:
         owner = owners[0]
         lines.append("Owner:")
         lines.append(
-            f"  {owner['molecule_id']}@{owner['revision'][:8]} "
-            "(pinned in .spaex/manifest.json)"
+            f"  {owner['molecule_id']}@{owner['revision'][:8]} (recorded in .spaex/install.lock)"
         )
     else:
         lines.append(f"Owners ({len(owners)}):")
