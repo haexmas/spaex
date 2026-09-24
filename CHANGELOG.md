@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.2.1](https://github.com/haexmas/spaex/compare/v5.2.0...v5.2.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* **ci:** chain PyPI publish off release-please outputs ([bed46be](https://github.com/haexmas/spaex/commit/bed46be72cc09f7e9092649ca845a56763412d9d))
+* **ci:** synchronize uv lockfile with package version ([1e6ec05](https://github.com/haexmas/spaex/commit/1e6ec05752be771e46eeabb5caf021d8a93ac5f4))
+
 ## [5.2.0](https://github.com/haexmas/spaex/compare/v5.1.2...v5.2.0) (2026-09-23)
 
 
