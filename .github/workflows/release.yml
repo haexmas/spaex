@@ -12,6 +12,15 @@ on:
           workflow_dispatch checks the workflow file at the dispatched ref
           and an existing tag predates this trigger.
         required: false
+  workflow_call:
+    inputs:
+      version:
+        description: >-
+          Version to publish (must match pyproject.toml). Passed by
+          release-please.yml, since a GITHUB_TOKEN tag push doesn't trigger
+          this workflow's own push trigger.
+        required: true
+        type: string
 
 permissions: {}
 
@@ -33,7 +42,7 @@ jobs:
         id: release-version
         env:
           REF_NAME: ${{ github.ref_name }}
-          DISPATCH_VERSION: ${{ github.event.inputs.version }}
+          DISPATCH_VERSION: ${{ inputs.version }}
         run: |
           package_version="$(python - <<'PY'
           import tomllib
