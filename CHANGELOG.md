@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.2.2](https://github.com/haexmas/spaex/compare/v5.2.1...v5.2.2) (2026-09-24)
+
+
+### Bug Fixes
+
+* refresh Spec Kit bootstrap and bundled workflow with current specify-cli ([7bec792](https://github.com/haexmas/spaex/commit/7bec79268fa560b52a01592f2221571b0625bdd1))
+* sync uv.lock with pyproject.toml version (5.2.0 -&gt; 5.2.1) ([e0fef9a](https://github.com/haexmas/spaex/commit/e0fef9afdf801c32701b0893aaae8dcb35835ea2))
+
 ## [5.2.1](https://github.com/haexmas/spaex/compare/v5.2.0...v5.2.1) (2026-09-24)
 
 
