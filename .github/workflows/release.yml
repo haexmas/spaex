@@ -7,20 +7,11 @@ on:
     inputs:
       version:
         description: >-
-          Version to publish (must match pyproject.toml). Only needed to
-          catch up a tag whose push-triggered publish never ran, since
-          workflow_dispatch checks the workflow file at the dispatched ref
-          and an existing tag predates this trigger.
-        required: false
-  workflow_call:
-    inputs:
-      version:
-        description: >-
           Version to publish (must match pyproject.toml). Passed by
-          release-please.yml, since a GITHUB_TOKEN tag push doesn't trigger
-          this workflow's own push trigger.
-        required: true
-        type: string
+          release-please.yml's dispatch step, since a GITHUB_TOKEN tag push
+          doesn't trigger this workflow's own push trigger. Also usable to
+          catch up a tag whose push-triggered publish never ran.
+        required: false
 
 permissions: {}
 
