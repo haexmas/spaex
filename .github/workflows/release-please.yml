@@ -15,12 +15,48 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       version: ${{ steps.release.outputs.version }}
+      pr: ${{ steps.release.outputs.pr }}
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  sync-lockfile:
+    needs: release-please
+    if: needs.release-please.outputs.pr != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: read release PR branch
+        id: pr
+        env:
+          PR_JSON: ${{ needs.release-please.outputs.pr }}
+        run: |
+          branch="$(python -c 'import json, os; print(json.loads(os.environ["PR_JSON"])["headBranchName"])')"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.pr.outputs.branch }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14.7'
+      - name: install package with dev extras
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: sync uv.lock with pyproject.toml version
+        run: |
+          uv lock
+          if ! git diff --quiet -- uv.lock; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add uv.lock
+            git commit -m 'chore: sync uv.lock with pyproject.toml version'
+            git push origin HEAD:${{ steps.pr.outputs.branch }}
+          fi
 
   publish:
     needs: release-please
