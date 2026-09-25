@@ -1,5 +1,14 @@
 # Changelog
 
+## [5.2.3](https://github.com/haexmas/spaex/compare/v5.2.2...v5.2.3) (2026-09-25)
+
+
+### Bug Fixes
+
+* **ci:** auto-sync uv.lock on the release-please PR branch ([0e0e16d](https://github.com/haexmas/spaex/commit/0e0e16d1c5680d422473af66be2621b9085d6877))
+* **ci:** dispatch release.yml instead of calling it as a reusable workflow ([dde84ae](https://github.com/haexmas/spaex/commit/dde84aee2761d87e89a05e45d8ec36b5bbd6805c))
+* sync uv.lock with pyproject.toml version (5.2.1 -&gt; 5.2.2) ([c2ca37a](https://github.com/haexmas/spaex/commit/c2ca37adecff2198c2eb93b1250d961d0d4d5a32))
+
 ## [5.2.2](https://github.com/haexmas/spaex/compare/v5.2.1...v5.2.2) (2026-09-24)
 
 
