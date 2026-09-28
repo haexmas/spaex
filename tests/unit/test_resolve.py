@@ -110,7 +110,7 @@ def test_publisher_key_atom_id_mismatch(tmp_path: Path) -> None:
         resolve_constitution_contributions(manifest, state_root)
 
 
-def test_version_mismatch(tmp_path: Path) -> None:
+def test_publisher_version_is_not_authoritative(tmp_path: Path) -> None:
     canonical = "https://github.com/example/publisher"
     publisher = tmp_path / "publisher"
     molecule_id = "com.github.example.publisher.constitution"
@@ -140,8 +140,9 @@ def test_version_mismatch(tmp_path: Path) -> None:
     manifest = _manifest(
         [CompoundEntry(source=canonical, revision=sha, molecules=(molecule_id,))]
     )
-    with pytest.raises(MissingAtomManifestError):
-        resolve_constitution_contributions(manifest, state_root)
+    contributions = resolve_constitution_contributions(manifest, state_root)
+    assert len(contributions) == 1
+    assert contributions[0].body == b"body"
 
 
 def test_atom_not_declared_by_publisher(tmp_path: Path) -> None:

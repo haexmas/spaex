@@ -19,7 +19,6 @@ from spaex.schema import validator as schema_validator
 @dataclass(frozen=True)
 class PublisherMoleculeEntry:
     path: str
-    version: str
     description: str | None = None
 
 
@@ -47,7 +46,6 @@ class PublisherManifest:
             RepoRelativePath.validate(entry["path"])
             molecules[molecule_id] = PublisherMoleculeEntry(
                 path=entry["path"],
-                version=entry["version"],
                 description=entry.get("description"),
             )
         return PublisherManifest(
