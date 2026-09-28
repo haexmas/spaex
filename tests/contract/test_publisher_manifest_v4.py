@@ -28,6 +28,13 @@ def test_valid_molecules_map_passes() -> None:
     schema_validator.validate(_valid(), _SCHEMA)
 
 
+def test_molecule_version_is_optional_in_publisher_map() -> None:
+    """Accept a publisher map that leaves version ownership to the molecule."""
+    data = _valid()
+    del data["molecules"]["com.example.publisher.alpha"]["version"]
+    schema_validator.validate(data, _SCHEMA)
+
+
 def test_missing_spaex_version_is_rejected() -> None:
     """Reject a publisher manifest without a spaex version."""
     data = _valid()

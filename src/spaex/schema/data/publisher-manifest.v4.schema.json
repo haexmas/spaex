@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/haexmas/spaex/schemas/publisher-manifest.v4.schema.json",
   "title": "spaex Publisher Root Manifest v4",
-  "description": "Schema for the root `manifest.json` of a publisher repo. Maps molecule ids to their internal directory paths. Structurally identical to v3; only the version-field name (`haex_hive_version` -> `spaex_version`) and value (`3` -> `4`) change.",
+  "description": "Schema for the root `manifest.json` of a publisher repo. Maps molecule ids to their internal directory paths. Molecule versions are authoritative in each molecule's own manifest; the legacy publisher-entry version is accepted for backward compatibility but ignored.",
   "type": "object",
   "additionalProperties": false,
   "required": ["spaex_version", "publisher", "molecules"],
@@ -38,7 +38,7 @@
     "publisherMoleculeEntry": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "version"],
+      "required": ["path"],
       "properties": {
         "path": {
           "$ref": "#/$defs/repoRelativePath",
@@ -47,7 +47,7 @@
         "version": {
           "type": "string",
           "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
-          "description": "Semver X.Y.Z of the molecule."
+          "description": "Deprecated legacy metadata. The molecule manifest is the sole source of truth for the molecule version."
         },
         "description": {
           "type": "string",

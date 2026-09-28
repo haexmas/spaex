@@ -352,15 +352,6 @@ def _iterate_resolved_molecules(
                     ),
                     context={"atom_id": molecule_id, "manifest_id": molecule_manifest.id},
                 )
-            if molecule_manifest.version != publisher_entry.version:
-                raise MissingAtomManifestError(
-                    message=(
-                        f"molecule {molecule_id!r} version {molecule_manifest.version!r} "
-                        f"does not match publisher-declared version {publisher_entry.version!r}"
-                    ),
-                    context={"atom_id": molecule_id},
-                )
-
             config_entry = compound_entry.config.get(molecule_id)
             effective_priority = molecule_manifest.priority
             if config_entry is not None and config_entry.priority is not None:
