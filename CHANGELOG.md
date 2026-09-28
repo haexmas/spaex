@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.3.0](https://github.com/haexmas/spaex/compare/v5.2.3...v5.3.0) (2026-09-28)
+
+
+### Features
+
+* **manifest:** make molecule version authoritative ([255bd42](https://github.com/haexmas/spaex/commit/255bd42e11ba46745ea725f9c3ca0536f8e9d950))
+
 ## [5.2.3](https://github.com/haexmas/spaex/compare/v5.2.2...v5.2.3) (2026-09-25)
 
 
