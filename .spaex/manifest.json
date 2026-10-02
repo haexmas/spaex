@@ -3,15 +3,15 @@
     {
       "molecules": [
         "com.github.haexmas.atoms.ast-grep",
+        "com.github.haexmas.atoms.coding-guideline-javascript-typescript",
+        "com.github.haexmas.atoms.coding-guideline-python",
         "com.github.haexmas.atoms.general-coding",
         "com.github.haexmas.atoms.graphify-first-authoring",
-        "com.github.haexmas.atoms.coding-guideline-javascript-typescript",
         "com.github.haexmas.atoms.ponytail",
-        "com.github.haexmas.atoms.coding-guideline-python",
         "com.github.haexmas.atoms.spaex-constitution",
         "com.github.haexmas.atoms.speckit"
       ],
-      "revision": "6c1f15ebd79c846985ecf47a6cbae8f3da24b315",
+      "revision": "fe9c6faafc88091956132cf9dbd5e9a911851521",
       "source": "https://github.com/haexmas/atoms"
     }
   ],

@@ -97,7 +97,7 @@ Rough guidance, not hard cutoffs — operator judgment overrides:
 
 ## Freshness backstop (agent-side, independent of hooks)
 
-FR-010 requires this rule's freshness guarantee to hold even when the `post-commit` and `post-checkout` hooks are not installed or have been bypassed:
+FR-010 requires this rule's freshness guarantee to hold even when the `post-commit`, `post-merge` and `post-checkout` hooks are not installed or have been bypassed:
 
 - **On a tracked branch, absent or incomplete graph** (`graphify-out/` or `graphify-out/graph.json` missing) → bootstrap with `graphify update <repo-root>` before authoring.
 - **On a tracked branch, stale or unmarked graph** (missing/invalid `indexed_at_sha`, or marker ≠ `HEAD`) → refresh with `graphify update <repo-root>` before authoring.
