@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.3.1](https://github.com/haexmas/spaex/compare/v5.3.0...v5.3.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* **speckit:** bootstrap repos without .specify before integration install ([8ceac58](https://github.com/haexmas/spaex/commit/8ceac5884bb410181acfc2dcb2d93671944cb704))
+
+
+### Documentation
+
+* **speckit:** document bootstrap agent-tool flag ([ac8bcf0](https://github.com/haexmas/spaex/commit/ac8bcf078d18f95615e84cc963de537f3c124e7a))
+
 ## [5.3.0](https://github.com/haexmas/spaex/compare/v5.2.3...v5.3.0) (2026-09-28)
 
 
