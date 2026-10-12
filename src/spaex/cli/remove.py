@@ -14,6 +14,7 @@ files the retracted molecules had previously contributed.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import sys
 from pathlib import Path
 
@@ -87,16 +88,8 @@ def _apply_removal(
                 config=new_config,
             )
         )
-    return ConsumerManifest(
-        spaex_version=manifest.spaex_version,
-        identity=manifest.identity,
-        compounds=tuple(new_compounds),
-        spaex_min_version=manifest.spaex_min_version,
-        groups=manifest.groups,
-        active_feature=manifest.active_feature,
-        identity_note=manifest.identity_note,
-        local_fragments=manifest.local_fragments,
-    )
+    # replace() keeps every other top-level field, e.g. skill_installation.
+    return dataclasses.replace(manifest, compounds=tuple(new_compounds))
 
 
 def _warn_external_carriers(repo_root: Path, remove_ids: tuple[str, ...]) -> None:

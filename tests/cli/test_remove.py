@@ -61,11 +61,15 @@ def test_single_id_retraction(adopted_repo, haex_add_helpers, monkeypatch) -> No
     assert written["compounds"][0]["molecules"] == [_CONST_ID]
 
 
-def test_apply_removal_preserves_constitution_local_fragments() -> None:
-    """`_apply_removal` reconstructs `ConsumerManifest` field-by-field; a
-    project-local fragment (Spec 023 FR-018) must survive untouched."""
+def test_apply_removal_preserves_non_compound_fields() -> None:
+    """Only `compounds` changes; a project-local fragment (Spec 023 FR-018)
+    and a persisted skill policy (Spec 018) must survive untouched."""
     from spaex.cli import remove as remove_cli
-    from spaex.model.consumer_manifest import CompoundEntry, ConsumerManifest
+    from spaex.model.consumer_manifest import (
+        CompoundEntry,
+        ConsumerManifest,
+        SkillInstallationPolicy,
+    )
 
     local_fragments = ({"file": ".spaex/local-fragments/x.md"},)
     manifest = ConsumerManifest(
@@ -79,11 +83,15 @@ def test_apply_removal_preserves_constitution_local_fragments() -> None:
             ),
         ),
         local_fragments=local_fragments,
+        skill_installation=SkillInstallationPolicy(
+            mode="managed", adapter="skillsmd", scope="project", agents=("claude",)
+        ),
     )
 
     result = remove_cli._apply_removal(manifest, (_SKILL_ID,))
 
     assert result.local_fragments == local_fragments
+    assert result.skill_installation == manifest.skill_installation
 
 
 def test_multi_id_comma_separated_retraction(
