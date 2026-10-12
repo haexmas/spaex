@@ -21,6 +21,7 @@ from typing import TextIO
 from spaex.constitution.resolve import ResolvedMolecule
 from spaex.integrations.runner import (
     CliExecutable,
+    build_init_argv,
     build_install_argv,
     resolve_cli_executable,
 )
@@ -248,8 +249,14 @@ def verify_cli(
     *,
     repo_root: Path,
     executable: CliExecutable | None = None,
+    selected: Sequence[str] = (),
 ) -> tuple[str, tuple[str, ...]]:
-    """Verify CLI version and supported keys before any install invocation."""
+    """Verify CLI version and supported keys before any install invocation.
+
+    The official CLI only answers ``integration list`` inside a Spec Kit
+    project, so a repo without ``.specify/`` is bootstrapped first with the
+    first selected integration (see ``_ensure_project_initialized``).
+    """
     executable_argv = resolve_cli_executable(declaration, executable)
     version_result = run_cli([*executable_argv, "version"], repo_root=repo_root)
     if version_result.returncode != 0:
@@ -271,6 +278,9 @@ def verify_cli(
             context={"installed": version_text, "required": _constraint_text(required)},
         )
 
+    _ensure_project_initialized(
+        declaration, selected, repo_root=repo_root, executable=executable_argv
+    )
     list_result = run_cli(
         [*executable_argv, "integration", "list"],
         repo_root=repo_root,
@@ -281,6 +291,34 @@ def verify_cli(
             context={"exit_code": str(list_result.returncode)},
         )
     return ".".join(str(part) for part in version), parse_supported_integrations(list_result.stdout)
+
+
+def _ensure_project_initialized(
+    declaration: SpeckitDeclaration,
+    selected: Sequence[str],
+    *,
+    repo_root: Path,
+    executable: Sequence[str],
+) -> None:
+    """Run ``specify init`` once in a repo that is not yet a Spec Kit project.
+
+    ``init`` requires an integration, so the first selected key is used; its
+    follow-up ``integration install`` in ``install_selected`` is then a no-op
+    the official CLI reports as already installed.
+    """
+    if not selected or (repo_root / ".specify").is_dir():
+        return
+    key = sorted(selected)[0]
+    result = run_cli(
+        build_init_argv(executable, key, declaration.integrations[key]),
+        repo_root=repo_root,
+        capture_output=False,
+    )
+    if result.returncode != 0:
+        raise SpeckitCliFailedError(
+            message="official `specify init` failed",
+            context={"integration": key, "exit_code": str(result.returncode)},
+        )
 
 
 def _detect_drifted_keys(
@@ -519,7 +557,9 @@ def prepare_install(
         return SpeckitInstallRecords(skipped_records, skipped_records)
 
     cli_executable = resolve_cli_executable(first, executable)
-    cli_version, supported = verify_cli(first, repo_root=repo_root, executable=cli_executable)
+    cli_version, supported = verify_cli(
+        first, repo_root=repo_root, executable=cli_executable, selected=selected
+    )
     ensure_supported(selected, supported)
     existing_for_first = existing_by_id.get(declarations[0].molecule_id)
     already_selected = (

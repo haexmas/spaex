@@ -23,6 +23,8 @@ from spaex.util.errors import (
 
 
 def _fake_cli(tmp_path: Path) -> tuple[str, str]:
+    # An already-initialized Spec Kit project, so no `specify init` runs.
+    (tmp_path / ".specify").mkdir(exist_ok=True)
     executable = tmp_path / "fake_specify.py"
     executable.write_text(
         f"""from pathlib import Path
