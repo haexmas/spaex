@@ -27,9 +27,10 @@ managed-file conflicts, and agent-specific behavior to the installed official
 `specify` CLI.
 
 A repository that is not yet a Spec Kit project (no `.specify/` directory) is
-bootstrapped first with `specify init --here --force --non-interactive`, using
-the alphabetically first selected integration; the remaining selected
-integrations are then installed as usual.
+bootstrapped first with
+`specify init --here --force --non-interactive --ignore-agent-tools`, using the
+alphabetically first selected integration; the remaining selected integrations
+are then installed as usual.
 
 The exact CLI package version is part of the molecule declaration and is
 installed into uv's isolated tool cache on first use. spaex does not modify the
