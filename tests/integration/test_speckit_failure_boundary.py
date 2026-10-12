@@ -52,6 +52,8 @@ def _resolved(tmp_path: Path, *, integration_key: str = "codex") -> list[Resolve
 
 
 def _cli(tmp_path: Path, *, version: str = "0.8.1", fail_install: bool = False) -> tuple[str, str]:
+    # An already-initialized Spec Kit project, so no `specify init` runs.
+    (tmp_path / ".specify").mkdir(exist_ok=True)
     executable = tmp_path / "fake_specify.py"
     target = "partial.md" if fail_install else "specify.md"
     exit_code = 7 if fail_install else 0

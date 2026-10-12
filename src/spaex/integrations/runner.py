@@ -29,6 +29,22 @@ def build_install_argv(
     return argv
 
 
+def build_init_argv(executable: CliExecutable, key: str, options: str) -> list[str]:
+    """Build a shell-free official project bootstrap invocation.
+
+    ``--here --force`` merges into the existing, non-empty consumer repo;
+    ``--non-interactive`` makes the CLI fail instead of hanging on a prompt.
+    """
+    argv = [executable] if isinstance(executable, str) else list(executable)
+    argv.extend(
+        ("init", "--here", "--force", "--non-interactive", "--ignore-agent-tools")
+    )
+    argv.extend(("--integration", key))
+    if options:
+        argv.append(f"--integration-options={options}")
+    return argv
+
+
 def resolve_cli_executable(
     declaration: SpeckitDeclaration,
     executable: CliExecutable | None = None,

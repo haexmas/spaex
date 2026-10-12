@@ -205,6 +205,8 @@ def _stateful_fake_cli(tmp_path: Path) -> tuple[str, str]:
     installed ... no files changed") regardless of whether its managed
     files still exist — matching specify-cli 1.0.6's actual behavior.
     """
+    # An already-initialized Spec Kit project, so no `specify init` runs.
+    (tmp_path / ".specify").mkdir(exist_ok=True)
     executable = tmp_path / "stateful_specify.py"
     executable.write_text(
         f"""import json
