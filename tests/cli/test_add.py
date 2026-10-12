@@ -66,10 +66,10 @@ def test_happy_path_adopts_single_molecule(
     assert (consumer / ".spaex" / "install.lock").exists()
 
 
-def test_mutate_compounds_preserves_constitution_local_fragments() -> None:
-    """`_mutate_compounds` reconstructs `ConsumerManifest` field-by-field; a
-    project-local fragment (Spec 023 FR-018) must survive untouched."""
-    from spaex.model.consumer_manifest import ConsumerManifest
+def test_mutate_compounds_preserves_non_compound_fields() -> None:
+    """Only `compounds` changes; a project-local fragment (Spec 023 FR-018)
+    and a persisted skill policy (Spec 018) must survive untouched."""
+    from spaex.model.consumer_manifest import ConsumerManifest, SkillInstallationPolicy
 
     local_fragments = (
         {
@@ -83,6 +83,9 @@ def test_mutate_compounds_preserves_constitution_local_fragments() -> None:
         identity="com.example.project",
         compounds=(),
         local_fragments=local_fragments,
+        skill_installation=SkillInstallationPolicy(
+            mode="managed", adapter="skillsmd", scope="project", agents=("claude",)
+        ),
     )
 
     result = add_cli._mutate_compounds(
@@ -93,6 +96,7 @@ def test_mutate_compounds_preserves_constitution_local_fragments() -> None:
     )
 
     assert result.local_fragments == local_fragments
+    assert result.skill_installation == manifest.skill_installation
 
 
 def test_merge_into_existing_compound_same_source_and_revision(
