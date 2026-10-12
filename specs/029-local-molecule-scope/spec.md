@@ -101,7 +101,7 @@ A teammate clones the repo, or the same developer creates a fresh checkout, and 
 - **Path owned by project scope**: a local molecule that would write an exclusive file at a path a project molecule owns is refused; the project file is never overwritten.
 - **Path tracked by git**: a local molecule that would write a file at a path git already tracks, or one that is not ignored by the project but present in the index, is refused, because writing there would change the committed tree.
 - **Composable contributions** (several molecules feeding one generated file): local contributions never change the project's generated output; they produce a separate local generated output instead.
-- **Spec Kit integrations in local scope**: an integration selected only locally is installed for this developer; its output files are excluded from git like every other local output. If the project scope already declares Spec Kit integrations, the local declaration must be compatible or the local adoption is refused.
+- **Spec Kit integrations in local scope**: an integration selected only locally is installed for this developer; its output files are excluded from git like every other local output. A checkout has exactly one active Spec Kit policy: if project scope already declares Spec Kit integrations, a local molecule declaring Spec Kit is refused (agent selection for a project-declared policy is already a per-install choice).
 - **Install hooks in local scope**: hooks run as for project scope. spaex can only exclude files it records itself; files a hook writes on its own are the hook's responsibility, and the developer is warned once when adopting a hook-bearing molecule locally.
 - **Local install failure**: a failing local-scope step rolls back the local outputs of that run without leaving project outputs half-written.
 - **Corrupt or invalid local overlay**: install refuses with a diagnostic naming the overlay; project scope is not silently applied without it, so the developer is never surprised by missing personal content.
@@ -125,7 +125,7 @@ A teammate clones the repo, or the same developer creates a fresh checkout, and 
 - **FR-010**: Adopting a molecule locally that is already adopted in project scope MUST be refused; a molecule later adopted in project scope while also present locally MUST be reported as shadowed and contribute nothing from local scope.
 - **FR-011**: Remove in local scope MUST delete every file only that local molecule contributed and drop its exclusion entries, leaving project files untouched.
 - **FR-012**: Status, trace and constitution show MUST label each molecule, file and behavior section with its scope.
-- **FR-013**: Local-scope Spec Kit integrations MUST be installed for the developer and excluded from git; an incompatible Spec Kit declaration across scopes MUST be refused.
+- **FR-013**: Local-scope Spec Kit integrations MUST be installed for the developer and excluded from git; a local Spec Kit declaration MUST be refused when project scope already declares one.
 - **FR-014**: Install hooks of local molecules MUST run under the same rules as project hooks, and the developer MUST be warned that files a hook writes on its own are not excluded automatically.
 - **FR-015**: Install of both scopes MUST be deterministic: two consecutive installs on unchanged inputs produce byte-identical outputs in both scopes.
 - **FR-016**: A failure in local scope MUST NOT leave project-scope outputs partially written; the installation either publishes a consistent result for both scopes or keeps the previous one.
