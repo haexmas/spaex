@@ -29,7 +29,7 @@ Two existing invariants are affected:
 - A checkout without `.spaex/local/` behaves exactly as before; project outputs are byte-identical with or without local adoptions.
 - Local harness content is not reviewed by the team. This is intended: it affects only the developer who adopted it, and only through an explicit operator command.
 - `info/exclude` is shared by all worktrees of a clone. An entry added in one worktree also hides an untracked file at the same path in another. Accepted for now; per-worktree `core.excludesFile` via `extensions.worktreeConfig` is the upgrade path.
-- Files an install hook writes on its own are not excluded automatically; hooks receive `SPAEX_SCOPE` so they can adapt.
+- Local hooks receive `SPAEX_SCOPE`; tracked or project-owned hook changes are refused, and newly created repository-local paths are captured in the local lock and exclusion block. Side effects outside the repository remain outside this feature's guarantee.
 - An older spaex without this feature drops `.spaex/local/` on its next install, because it does not stage that directory.
 - `spaex status` / `spaex trace` JSON output moves to `format_version: 2` (adds `scope`).
 

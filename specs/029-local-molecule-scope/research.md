@@ -70,6 +70,13 @@ All file references are repo-relative to `src/spaex/` unless marked otherwise.
 
 One block per worktree, keyed by the basename of `git rev-parse --git-dir` (`.git` for the primary checkout). spaex rewrites only its own block for the current worktree, creates the file and its `info/` directory when missing, and removes the block when it becomes empty. Entries are anchored (`/path`) so they match only at the repo root. Outside a git repository the step is skipped (spec edge case).
 
+The block is reconciled only after all in-tree staging and validation succeeds and
+is replaced through a temporary file plus atomic rename. If that write fails,
+the generation and repo-root snapshot are rolled back before the install
+returns an error. A process crash between the in-tree rename and the exclude
+rename is repaired by the next install, which reconciles the block from the
+current local lock before reporting success.
+
 **Rationale**:
 - `info/exclude` is git's built-in per-clone, never-committed ignore file, so no committed `.gitignore` changes (FR-005). Writing `.gitignore` itself is not an option: it can be an exclusive atom of a project molecule.
 - Verified: `info/exclude` lives in the common git dir and is shared by all worktrees, hence the per-worktree key so removing a local adoption in one worktree never drops another worktree's entries.
@@ -100,9 +107,9 @@ One block per worktree, keyed by the basename of `git rev-parse --git-dir` (`.gi
 
 ## R11. Install hooks in local scope
 
-**Decision**: Local hooks run through `install/hook_runner.run_install_hook` like project hooks, after project hooks, with an added environment variable `SPAEX_SCOPE=local` (`project` for project hooks). `spaex add --local` of a hook-bearing molecule prints a one-time warning that files the hook writes itself are not excluded (FR-014).
+**Decision**: Local hooks run through `install/hook_runner.run_install_hook` like project hooks, after project hooks, with an added environment variable `SPAEX_SCOPE=local` (`project` for project hooks). The local install snapshots repository state around each hook: a changed tracked or project-owned path refuses the publish and restores the pre-hook state; newly created untracked repository paths are added to the local lock and the per-worktree exclusion block before publication. `spaex add --local` of a hook-bearing molecule prints a one-time warning that side effects outside the repository are not covered by these checks (FR-014).
 
-**Rationale**: hooks are arbitrary code; spaex can only exclude what it records. `SPAEX_SCOPE` lets a hook author place outputs appropriately without spaex inspecting hook behavior.
+**Rationale**: hooks are arbitrary code, so the repository boundary must be enforced by observing their side effects rather than trusting hook authors. `SPAEX_SCOPE` still lets a hook author place outputs appropriately; the snapshot also prevents a hook from silently modifying committed or project-owned files.
 
 ## R12. Composable categories
 

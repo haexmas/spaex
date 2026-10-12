@@ -12,7 +12,7 @@
 | molecule declares `speckit` and project scope already does | `speckit-declaration-conflict` (existing) | existing |
 | local exclusive destination is project-owned or tracked by git | `local-path-conflict` | `VALIDATION_REFUSE` |
 
-- A hook-bearing molecule prints: `warning: <id> runs an install hook; files it writes on its own are not excluded from git`.
+- A hook-bearing molecule prints: `warning: <id> runs an install hook; repository side effects are checked, but files written outside the repository are not covered by local-scope exclusions`.
 
 ## `spaex remove [--local] <molecule-ids>`
 

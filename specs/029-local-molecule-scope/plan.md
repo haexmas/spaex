@@ -24,7 +24,7 @@ Add a second adoption scope, `local`, next to today's project scope. A developer
 
 **Performance Goals**: Install without a local overlay does no extra work beyond one `is_file()` check (SC-002 byte-identity also implies no extra git calls). With an overlay: one extra `git ls-files` and one `git rev-parse` per install; local behavior composition costs one composer pass over local fragments only.
 
-**Constraints**: Project outputs byte-identical with and without an overlay (SC-002); deterministic outputs in both scopes (FR-015); single atomic publish (FR-016); no edits to committed ignore files (FR-005).
+**Constraints**: Project outputs byte-identical with and without an overlay (SC-002); deterministic outputs in both scopes (FR-015); single atomic publish (FR-016); no edits to committed ignore files (FR-005); local hook side effects are checked at the repository boundary (FR-014).
 
 **Scale/Scope**: Same molecule counts as project scope (single digits to low tens per checkout).
 
@@ -116,6 +116,7 @@ tests/
 │   ├── test_local_manifest.py     # schema + parsing round-trip, invalid overlay
 │   ├── test_git_exclude.py        # block create/update/remove, foreign text untouched,
 │   │                              #   malformed block refusal, per-worktree keys
+│   ├── test_local_hook_side_effects.py # tracked/project-owned refusal, untracked capture
 │   └── test_local_scope_preflight.py   # shadowing, project-owned and tracked-path refusal,
 │                                       #   speckit conflict
 ├── contract/
