@@ -79,6 +79,16 @@ class RepoSideEffectGuard:
     def __enter__(self) -> RepoSideEffectGuard:
         raw_prefix = _git(self._root, "rev-parse", "--show-prefix")
         self._prefix = raw_prefix.decode("utf-8").strip() if raw_prefix is not None else ""
+        raw_index = _git(self._root, "rev-parse", "--git-path", "index")
+        self._index_path = None
+        self._index_before = None
+        if raw_index is not None:
+            index_path = Path(raw_index.decode("utf-8").strip())
+            self._index_path = index_path if index_path.is_absolute() else self._root / index_path
+            if self._index_path.is_file():
+                self._index_before = self._index_path.read_bytes()
+        raw_tracked = _git(self._root, "ls-files", "-z")
+        self._tracked_before = _nul_paths(raw_tracked) if raw_tracked is not None else set()
         self._dirty_before = _dirty_tracked(self._root, self._prefix)
         self._untracked_before = (
             _untracked(self._root) if self._dirty_before is not None else set()
@@ -109,6 +119,14 @@ class RepoSideEffectGuard:
         if self._dirty_before is not None:
             changed |= (_dirty_tracked(self._root, self._prefix) or set()) - self._dirty_before
             created = _untracked(self._root) - self._untracked_before
+        index_after = (
+            self._index_path.read_bytes()
+            if self._index_path is not None and self._index_path.is_file()
+            else None
+        )
+        if index_after != self._index_before:
+            changed |= self._dirty_before or set()
+            changed |= _dirty_tracked(self._root, self._prefix) or set()
         spaex_root = self._root / SPAEX_DIRNAME
         spaex_after = {
             path.relative_to(self._root).as_posix(): path.read_bytes()
@@ -135,6 +153,11 @@ class RepoSideEffectGuard:
         return False
 
     def _revert(self, changed: set[str]) -> None:
+        if self._index_path is not None:
+            if self._index_before is None:
+                self._index_path.unlink(missing_ok=True)
+            else:
+                atomic.write_replace(self._index_path, self._index_before)
         restore_from_index = sorted(path for path in changed if path not in self._saved)
         for path in sorted(changed - set(restore_from_index)):
             target = self._root / path
@@ -144,7 +167,11 @@ class RepoSideEffectGuard:
             else:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 atomic.write_replace(target, before)
-        new_files = [path for path in restore_from_index if path.split("/", 1)[0] == SPAEX_DIRNAME]
+        new_files = [
+            path
+            for path in restore_from_index
+            if path.split("/", 1)[0] == SPAEX_DIRNAME or path not in self._tracked_before
+        ]
         for path in new_files:
             (self._root / path).unlink(missing_ok=True)
         tracked = [path for path in restore_from_index if path not in new_files]
