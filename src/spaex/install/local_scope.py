@@ -25,22 +25,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from spaex.behavior.orchestrate import record_declares_behavior
-from spaex.constitution.publish import CONSTITUTION_PATH, delete_orphaned_paths
+from spaex.constitution.publish import CONSTITUTION_PATH
 from spaex.constitution.resolve import ResolvedMolecule, resolve_install_inputs
 from spaex.install import git_exclude
-from spaex.install.generation import allocate_generation_id
 from spaex.install.generic_atoms import (
     DeliveredFile,
     collect_exclusive_atoms,
     content_hash,
-    restore_delivered_targets,
-    snapshot_delivered_targets,
-    write_delivered_files,
 )
 from spaex.install.nix_packages import ComposedFile, collect_package_fragments, compose
 from spaex.install.side_effects import RepoSideEffectGuard
 from spaex.integrations.speckit import emit_results, prepare_install
-from spaex.io import transaction
 from spaex.model.consumer_manifest import ConsumerManifest, flatten_compound_pins
 from spaex.model.install_lock import (
     HookStatus,
@@ -51,7 +46,6 @@ from spaex.model.install_lock import (
 from spaex.model.local_manifest import LocalManifest
 from spaex.paths import (
     LOCAL_CONSTITUTION_RELATIVE_PATH,
-    LOCAL_DIRNAME,
     LOCAL_MANIFEST_RELATIVE_PATH,
     LOCAL_RELATIVE_DIR,
     SPAEX_DIRNAME,
@@ -66,7 +60,6 @@ from spaex.util.errors import (
     SpeckitDeclarationConflictError,
 )
 
-LOCAL_GITIGNORE = b"*\n"
 LOCAL_GENERATED_PACKAGES_PATH = f"{LOCAL_RELATIVE_DIR}/generated/nix-packages.json"
 LOCAL_PREAMBLE = (
     "> These rules apply only to this checkout and only for this developer. "
@@ -77,10 +70,6 @@ HOOK_WARNING = (
     "warning: {molecule_id} runs an install hook; repository side effects are checked, "
     "but files written outside the repository are not covered by local-scope exclusions\n"
 )
-
-# Files under `.spaex/local/` that every local publish writes fresh; every
-# other file there (behavior outputs) is carried over verbatim.
-_REGENERATED = frozenset({"manifest.json", ".gitignore", transaction.INSTALL_LOCK_NAME})
 
 RunHooks = Callable[..., dict[str, HookStatus]]
 
@@ -429,98 +418,3 @@ def _build_records(
         )
     entries.sort(key=lambda m: (m.id, m.source, m.revision, m.paths))
     return tuple(entries), hashes
-
-
-def _project_paths(live: Path) -> frozenset[str]:
-    """Paths the published project lock owns; local orphan cleanup must keep them."""
-    path = live / transaction.INSTALL_LOCK_NAME
-    if not path.is_file():
-        return frozenset()
-    lock = InstallLock.from_json(path.read_bytes())
-    return frozenset(p for molecule in lock.molecules for p in molecule.paths)
-
-
-def publish(repo_root: Path, plan: LocalPlan, *, state_root: Path) -> None:
-    """Publish local scope as its own `.spaex` generation.
-
-    Every live project file is re-staged byte-for-byte, so the committed tree
-    is unchanged. Root files are written, orphans deleted and the exclusion
-    block reconciled inside `post_write_verify`: a failure there restores the
-    root files and rolls the whole generation back.
-    """
-    live = repo_root / transaction.SPAEX_DIR
-    staged = [
-        transaction.StagedFile(path.relative_to(live).as_posix(), path.read_bytes())
-        for path in sorted(live.rglob("*"))
-        if path.is_file()
-        and not path.is_symlink()
-        and path.relative_to(live).parts[0] != LOCAL_DIRNAME
-    ]
-    new_lock: InstallLock | None = None
-    # Kept while the overlay lists anything, even when every entry is shadowed:
-    # spaex never drops the developer's adoption record on its own (R9).
-    if plan.overlay_bytes is not None:
-        existing = live / LOCAL_DIRNAME
-        # Carried-over files are behavior outputs; drop them once no local
-        # molecule declares behavior any more.
-        if existing.is_dir() and any(map(record_declares_behavior, plan.resolution.resolved)):
-            for path in sorted(existing.rglob("*")):
-                relative = path.relative_to(existing)
-                if (
-                    path.is_file()
-                    and not path.is_symlink()
-                    and relative.as_posix() not in _REGENERATED
-                    and relative.parts[0] != "generated"
-                ):
-                    staged.append(
-                        transaction.StagedFile(
-                            f"{LOCAL_DIRNAME}/{relative.as_posix()}", path.read_bytes()
-                        )
-                    )
-        previous_id = plan.previous_lock.generation_id if plan.previous_lock else None
-        new_lock = InstallLock(
-            spaex_version="4",
-            generation_id=allocate_generation_id(plan.overlay_bytes, previous_id),
-            molecules=plan.records,
-            content_hashes=dict(plan.content_hashes),
-        )
-        staged += [
-            transaction.StagedFile(f"{LOCAL_DIRNAME}/manifest.json", plan.overlay_bytes),
-            transaction.StagedFile(f"{LOCAL_DIRNAME}/.gitignore", LOCAL_GITIGNORE),
-            transaction.StagedFile(
-                f"{LOCAL_DIRNAME}/{transaction.INSTALL_LOCK_NAME}", new_lock.to_json_bytes()
-            ),
-        ]
-        if plan.packages_bytes is not None:
-            staged.append(
-                transaction.StagedFile(
-                    LOCAL_GENERATED_PACKAGES_PATH.removeprefix(f"{SPAEX_DIRNAME}/"),
-                    plan.packages_bytes,
-                )
-            )
-    empty_lock = InstallLock(
-        spaex_version="4", generation_id="g_19700101T000000Z_0000", molecules=()
-    )
-
-    def post_write_verify() -> None:
-        snapshot = snapshot_delivered_targets(plan.delivered, repo_root=repo_root)
-        try:
-            write_delivered_files(plan.delivered, repo_root=repo_root)
-            delete_orphaned_paths(
-                repo_root,
-                plan.previous_lock,
-                new_lock or empty_lock,
-                keep=_project_paths(live),
-            )
-            git_exclude.reconcile(repo_root, exclusion_paths(new_lock))
-        except (OSError, HaexError):
-            restore_delivered_targets(snapshot)
-            raise
-
-    transaction.publish_generation(
-        live,
-        staged,
-        post_write_verify=post_write_verify,
-        state_root=state_root,
-        repo_root=repo_root,
-    )
