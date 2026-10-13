@@ -22,6 +22,9 @@ def repo(tmp_path: Path, git_binary: str) -> Path:
     root = tmp_path / "repo"
     root.mkdir()
     _git(root, "init", "-q")
+    _git(root, "config", "user.email", "spaex-test@example.com")
+    _git(root, "config", "user.name", "spaex-test")
+    _git(root, "config", "commit.gpgsign", "false")
     return root
 
 
@@ -70,12 +73,12 @@ def test_blocks_of_other_worktrees_are_untouched(repo: Path) -> None:
 
 
 def test_special_characters_are_escaped(repo: Path) -> None:
-    (repo / "a*b").write_text("x")
+    (repo / "a[b").write_text("x")
     (repo / "axb").write_text("x")
 
-    git_exclude.reconcile(repo, ["a*b"])
+    git_exclude.reconcile(repo, ["a[b"])
 
-    assert git_exclude.block_paths(repo) == ("/a\\*b",)
+    assert git_exclude.block_paths(repo) == ("/a\\[b",)
     assert _git(repo, "status", "--porcelain") == "?? axb"
 
 

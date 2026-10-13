@@ -104,7 +104,7 @@ def test_remove_last_local_leaves_no_trace(scene: SimpleNamespace) -> None:
 def test_fresh_clone_ignores_local_scope(scene: SimpleNamespace, tmp_path: Path) -> None:
     assert scene.add(_MINE_ID, local=True) == 0
     clone = tmp_path / "clone"
-    _git(tmp_path, "clone", "-q", str(scene.consumer), str(clone))
+    _git(tmp_path, "-c", "core.autocrlf=false", "clone", "-q", str(scene.consumer), str(clone))
     # spaex derives a git checkout's identity from `origin`; a bare path has no scheme.
     _git(clone, "remote", "set-url", "origin", "https://example.com/consumer")
 
