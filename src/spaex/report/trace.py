@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Literal
 
 from spaex.cli.install import _load_consumer_manifest
-from spaex.model.install_lock import InstallLock, path_owners, read_with_consistent_generation
+from spaex.install import local_scope
+from spaex.model.install_lock import InstallLock, read_with_consistent_generation
 from spaex.paths import COMPOSED_CONSTITUTION_RELATIVE_PATH
 from spaex.util.errors import UsageError
 
@@ -19,6 +20,7 @@ class MoleculeOwner:
     molecule_id: str
     source: str
     revision: str
+    scope: Literal["project", "local"] = "project"
 
 
 @dataclass(frozen=True)
@@ -59,6 +61,23 @@ def normalize_query(repo_root: Path, raw: str) -> str:
     return relative.as_posix()
 
 
+def _owners_by_path(
+    project: InstallLock, local: InstallLock | None
+) -> dict[str, tuple[MoleculeOwner, ...]]:
+    """Every recorded path with its owners, project scope first (Spec 029)."""
+    owners: dict[str, list[MoleculeOwner]] = {}
+    scoped: list[tuple[Literal["project", "local"], InstallLock]] = [("project", project)]
+    if local is not None:
+        scoped.append(("local", local))
+    for scope, lock in scoped:
+        for molecule in lock.molecules:
+            for path in molecule.paths:
+                owners.setdefault(path, []).append(
+                    MoleculeOwner(molecule.id, molecule.source, molecule.revision, scope)
+                )
+    return {path: tuple(entries) for path, entries in owners.items()}
+
+
 def resolve_trace_query(repo_root: Path, query: str) -> FileAttribution:
     """Resolve a `spaex trace` query against the install lock's recorded paths (research.md R2)."""
     normalized = normalize_query(repo_root, query)
@@ -66,8 +85,7 @@ def resolve_trace_query(repo_root: Path, query: str) -> FileAttribution:
     def _build(lock: InstallLock) -> FileAttribution:
         _load_consumer_manifest(repo_root)  # gate only: propagates its HaexError
 
-        owners_map = path_owners(lock)
-        lock_by_id = {molecule.id: molecule for molecule in lock.molecules}
+        owners_map = _owners_by_path(lock, local_scope.read_local_lock(repo_root))
 
         if normalized in owners_map:
             kind: Literal["file", "directory"] = "file"
@@ -88,14 +106,7 @@ def resolve_trace_query(repo_root: Path, query: str) -> FileAttribution:
         matches = tuple(
             PathOwnership(
                 path=path,
-                owners=tuple(
-                    MoleculeOwner(
-                        molecule_id=molecule_id,
-                        source=lock_by_id[molecule_id].source,
-                        revision=lock_by_id[molecule_id].revision,
-                    )
-                    for molecule_id in owners_map[path]
-                ),
+                owners=owners_map[path],
                 constitution_trace_hint=(path == COMPOSED_CONSTITUTION_RELATIVE_PATH),
             )
             for path in matched_paths

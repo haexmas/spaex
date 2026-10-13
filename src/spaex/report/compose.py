@@ -10,6 +10,7 @@ from spaex.behavior.clauses import parse_clauses
 from spaex.behavior.fragment import PROJECT_SCOPE
 from spaex.behavior.orchestrate import CONSTITUTION_D_DIRNAME
 from spaex.cli.install import _load_consumer_manifest
+from spaex.install import local_scope
 from spaex.model.consumer_manifest import flatten_compound_pins
 from spaex.model.install_lock import (
     HookStatus,
@@ -19,12 +20,15 @@ from spaex.model.install_lock import (
 )
 from spaex.paths import (
     COMPOSED_CONSTITUTION_RELATIVE_PATH,
+    LOCAL_CONSTITUTION_RELATIVE_PATH,
     SPAEX_DIRNAME,
     composed_constitution_path,
+    local_dir,
 )
 from spaex.report.staleness import check_constitution_staleness
 
 InstallState = Literal["installed", "pinned_not_installed", "installed_not_pinned"]
+Scope = Literal["project", "local"]
 
 
 @dataclass(frozen=True)
@@ -46,6 +50,7 @@ class MoleculeRecord:
     install_state: InstallState
     hook_status: HookStatus | None
     atoms: AtomGrouping
+    scope: Scope = "project"
 
 
 @dataclass(frozen=True)
@@ -61,6 +66,7 @@ class DriftFinding:
     molecule_id: str | None
     pinned: tuple[str, str] | None
     installed: tuple[str, str] | None
+    scope: Scope = "project"
 
 
 @dataclass(frozen=True)
@@ -81,11 +87,15 @@ class CompositionReport:
     molecules: tuple[MoleculeRecord, ...]
     constitution: ConstitutionSummary | None
     drift: tuple[DriftFinding, ...]
+    shadowed: tuple[str, ...] = ()
 
 
-def behavior_fragment_ids(repo_root: Path, molecule_id: str) -> list[str]:
-    """Sorted fragment-id stems under `.spaex/constitution.d/<molecule_id>/`."""
-    molecule_dir = repo_root / SPAEX_DIRNAME / CONSTITUTION_D_DIRNAME / molecule_id
+def behavior_fragment_ids(
+    repo_root: Path, molecule_id: str, *, spaex_dir: Path | None = None
+) -> list[str]:
+    """Sorted fragment-id stems under `<spaex_dir>/constitution.d/<molecule_id>/`."""
+    base = spaex_dir if spaex_dir is not None else repo_root / SPAEX_DIRNAME
+    molecule_dir = base / CONSTITUTION_D_DIRNAME / molecule_id
     if not molecule_dir.is_dir():
         return []
     return sorted(p.stem for p in molecule_dir.glob("*.md"))
@@ -97,21 +107,32 @@ def project_local_fragment_ids(repo_root: Path) -> list[str]:
 
 
 def build_atom_grouping(
-    repo_root: Path, molecule_id: str, lock: InstallLock
+    repo_root: Path,
+    molecule_id: str,
+    lock: InstallLock,
+    *,
+    spaex_dir: Path | None = None,
+    constitution_path: str = COMPOSED_CONSTITUTION_RELATIVE_PATH,
 ) -> AtomGrouping:
-    """Group `molecule_id`'s recorded paths by what spaex did with them (research.md R1)."""
+    """Group `molecule_id`'s recorded paths by what spaex did with them (research.md R1).
+
+    Spec 029: `spaex_dir`/`constitution_path` point at `.spaex/local/` for a
+    local-scope molecule.
+    """
     owners = path_owners(lock)
     composed_artifacts: list[str] = []
     files: list[str] = []
     for path, owner_ids in owners.items():
-        if path == COMPOSED_CONSTITUTION_RELATIVE_PATH or molecule_id not in owner_ids:
+        if path == constitution_path or molecule_id not in owner_ids:
             continue
         if len(owner_ids) > 1:
             composed_artifacts.append(path)
         else:
             files.append(path)
     return AtomGrouping(
-        behavior_fragments=tuple(behavior_fragment_ids(repo_root, molecule_id)),
+        behavior_fragments=tuple(
+            behavior_fragment_ids(repo_root, molecule_id, spaex_dir=spaex_dir)
+        ),
         composed_artifacts=tuple(sorted(composed_artifacts)),
         files=tuple(sorted(files)),
     )
@@ -169,6 +190,7 @@ def _build_drift_findings(
                     molecule_id=molecule.molecule_id,
                     pinned=molecule.pinned,
                     installed=None,
+                    scope=molecule.scope,
                 )
             )
         elif molecule.install_state == "installed_not_pinned":
@@ -178,6 +200,7 @@ def _build_drift_findings(
                     molecule_id=molecule.molecule_id,
                     pinned=None,
                     installed=molecule.installed,
+                    scope=molecule.scope,
                 )
             )
         elif (
@@ -191,6 +214,7 @@ def _build_drift_findings(
                     molecule_id=molecule.molecule_id,
                     pinned=molecule.pinned,
                     installed=molecule.installed,
+                    scope=molecule.scope,
                 )
             )
     if constitution is not None and constitution.stale:
@@ -199,7 +223,58 @@ def _build_drift_findings(
                 kind="constitution_stale", molecule_id=None, pinned=None, installed=None
             )
         )
-    return tuple(sorted(findings, key=lambda f: (f.molecule_id is None, f.molecule_id or "")))
+    return tuple(
+        sorted(
+            findings,
+            key=lambda f: (f.molecule_id is None, f.scope != "project", f.molecule_id or ""),
+        )
+    )
+
+
+def _molecule_records(
+    repo_root: Path,
+    pinned_map: dict[str, tuple[str, str]],
+    lock: InstallLock,
+    *,
+    scope: Scope,
+    spaex_dir: Path | None,
+    constitution_path: str,
+) -> list[MoleculeRecord]:
+    """One record per molecule pinned or installed in one scope."""
+    installed_map = {molecule.id: molecule for molecule in lock.molecules}
+    records: list[MoleculeRecord] = []
+    for molecule_id in sorted(set(pinned_map) | set(installed_map)):
+        pinned = pinned_map.get(molecule_id)
+        installed_entry = installed_map.get(molecule_id)
+        installed = (
+            (installed_entry.source, installed_entry.revision)
+            if installed_entry is not None
+            else None
+        )
+        if pinned is not None and installed_entry is not None:
+            install_state: InstallState = "installed"
+        elif installed_entry is None:
+            install_state = "pinned_not_installed"
+        else:
+            install_state = "installed_not_pinned"
+        records.append(
+            MoleculeRecord(
+                molecule_id=molecule_id,
+                pinned=pinned,
+                installed=installed,
+                install_state=install_state,
+                hook_status=installed_entry.hook_status if installed_entry else None,
+                atoms=build_atom_grouping(
+                    repo_root,
+                    molecule_id,
+                    lock,
+                    spaex_dir=spaex_dir,
+                    constitution_path=constitution_path,
+                ),
+                scope=scope,
+            )
+        )
+    return records
 
 
 def build_composition_report(repo_root: Path) -> CompositionReport:
@@ -207,33 +282,30 @@ def build_composition_report(repo_root: Path) -> CompositionReport:
     def _build(lock: InstallLock) -> CompositionReport:
         manifest = _load_consumer_manifest(repo_root)
         pinned_map = flatten_compound_pins(manifest)
-        installed_map = {molecule.id: molecule for molecule in lock.molecules}
-        molecule_ids = sorted(set(pinned_map) | set(installed_map))
-
-        molecules: list[MoleculeRecord] = []
-        for molecule_id in molecule_ids:
-            pinned = pinned_map.get(molecule_id)
-            installed_entry = installed_map.get(molecule_id)
-            installed = (
-                (installed_entry.source, installed_entry.revision)
-                if installed_entry is not None
-                else None
-            )
-            if pinned is not None and installed_entry is not None:
-                install_state: InstallState = "installed"
-            elif installed_entry is None:
-                install_state = "pinned_not_installed"
-            else:
-                install_state = "installed_not_pinned"
-            molecules.append(
-                MoleculeRecord(
-                    molecule_id=molecule_id,
-                    pinned=pinned,
-                    installed=installed,
-                    install_state=install_state,
-                    hook_status=installed_entry.hook_status if installed_entry else None,
-                    atoms=build_atom_grouping(repo_root, molecule_id, lock),
-                )
+        molecules = _molecule_records(
+            repo_root,
+            pinned_map,
+            lock,
+            scope="project",
+            spaex_dir=None,
+            constitution_path=COMPOSED_CONSTITUTION_RELATIVE_PATH,
+        )
+        overlay = local_scope.load_overlay(repo_root)
+        local_pins = (
+            flatten_compound_pins(overlay.as_consumer_manifest(manifest.identity))
+            if overlay is not None
+            else {}
+        )
+        shadowed = tuple(sorted(set(local_pins) & set(pinned_map)))
+        local_lock = local_scope.read_local_lock(repo_root)
+        if local_pins or local_lock is not None:
+            molecules += _molecule_records(
+                repo_root,
+                {k: v for k, v in local_pins.items() if k not in shadowed},
+                local_lock or InstallLock(spaex_version="4", generation_id="", molecules=()),
+                scope="local",
+                spaex_dir=local_dir(repo_root),
+                constitution_path=LOCAL_CONSTITUTION_RELATIVE_PATH,
             )
 
         molecules_tuple = tuple(molecules)
@@ -242,6 +314,7 @@ def build_composition_report(repo_root: Path) -> CompositionReport:
             molecules=molecules_tuple,
             constitution=constitution,
             drift=_build_drift_findings(molecules_tuple, constitution),
+            shadowed=shadowed,
         )
 
     return read_with_consistent_generation(repo_root, _build)
