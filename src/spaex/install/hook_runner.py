@@ -19,6 +19,7 @@ orchestrator; this module owns the per-hook invocation contract:
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -54,6 +55,7 @@ def run_install_hook(
     resolved: ResolvedMolecule,
     consumer_repo_root: Path,
     state_root: Path,
+    scope: str = "project",
 ) -> HookOutcome:
     """Run one molecule's install_hook. Never raises for hook-domain failures.
 
@@ -62,6 +64,9 @@ def run_install_hook(
     here. Every failure mode below returns a HookOutcome the orchestrator
     translates into hook_status and (per on_failure policy) transaction
     rollback.
+
+    ``scope`` (Spec 029) is exported to the hook as ``SPAEX_SCOPE``
+    (``project`` or ``local``) so a hook can place its outputs accordingly.
     """
     hook = resolved.install_hook
     assert hook is not None, "run_install_hook requires a molecule with install_hook"
@@ -87,7 +92,12 @@ def run_install_hook(
 
     argv = [hook.interpreter, str(canonical_target), *hook.args]
     try:
-        completed = subprocess.run(argv, cwd=consumer_repo_root, check=False)
+        completed = subprocess.run(
+            argv,
+            cwd=consumer_repo_root,
+            check=False,
+            env={**os.environ, "SPAEX_SCOPE": scope},
+        )
     except KeyboardInterrupt:
         return HookOutcome(kind=HookOutcomeKind.INTERRUPTED, reason="interrupted")
     except OSError:

@@ -615,7 +615,7 @@ def _build_molecule_inputs(
     """
     inputs: list[MoleculeInput] = []
     for record in resolved:
-        if not _record_declares_behavior(record):
+        if not record_declares_behavior(record):
             continue
         cache_dir = record.cache_dir
         manifest = record.molecule_manifest
@@ -641,10 +641,10 @@ def _build_molecule_inputs(
 
 
 def _any_declares_behavior(resolved: Sequence[ResolvedMolecule]) -> bool:
-    return any(_record_declares_behavior(r) for r in resolved)
+    return any(record_declares_behavior(r) for r in resolved)
 
 
-def _record_declares_behavior(record: ResolvedMolecule) -> bool:
+def record_declares_behavior(record: ResolvedMolecule) -> bool:
     manifest = record.molecule_manifest
     if manifest is None:
         return False

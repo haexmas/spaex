@@ -13,7 +13,7 @@ import os
 import shutil
 import sys
 import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 from types import TracebackType
@@ -34,7 +34,7 @@ from spaex.constitution.resolve import (
     ResolvedMolecule,
     resolve_install_inputs,
 )
-from spaex.install import inflight
+from spaex.install import inflight, local_scope
 from spaex.install.generic_atoms import DeliveredFile, collect_exclusive_atoms
 from spaex.install.hook_runner import HookOutcomeKind, run_install_hook
 from spaex.install.lock import OwnerToken
@@ -63,6 +63,7 @@ from spaex.model.install_lock import (
 from spaex.paths import (
     MANIFEST_RELATIVE_PATH,
     composed_constitution_path,
+    local_dir,
     manifest_path,
 )
 from spaex.skills.installer import pending_external_skill_molecules
@@ -284,6 +285,7 @@ def run(
             preserved_files = (
                 *preserved_project_local_files,
                 *preserved_behavior_files,
+                *_preserved_local_scope_files(repo_root),
             )
             contributing_ids = {contribution.source.id for contribution in contributions}
             existing_lock = _read_live_lock(repo_root)
@@ -308,6 +310,16 @@ def run(
                     disabled=bool(getattr(args, "no_speckit_integrations", False)),
                 )
                 emit_results(speckit_records)
+                local_plan = _prepare_local_scope(
+                    args,
+                    repo_root=repo_root,
+                    state_root=state_root,
+                    manifest=manifest,
+                    resolved=resolved,
+                    delivered_files=delivered_files,
+                    existing_lock=existing_lock,
+                    skip_hooks=skip_hooks,
+                )
                 hook_only_records = _hook_only_records(
                     resolved,
                     contributing_ids=contributing_ids,
@@ -324,14 +336,15 @@ def run(
                 # (empty constitution + molecule map with hook_status)
                 # differs from disk. A hook-only re-install with an
                 # identical hook_status map is a clean no-op.
-                if _is_no_op(
+                project_no_op = _is_no_op(
                     repo_root,
                     None,
                     hook_only_records,
                     allow_existing_behavior_artifact=(
                         bool(project_local) or _has_behavior_fragments(resolved)
                     ),
-                ):
+                )
+                if project_no_op and local_plan.is_no_op:
                     inflight.clean_stale_siblings(
                         repo_root / transaction.SPAEX_DIR,
                         remove_prev=True,
@@ -343,14 +356,18 @@ def run(
                         resolved=resolved,
                         project_local=project_local,
                         abort_on_contradiction=abort_on_contradiction,
+                        local_plan=local_plan,
                     )
+                    local_scope.reconcile_exclusions(repo_root)
                     return exit_codes.SUCCESS
                 generation_context = _preserve_generation_for_behavior(
-                    repo_root, resolved, project_local
+                    repo_root, resolved, project_local, local_active=local_plan.active
                 )
                 stale_bytes_to_restore: bytes | None = None
                 with generation_context:
-                    if speckit_records:
+                    if project_no_op:
+                        pass
+                    elif speckit_records:
                         publish_constitution(
                             [],
                             repo_root,
@@ -372,7 +389,9 @@ def run(
                             delivered_files=delivered_files,
                         )
                     new_generation_id = _live_generation_id(repo_root)
-                    if hook_only_records:
+                    if project_no_op:
+                        pass
+                    elif hook_only_records:
                         sys.stdout.write(
                             f"installed generation {new_generation_id}\n"
                         )
@@ -380,12 +399,14 @@ def run(
                         sys.stdout.write(
                             f"installed empty generation {new_generation_id}\n"
                         )
+                    _publish_local_scope(repo_root, local_plan, state_root=state_root)
                     outcome = _run_behavior_pipeline(
                         repo_root=repo_root,
                         state_root=state_root,
                         resolved=resolved,
                         project_local=project_local,
                         abort_on_contradiction=abort_on_contradiction,
+                        local_plan=local_plan,
                     )
                     if (
                         not abort_on_contradiction
@@ -399,6 +420,7 @@ def run(
                     (repo_root / ".spaex" / STALE_FILENAME).write_bytes(
                         stale_bytes_to_restore
                     )
+                local_scope.reconcile_exclusions(repo_root)
                 return exit_codes.SUCCESS
 
             molecule_ids = sorted(
@@ -464,6 +486,16 @@ def run(
                 disabled=bool(getattr(args, "no_speckit_integrations", False)),
             )
             emit_results(speckit_records)
+            local_plan = _prepare_local_scope(
+                args,
+                repo_root=repo_root,
+                state_root=state_root,
+                manifest=manifest,
+                resolved=resolved,
+                delivered_files=delivered_files,
+                existing_lock=existing_lock,
+                skip_hooks=skip_hooks,
+            )
 
             hook_only_records = _hook_only_records(
                 resolved,
@@ -505,7 +537,8 @@ def run(
                 ),
                 *hook_only_records,
             ]
-            if _is_no_op(repo_root, assembled_body, expected_records):
+            project_no_op = _is_no_op(repo_root, assembled_body, expected_records)
+            if project_no_op and local_plan.is_no_op:
                 inflight.clean_stale_siblings(
                     repo_root / transaction.SPAEX_DIR,
                     remove_prev=True,
@@ -517,15 +550,19 @@ def run(
                     resolved=resolved,
                     project_local=project_local,
                     abort_on_contradiction=abort_on_contradiction,
+                    local_plan=local_plan,
                 )
+                local_scope.reconcile_exclusions(repo_root)
                 return exit_codes.SUCCESS
 
             generation_context = _preserve_generation_for_behavior(
-                repo_root, resolved, project_local
+                repo_root, resolved, project_local, local_active=local_plan.active
             )
             stale_bytes_to_restore = None
             with generation_context:
-                if speckit_records:
+                if project_no_op:
+                    pass
+                elif speckit_records:
                     publish_constitution(
                         contributions,
                         repo_root,
@@ -550,14 +587,17 @@ def run(
                         delivered_files=delivered_files,
                         contributor_extra_paths=contributor_extra_paths,
                     )
-                new_generation_id = _live_generation_id(repo_root)
-                sys.stdout.write(f"installed generation {new_generation_id}\n")
+                if not project_no_op:
+                    new_generation_id = _live_generation_id(repo_root)
+                    sys.stdout.write(f"installed generation {new_generation_id}\n")
+                _publish_local_scope(repo_root, local_plan, state_root=state_root)
                 outcome = _run_behavior_pipeline(
                     repo_root=repo_root,
                     state_root=state_root,
                     resolved=resolved,
                     project_local=project_local,
                     abort_on_contradiction=abort_on_contradiction,
+                    local_plan=local_plan,
                 )
                 if (
                     not abort_on_contradiction
@@ -571,6 +611,7 @@ def run(
                 (repo_root / ".spaex" / STALE_FILENAME).write_bytes(
                     stale_bytes_to_restore
                 )
+            local_scope.reconcile_exclusions(repo_root)
             return exit_codes.SUCCESS
     except HaexError:
         raise
@@ -582,14 +623,65 @@ def run(
         ) from exc
 
 
+def _prepare_local_scope(
+    args: argparse.Namespace,
+    *,
+    repo_root: Path,
+    state_root: Path,
+    manifest: ConsumerManifest,
+    resolved: Sequence[ResolvedMolecule],
+    delivered_files: Sequence[DeliveredFile],
+    existing_lock: InstallLock | None,
+    skip_hooks: bool,
+) -> local_scope.LocalPlan:
+    """Spec 029: validate local scope and run its hooks before any publication."""
+    return local_scope.prepare(
+        repo_root,
+        manifest=manifest,
+        state_root=state_root,
+        project_resolved=resolved,
+        project_delivered=delivered_files,
+        project_lock=existing_lock,
+        run_hooks=_run_hooks,
+        skip_hooks=skip_hooks,
+        speckit_selection=getattr(args, "speckit_agents", None),
+        speckit_disabled=bool(getattr(args, "no_speckit_integrations", False)),
+    )
+
+
+def _publish_local_scope(
+    repo_root: Path, plan: local_scope.LocalPlan, *, state_root: Path
+) -> None:
+    """Spec 029: publish local scope after the project generation, if it changed.
+
+    ponytail: runs inside the caller's `.spaex` rollback context, which does
+    not cover repo-root files this local publication already wrote should a
+    later behavior pass fail; the next install rewrites them. Upgrade path:
+    one combined root-file snapshot for both scopes.
+    """
+    if plan.is_no_op:
+        return
+    local_scope.publish(repo_root, plan, state_root=state_root)
+    if plan.records:
+        sys.stdout.write(f"local: {len(plan.records)} molecule(s) installed\n")
+    else:
+        sys.stdout.write("local: no molecules adopted; local scope removed\n")
+
+
 def _preserve_generation_for_behavior(
     repo_root: Path,
     resolved: Sequence[ResolvedMolecule],
     project_local: Sequence[BehaviorFragment] = (),
+    *,
+    local_active: bool = False,
 ) -> AbstractContextManager[None]:
-    """Keep a copy of the live generation until behavior orchestration passes."""
+    """Keep a copy of the live generation until behavior orchestration passes.
+
+    Spec 029: also active whenever local scope exists, so a failing local
+    publication after a successful project publication restores both.
+    """
     live = repo_root / transaction.SPAEX_DIR
-    if not project_local and not _has_behavior_fragments(resolved):
+    if not project_local and not _has_behavior_fragments(resolved) and not local_active:
         return nullcontext()
 
     backup_root = Path(
@@ -691,6 +783,23 @@ def _preserved_project_local_files(
     return tuple(preserved.values())
 
 
+def _preserved_local_scope_files(repo_root: Path) -> tuple[transaction.StagedFile, ...]:
+    """Carry `.spaex/local/**` verbatim through a project publication (Spec 029).
+
+    A project publish never changes local scope; the local publish that may
+    follow replaces these files itself.
+    """
+    live_root = repo_root / transaction.SPAEX_DIR
+    local_root = local_dir(repo_root)
+    if not local_root.is_dir():
+        return ()
+    return tuple(
+        transaction.StagedFile(path.relative_to(live_root).as_posix(), path.read_bytes())
+        for path in sorted(local_root.rglob("*"))
+        if path.is_file() and not path.is_symlink()
+    )
+
+
 def _read_live_lock(repo_root: Path) -> InstallLock | None:
     """Read the current lock for Spec Kit idempotence without blocking install."""
     path = repo_root / transaction.SPAEX_DIR / transaction.INSTALL_LOCK_NAME
@@ -755,6 +864,8 @@ def _run_hooks(
     repo_root: Path,
     state_root: Path,
     skip_hooks: bool = False,
+    scope: str = "project",
+    observe: Callable[[ResolvedMolecule], AbstractContextManager[object]] | None = None,
 ) -> dict[str, HookStatus]:
     """Hook orchestration with per-molecule on_failure policy.
 
@@ -777,6 +888,10 @@ def _run_hooks(
     When ``skip_hooks`` is true (Spec 016 FR-026), no hook subprocess is
     launched; every resolved molecule declaring ``install_hook`` is
     recorded as ``hook_status="skipped"`` (FR-023, FR-028).
+
+    Spec 029: ``scope`` is exported to each hook as ``SPAEX_SCOPE``, and
+    ``observe`` (local scope only) wraps each hook run in a repository
+    side-effect guard.
     """
     statuses: dict[str, HookStatus] = {}
     for record in resolved:
@@ -785,9 +900,13 @@ def _run_hooks(
         if skip_hooks:
             statuses[record.molecule_id] = "skipped"
             continue
-        outcome = run_install_hook(
-            record, consumer_repo_root=repo_root, state_root=state_root
-        )
+        with observe(record) if observe is not None else nullcontext():
+            outcome = run_install_hook(
+                record,
+                consumer_repo_root=repo_root,
+                state_root=state_root,
+                scope=scope,
+            )
         if outcome.kind is HookOutcomeKind.OK:
             statuses[record.molecule_id] = "ok"
             continue
@@ -850,6 +969,7 @@ def _run_behavior_pipeline(
     resolved: list[ResolvedMolecule],
     project_local: Sequence[BehaviorFragment] = (),
     abort_on_contradiction: bool = True,
+    local_plan: local_scope.LocalPlan | None = None,
 ) -> behavior_orchestrate.BehaviorOutcome:
     """Spec 023 behavior-harness pass.
 

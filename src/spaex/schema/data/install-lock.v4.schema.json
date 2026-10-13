@@ -52,10 +52,11 @@
           "uniqueItems": true,
           "items": {
             "type": "string",
-            "$comment": "Spec 027: the second anyOf branch admits a bare repo-root-relative filename (no leading dot-segment) for exclusive generic-atom entries (e.g. flake.nix, .envrc, .gitignore) — syntactic widening only; nothing here restricts the branch to any particular category, since paths carries no category field to key off (see data-model.md InstallLock extension). The original dot-segment-required branch is unchanged and remains the only accepted shape for behavior/skill/skills and composable-category (.spaex/generated/...) entries.",
+            "$comment": "Spec 027: the second anyOf branch admits a bare repo-root-relative filename (no leading dot-segment) for exclusive generic-atom entries (e.g. flake.nix, .envrc, .gitignore) — syntactic widening only; nothing here restricts the branch to any particular category, since paths carries no category field to key off (see data-model.md InstallLock extension). Spec 029: the third branch admits any other repo-relative POSIX path without `.`/`..` segments; only a local-scope `.spaex/local/install.lock` uses it, to record files a local install hook created. The original dot-segment-required branch is unchanged and remains the only accepted shape for behavior/skill/skills and composable-category (.spaex/generated/...) entries.",
             "anyOf": [
               { "pattern": "^(?!.*(?:^|/)\\.\\.?/)(?!.*\\\\)\\.[A-Za-z0-9._-]+/[^\\u0000-\\u001F\\u007F\\\\]+$" },
-              { "pattern": "^(?!\\.{1,2}$)[^\\u0000-\\u001F\\u007F/\\\\]+$" }
+              { "pattern": "^(?!\\.{1,2}$)[^\\u0000-\\u001F\\u007F/\\\\]+$" },
+              { "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*\\\\)(?!.*//)[^\\u0000-\\u001F\\u007F]+$" }
             ]
           },
           "description": "Unique, deterministically ordered POSIX paths relative to the consumer repository root that this molecule wrote or contributed. Behavior molecules list the shared .spaex/constitution.md publication path. A path under a leading dot-segment implicitly names its participating root; a bare filename (Spec 027) has no such root and is understood to live at the literal repository root instead."

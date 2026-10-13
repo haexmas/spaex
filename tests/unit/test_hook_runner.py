@@ -134,10 +134,13 @@ def test_nonzero_exit_returns_nonzero_exit(
     assert outcome.exit_code == 7
 
 
-def test_argv_uses_canonical_target_cwd_and_no_env_override(
+def test_argv_uses_canonical_target_cwd_and_inherited_env_plus_scope(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Launch the canonical script with inherited process state and consumer cwd."""
+    """Launch the canonical script with inherited process state and consumer cwd.
+
+    The only environment addition is Spec 029's `SPAEX_SCOPE`.
+    """
     resolved = _make_resolved(tmp_path, args=("--verbose",))
     monkeypatch.setattr(hook_runner.shutil, "which", lambda name: "/usr/bin/" + name)
     store = _StoreRecorder()
@@ -153,7 +156,7 @@ def test_argv_uses_canonical_target_cwd_and_no_env_override(
 
     assert subp.call_kwargs is not None
     assert subp.call_kwargs["cwd"] == consumer
-    assert "env" not in subp.call_kwargs
+    assert subp.call_kwargs["env"] == {**os.environ, "SPAEX_SCOPE": "project"}
     assert "capture_output" not in subp.call_kwargs
     assert "stdin" not in subp.call_kwargs
     assert subp.call_kwargs["check"] is False
