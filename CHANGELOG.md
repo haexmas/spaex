@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.3.2](https://github.com/haexmas/spaex/compare/v5.3.1...v5.3.2) (2026-10-13)
+
+
+### Bug Fixes
+
+* **cli:** keep skill_installation policy across add and remove ([a81b163](https://github.com/haexmas/spaex/commit/a81b16392305a90364a962681a24c04fae4267e3))
+* **cli:** let spaex remove forward Spec Kit and hook controls ([7ebc86a](https://github.com/haexmas/spaex/commit/7ebc86a1e67d237515cd5399c64c40316352fa40))
+
 ## [5.3.1](https://github.com/haexmas/spaex/compare/v5.3.0...v5.3.1) (2026-10-12)
 
 
