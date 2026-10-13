@@ -29,6 +29,19 @@ def build_install_argv(
     return argv
 
 
+def build_upgrade_argv(executable: CliExecutable, key: str, options: str) -> list[str]:
+    """Build a shell-free official refresh of an installed integration.
+
+    Without ``--force`` the CLI refuses to overwrite locally modified managed
+    files, so only missing ones are restored.
+    """
+    argv = [executable] if isinstance(executable, str) else list(executable)
+    argv.extend(("integration", "upgrade", key))
+    if options:
+        argv.append(f"--integration-options={options}")
+    return argv
+
+
 def build_init_argv(executable: CliExecutable, key: str, options: str) -> list[str]:
     """Build a shell-free official project bootstrap invocation.
 

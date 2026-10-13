@@ -21,7 +21,8 @@ from pathlib import Path
 from spaex.constitution.resolve import ResolvedMolecule
 from spaex.integrations.speckit import (
     _clear_stale_registrations,
-    _detect_drifted_keys,
+    _detect_drift,
+    _Drift,
     prepare_install,
 )
 from spaex.model.install_lock import InstallLock, MoleculeEntry, SpeckitLockRecord
@@ -97,55 +98,69 @@ def test_detect_drifted_keys_flags_key_absent_from_manifests(tmp_path: Path) -> 
     """Treat an installed key omitted from the CLI manifest map as drifted."""
     payload = json.dumps({"manifests": {"claude": {"readable": True, "missing_files": []}}})
     executable = _status_only_cli(tmp_path, response=payload)
-    drifted = _detect_drifted_keys(("claude", "codex"), repo_root=tmp_path, executable=executable)
-    assert drifted == frozenset({"codex"})
+    drift = _detect_drift(("claude", "codex"), repo_root=tmp_path, executable=executable)
+    assert drift == _Drift(reinstall=frozenset({"codex"}))
 
 
 def test_detect_drifted_keys_flags_missing_files(tmp_path: Path) -> None:
-    """Treat an integration with missing managed files as drifted."""
+    """Refresh an integration whose readable manifest lists missing files."""
     payload = json.dumps(
         {"manifests": {"codex": {"readable": True, "missing_files": [".agents/skills/x.md"]}}}
     )
     executable = _status_only_cli(tmp_path, response=payload)
-    drifted = _detect_drifted_keys(("codex",), repo_root=tmp_path, executable=executable)
-    assert drifted == frozenset({"codex"})
+    drift = _detect_drift(("codex",), repo_root=tmp_path, executable=executable)
+    assert drift == _Drift(refresh=frozenset({"codex"}))
 
 
 def test_detect_drifted_keys_flags_unreadable_manifest(tmp_path: Path) -> None:
-    """Treat an integration with an unreadable manifest as drifted."""
+    """Reinstall an integration whose manifest is unreadable."""
     payload = json.dumps({"manifests": {"codex": {"readable": False, "missing_files": []}}})
     executable = _status_only_cli(tmp_path, response=payload)
-    drifted = _detect_drifted_keys(("codex",), repo_root=tmp_path, executable=executable)
-    assert drifted == frozenset({"codex"})
+    drift = _detect_drift(("codex",), repo_root=tmp_path, executable=executable)
+    assert drift == _Drift(reinstall=frozenset({"codex"}))
 
 
 def test_detect_drifted_keys_trusts_a_healthy_manifest(tmp_path: Path) -> None:
     """Keep an integration whose manifest and managed files are healthy."""
     payload = json.dumps({"manifests": {"codex": {"readable": True, "missing_files": []}}})
     executable = _status_only_cli(tmp_path, response=payload)
-    drifted = _detect_drifted_keys(("codex",), repo_root=tmp_path, executable=executable)
-    assert drifted == frozenset()
+    drift = _detect_drift(("codex",), repo_root=tmp_path, executable=executable)
+    assert drift == _Drift()
+
+
+def test_detect_drifted_keys_reads_error_status_with_nonzero_exit(tmp_path: Path) -> None:
+    """Flag missing files that specify-cli reports with a failing exit code."""
+    payload = json.dumps(
+        {
+            "status": "error",
+            "missing_managed_files": 1,
+            "manifests": {"claude": {"readable": True, "missing_files": [".claude/skills/x.md"]}},
+        }
+    )
+    executable = _status_only_cli(tmp_path, response=payload, exit_code=1)
+    drift = _detect_drift(("claude",), repo_root=tmp_path, executable=executable)
+    assert drift == _Drift(refresh=frozenset({"claude"}))
 
 
 def test_detect_drifted_keys_fails_closed_on_cli_error(tmp_path: Path) -> None:
     """Report no drift when the official CLI status command fails."""
     executable = _status_only_cli(tmp_path, response="", exit_code=2)
-    drifted = _detect_drifted_keys(("codex",), repo_root=tmp_path, executable=executable)
-    assert drifted == frozenset()
+    drift = _detect_drift(("codex",), repo_root=tmp_path, executable=executable)
+    assert drift == _Drift()
 
 
 def test_detect_drifted_keys_fails_closed_on_malformed_json(tmp_path: Path) -> None:
     """Report no drift when the official CLI emits malformed status JSON."""
     executable = _status_only_cli(tmp_path, response="not json")
-    drifted = _detect_drifted_keys(("codex",), repo_root=tmp_path, executable=executable)
-    assert drifted == frozenset()
+    drift = _detect_drift(("codex",), repo_root=tmp_path, executable=executable)
+    assert drift == _Drift()
 
 
 def test_detect_drifted_keys_fails_closed_on_non_object_json(tmp_path: Path) -> None:
     for response in ("null", "[]"):
         executable = _status_only_cli(tmp_path, response=response)
-        drifted = _detect_drifted_keys(("codex",), repo_root=tmp_path, executable=executable)
-        assert drifted == frozenset()
+        drift = _detect_drift(("codex",), repo_root=tmp_path, executable=executable)
+        assert drift == _Drift()
 
 
 def test_clear_stale_registrations_removes_only_the_drifted_key(tmp_path: Path) -> None:
@@ -200,10 +215,14 @@ def test_clear_stale_registrations_is_a_noop_on_non_object_state(tmp_path: Path)
 def _stateful_fake_cli(tmp_path: Path) -> tuple[str, str]:
     """A fake `specify` that mirrors the real CLI's own idempotency deadlock.
 
-    Once a key is in `.specify/integration.json`'s `installed_integrations`,
-    `integration install <key>` refuses to touch it again ("already
-    installed ... no files changed") regardless of whether its managed
-    files still exist — matching specify-cli 1.0.6's actual behavior.
+    Once a key is registered (listed in `.specify/integration.json`'s
+    `installed_integrations`, or its default integration), `integration
+    install <key>` refuses to touch it again ("already installed ... no
+    files changed") regardless of whether its managed files still exist.
+    `integration status --json` exits 1 while it reports missing files, and
+    `integration upgrade <key>` restores them; a `<key>.broken` file under
+    `.specify/integrations/` makes that key's manifest unreadable. This
+    matches specify-cli 1.0.11's actual behavior.
     """
     # An already-initialized Spec Kit project, so no `specify init` runs.
     (tmp_path / ".specify").mkdir(exist_ok=True)
@@ -230,6 +249,18 @@ def _save(data):
     STATE.write_text(json.dumps(data))
 
 
+def _registered(data):
+    keys = list(data.get("installed_integrations", []))
+    default = data.get("default_integration")
+    if default and default not in keys:
+        keys.append(default)
+    return keys
+
+
+def _broken(key):
+    return (Path.cwd() / ".specify" / "integrations" / f"{{key}}.broken").exists()
+
+
 def _marker(key):
     root = ".claude" if key == "claude" else ".agents"
     return Path.cwd() / root / "skills" / "specify.md"
@@ -246,18 +277,27 @@ if args[:2] == ["integration", "list"]:
 if args[:3] == ["integration", "status", "--json"]:
     data = _state()
     manifests = {{}}
-    for key in data.get("installed_integrations", []):
+    for key in _registered(data):
         marker = _marker(key)
         manifests[key] = {{
-            "readable": True,
+            "readable": not _broken(key),
             "missing_files": [] if marker.exists() else [str(marker)],
         }}
     print(json.dumps({{"manifests": manifests}}))
+    missing = any(entry["missing_files"] for entry in manifests.values())
+    raise SystemExit(1 if missing else 0)
+if args[:2] == ["integration", "upgrade"]:
+    key = args[2]
+    if key not in _registered(_state()) or _broken(key):
+        raise SystemExit(1)
+    marker = _marker(key)
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.touch()
     raise SystemExit(0)
 if args[:2] == ["integration", "install"]:
     key = args[2]
     data = _state()
-    if key in data.get("installed_integrations", []):
+    if key in _registered(data):
         print(f"Integration '{{key}}' is already installed.")
         print("No files were changed.")
         raise SystemExit(0)
@@ -265,6 +305,7 @@ if args[:2] == ["integration", "install"]:
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.touch()
     data.setdefault("installed_integrations", []).append(key)
+    data.setdefault("default_integration", key)
     _save(data)
     print(f"Integration '{{key}}' installed successfully")
     raise SystemExit(0)
@@ -304,7 +345,7 @@ def test_prepare_install_repairs_agent_output_lost_between_checkouts(tmp_path: P
         executable=executable,
     )
 
-    assert marker.exists(), "drifted key must be genuinely reinstalled, not just re-recorded"
+    assert marker.exists(), "drifted key must be genuinely restored, not just re-recorded"
     assert second[resolved[0].molecule_id].outcomes == {"codex": "installed"}
     assert second[resolved[0].molecule_id].selected == ("codex",)
 
@@ -335,3 +376,73 @@ def test_prepare_install_leaves_healthy_selection_untouched(tmp_path: Path) -> N
     new_calls = calls_after[len(calls_before) :]
     assert "integration install codex" not in new_calls
     assert second[resolved[0].molecule_id].outcomes == {"codex": "installed"}
+
+
+def test_prepare_install_restores_the_default_integration(tmp_path: Path) -> None:
+    """Restore lost output of the default integration, which cannot be unregistered."""
+    executable = _stateful_fake_cli(tmp_path)
+    resolved = [
+        _resolved(tmp_path, molecule_id="com.example.speckit", options={"claude": "", "codex": ""})
+    ]
+    first = prepare_install(
+        resolved,
+        repo_root=tmp_path,
+        existing_lock=None,
+        explicit_selection="claude,codex",
+        executable=executable,
+    )
+    lock = _lock(resolved[0], first[resolved[0].molecule_id])
+    markers = [
+        tmp_path / ".claude" / "skills" / "specify.md",
+        tmp_path / ".agents" / "skills" / "specify.md",
+    ]
+    for marker in markers:
+        marker.unlink()
+
+    second = prepare_install(
+        resolved,
+        repo_root=tmp_path,
+        existing_lock=lock,
+        executable=executable,
+    )
+
+    assert all(marker.exists() for marker in markers)
+    calls = (tmp_path / "calls.log").read_text().splitlines()
+    assert "integration upgrade claude" in calls
+    assert "integration upgrade codex" in calls
+    assert second[resolved[0].molecule_id].outcomes == {"claude": "installed", "codex": "installed"}
+
+
+def test_prepare_install_reinstalls_an_integration_with_an_unreadable_manifest(
+    tmp_path: Path,
+) -> None:
+    """Fall back to a fresh install when the official manifest is unusable."""
+    executable = _stateful_fake_cli(tmp_path)
+    resolved = [
+        _resolved(tmp_path, molecule_id="com.example.speckit", options={"claude": "", "codex": ""})
+    ]
+    first = prepare_install(
+        resolved,
+        repo_root=tmp_path,
+        existing_lock=None,
+        explicit_selection="claude,codex",
+        executable=executable,
+    )
+    lock = _lock(resolved[0], first[resolved[0].molecule_id])
+    marker = tmp_path / ".agents" / "skills" / "specify.md"
+    marker.unlink()
+    broken = tmp_path / ".specify" / "integrations" / "codex.broken"
+    broken.parent.mkdir(parents=True, exist_ok=True)
+    broken.touch()
+
+    prepare_install(
+        resolved,
+        repo_root=tmp_path,
+        existing_lock=lock,
+        executable=executable,
+    )
+
+    assert marker.exists()
+    calls = (tmp_path / "calls.log").read_text().splitlines()
+    assert calls.count("integration install codex") == 2
+    assert "integration upgrade codex" not in calls
