@@ -8,33 +8,21 @@ permissions: {}
 
 jobs:
   release-please:
-    permissions:
-      contents: write
-      pull-requests: write
     runs-on: ubuntu-latest
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      version: ${{ steps.release.outputs.version }}
     steps:
-      - uses: googleapis/release-please-action@v4
-        id: release
+      # A GitHub App token instead of GITHUB_TOKEN: events it causes trigger
+      # workflows normally. The release PR's CI then runs without manual
+      # approval, and the GitHub release it publishes starts release.yml.
+      - uses: actions/create-github-app-token@v3
+        id: app-token
         with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+      - uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-
-  publish:
-    needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-      - name: dispatch release workflow
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.release-please.outputs.version }}
-        run: >
-          gh workflow run release.yml
-          --repo ${{ github.repository }}
-          --ref main
-          -f version="$VERSION"
