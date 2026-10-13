@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.4.1](https://github.com/haexmas/spaex/compare/v5.4.0...v5.4.1) (2026-10-13)
+
+
+### Bug Fixes
+
+* **release:** bump uv.lock in the release commit itself ([05b52e6](https://github.com/haexmas/spaex/commit/05b52e6182b86c6e726e5f3ac83c0887f5a3c9d3))
+
 ## [5.4.0](https://github.com/haexmas/spaex/compare/v5.3.2...v5.4.0) (2026-10-13)
 
 
