@@ -10,8 +10,9 @@ from types import SimpleNamespace
 import pytest
 
 from spaex.cli import install as install_cli
-from spaex.install import git_exclude
-from spaex.util.errors import InstallTransactionFailedError
+from spaex.install import git_exclude, side_effects
+from spaex.install.side_effects import RepoSideEffectGuard
+from spaex.util.errors import InstallTransactionFailedError, LocalHookRestorationError
 
 _CREATES_ID = "com.example.publisher.creates"
 _EDITS_ID = "com.example.publisher.edits"
@@ -141,3 +142,32 @@ def test_hook_staging_a_tracked_file_is_reverted_and_refused(scene: SimpleNamesp
     assert caught.value.context["install_key"] == "local-hook-side-effect"
     assert (consumer / "README.md").read_text() == "team readme\n"
     assert _git(consumer, "status", "--porcelain", "--untracked-files=all") == ""
+
+
+def test_guard_reverts_tracked_changes_when_operation_raises(scene: SimpleNamespace) -> None:
+    consumer = scene.consumer
+
+    with pytest.raises(RuntimeError, match="hook failed"), RepoSideEffectGuard(
+        consumer, actor="test hook", protected=()
+    ):
+        (consumer / "README.md").write_text("hijacked\n")
+        raise RuntimeError("hook failed")
+
+    assert (consumer / "README.md").read_text() == "team readme\n"
+    assert _git(consumer, "status", "--porcelain", "--untracked-files=all") == ""
+
+
+def test_guard_reports_failed_tracked_restore(scene: SimpleNamespace, monkeypatch) -> None:
+    consumer = scene.consumer
+    original_git = side_effects._git
+
+    def fail_checkout(repo_root: Path, *args: str) -> bytes | None:
+        if args and args[0] == "checkout":
+            return None
+        return original_git(repo_root, *args)
+
+    with pytest.raises(LocalHookRestorationError, match="could not restore"), RepoSideEffectGuard(
+        consumer, actor="test hook", protected=()
+    ):
+        (consumer / "README.md").write_text("hijacked\n")
+        monkeypatch.setattr(side_effects, "_git", fail_checkout)

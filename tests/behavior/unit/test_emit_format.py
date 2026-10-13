@@ -120,6 +120,24 @@ def test_emit_rejects_header_after_preamble(tmp_path: Path) -> None:
         )
 
 
+def test_emit_preamble_does_not_add_a_spurious_blank_line(tmp_path: Path) -> None:
+    src = "a" * 64
+    bih = "b" * 64
+    header = _valid_body(src, bih).splitlines()[0]
+
+    emit_composed(
+        ComposedShape(body=header),
+        repo_root=tmp_path,
+        expected_source_hash=src,
+        expected_build_input_hash=bih,
+        preamble="local rules\n",
+    )
+
+    assert (tmp_path / SPAEX_MD_FILENAME).read_text(encoding="utf-8") == (
+        f"{header}\nlocal rules\n"
+    )
+
+
 def test_emit_header_must_be_on_first_line(tmp_path: Path) -> None:
     body = "\n" + _valid_body("a" * 64, "b" * 64)
     with pytest.raises(ComposerInvalidOutputError):

@@ -56,7 +56,9 @@ def scene(tmp_path: Path, haex_add_helpers, monkeypatch, git_binary: str) -> Sim
     )
     consumer = haex_add_helpers["make_consumer"](tmp_path)
     _git(consumer, "init", "-q")
-    (consumer / ".gitignore").write_text(".spaex/manifest.json.lock\n.spaex/composer.log\n")
+    (consumer / ".gitignore").write_text(
+        ".spaex/manifest.json.lock\n.spaex/composer.log\n", encoding="utf-8"
+    )
 
     def add(ids: str, *, local: bool = False) -> int:
         return haex_add_helpers["run_add"](
@@ -82,7 +84,7 @@ def test_local_rules_get_their_own_document(
     assert scene.add(_MINE_ID, local=True) == 0
 
     assert (consumer / ".spaex/constitution.md").read_bytes() == team
-    local = (consumer / ".spaex/local/constitution.md").read_text()
+    local = (consumer / ".spaex/local/constitution.md").read_text(encoding="utf-8")
     header, preamble = local.split("\n")[:2]
     assert header.startswith("<!-- spaex-composed:")
     assert preamble == LOCAL_PREAMBLE.rstrip("\n")

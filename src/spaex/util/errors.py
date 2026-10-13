@@ -528,3 +528,13 @@ class LocalHookSideEffectError(HaexError):
         "A local-scope install hook changed a git-tracked or project-owned file; "
         "the change was reverted. Run `spaex remove --local <id>` for that molecule."
     )
+
+
+@dataclass
+class LocalHookRestorationError(HaexError):
+    diagnostic_key: str = "local-hook-restoration-failed"
+    exit_code: int = exit_codes.INCOMPLETE_TRANSACTION
+    hint: str = (
+        "A local-scope install hook changed team-owned state and automatic restoration "
+        "failed; restore the listed paths manually before retrying."
+    )

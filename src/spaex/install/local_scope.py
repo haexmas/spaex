@@ -33,6 +33,7 @@ from spaex.install.generic_atoms import (
     collect_exclusive_atoms,
     content_hash,
 )
+from spaex.install.git_env import git_environment
 from spaex.install.nix_packages import ComposedFile, collect_package_fragments, compose
 from spaex.install.side_effects import RepoSideEffectGuard
 from spaex.integrations.speckit import emit_results, prepare_install
@@ -169,6 +170,7 @@ def tracked_paths(repo_root: Path, paths: Iterable[str]) -> frozenset[str]:
         ["git", "--literal-pathspecs", "-C", str(repo_root), "ls-files", "-z", "--", *candidates],
         capture_output=True,
         check=False,
+        env=git_environment(),
     )
     if proc.returncode != 0:
         return frozenset()

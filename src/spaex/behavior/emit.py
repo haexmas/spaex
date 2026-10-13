@@ -171,7 +171,8 @@ def emit_composed(
     body = shape.body
     if preamble:
         header_line, _, rest = body.partition("\n")
-        body = f"{header_line}\n{preamble}\n{rest}"
+        separator = "" if preamble.endswith("\n") else "\n"
+        body = f"{header_line}\n{preamble}{separator}{rest}"
     _atomic_write(target, body)
     return EmitOutcome(
         path=target,
