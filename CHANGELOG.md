@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.4.2](https://github.com/haexmas/spaex/compare/v5.4.1...v5.4.2) (2026-10-13)
+
+
+### Bug Fixes
+
+* **speckit:** install agent skills in fresh clones ([b4fd460](https://github.com/haexmas/spaex/commit/b4fd4608b2e58ff69a8bb1252d882a15d2baa74b))
+* **speckit:** restore missing integration files through upgrade ([b816eff](https://github.com/haexmas/spaex/commit/b816eff721be141af073da74705fe00b27d1a645))
+
 ## [5.4.1](https://github.com/haexmas/spaex/compare/v5.4.0...v5.4.1) (2026-10-13)
 
 
