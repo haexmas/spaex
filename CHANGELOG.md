@@ -1,5 +1,32 @@
 # Changelog
 
+## [5.4.0](https://github.com/haexmas/spaex/compare/v5.3.2...v5.4.0) (2026-10-13)
+
+
+### Features
+
+* **local-scope:** add and remove molecules in local scope ([9462976](https://github.com/haexmas/spaex/commit/946297601b05e9439d99b339c27d6182a3026887))
+* **local-scope:** add overlay model, schema and git exclude block ([dc9784f](https://github.com/haexmas/spaex/commit/dc9784f738e11607fb53b917972e0cce52448e9e))
+* **local-scope:** compose local behavior rules and bump bootstrap block to v3 ([e2ab67e](https://github.com/haexmas/spaex/commit/e2ab67edad53c3f7a392baa7f6d115cb64510ea1))
+* **local-scope:** label scope in status, trace and constitution show ([7e11db3](https://github.com/haexmas/spaex/commit/7e11db3ef53096ac9ee9c64126820780ac3cc911))
+* **local-scope:** plan and publish local scope during install ([cc0e43f](https://github.com/haexmas/spaex/commit/cc0e43f6343a2185b7185f869f9ad5edab4e6daf))
+
+
+### Bug Fixes
+
+* **cli:** forward reinstall controls for local remove ([a383716](https://github.com/haexmas/spaex/commit/a383716b6c7161e670f4199835d3181cade91118))
+* **local-scope:** address CodeRabbit review findings ([d28cce7](https://github.com/haexmas/spaex/commit/d28cce7be689be5076b95f498623737c7bf212da))
+* **local-scope:** guard ignored spaex side effects ([eb2c98d](https://github.com/haexmas/spaex/commit/eb2c98dec17d472b0853b56058a38296b0e96629))
+* **local-scope:** keep shadowed overlay, project-owned files and crash convergence ([7711feb](https://github.com/haexmas/spaex/commit/7711feb957d294fcf4d95e8819b36834e5c16077))
+* **local-scope:** restore git index after guarded hooks ([184667e](https://github.com/haexmas/spaex/commit/184667eb0733e2c3bde695a3b352bfa21a754816))
+* **tests:** make local scope checks portable ([9bd2d7c](https://github.com/haexmas/spaex/commit/9bd2d7c7a705c05872a9f4c54358a644fea1aa8e))
+
+
+### Documentation
+
+* **local-scope:** document local scope and align spec 029 artifacts with the implementation ([c957278](https://github.com/haexmas/spaex/commit/c9572787e2c04080d8c13c638b84c60f0857e2c7))
+* **spec:** add tasks for spec 029 local molecule scope ([68c9a47](https://github.com/haexmas/spaex/commit/68c9a476773be11221e4b6c9f2051b56bc0668d0))
+
 ## [5.3.2](https://github.com/haexmas/spaex/compare/v5.3.1...v5.3.2) (2026-10-13)
 
 
