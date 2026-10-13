@@ -271,7 +271,7 @@ def test_orphan_cleanup_skips_symlinked_parent_outside_repository(tmp_path: Path
     )
     current = InstallLock("3", "g_20260102T000000Z_0000", (_molecule(),))
 
-    publish_module._delete_orphaned_paths(tmp_path, previous, current)
+    publish_module.delete_orphaned_paths(tmp_path, previous, current)
 
     assert protected.read_text() == "keep me\n"
 

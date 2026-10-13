@@ -57,7 +57,7 @@ from spaex.util.errors import HaexError, PostWriteValidationError
 CONSTITUTION_PATH = f"{transaction.SPAEX_DIR}/{transaction.CONSTITUTION_NAME}"
 
 
-def _delete_orphaned_paths(
+def delete_orphaned_paths(
     repo_root: Path,
     previous_lock: InstallLock | None,
     current_lock: InstallLock,
@@ -229,7 +229,7 @@ def _publish_constitution(
                 message="published install.lock does not match the assembled generation",
             )
         if not delivered_files:
-            _delete_orphaned_paths(repo_root, existing_lock, lock)
+            delete_orphaned_paths(repo_root, existing_lock, lock)
             return
         # `transaction.publish_generation`'s swap-rollback only covers
         # `.spaex/` itself (ADR 0026) — these root-level targets live
@@ -240,7 +240,7 @@ def _publish_constitution(
         snapshot = snapshot_delivered_targets(delivered_files, repo_root=repo_root)
         try:
             write_delivered_files(delivered_files, repo_root=repo_root)
-            _delete_orphaned_paths(repo_root, existing_lock, lock)
+            delete_orphaned_paths(repo_root, existing_lock, lock)
         except (OSError, HaexError):
             restore_delivered_targets(snapshot)
             raise
@@ -306,7 +306,7 @@ def publish_constitution(
     ``atoms.constitution`` and a Spec 027 category would have those extra
     paths written to disk but never recorded against its own
     ``install.lock`` entry, leaving them un-attributable to any molecule and
-    therefore never cleaned up by ``_delete_orphaned_paths`` on retraction.
+    therefore never cleaned up by ``delete_orphaned_paths`` on retraction.
     """
     if not contributions:
         _publish_constitution(

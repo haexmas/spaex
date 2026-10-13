@@ -165,7 +165,7 @@ def test_install_runs_hook_only_alongside_constitution_molecule(
 
     invoked: list[str] = []
 
-    def fake_run_install_hook(record, *, consumer_repo_root, state_root):
+    def fake_run_install_hook(record, *, consumer_repo_root, state_root, scope="project"):
         """Record each hook invocation and report a successful outcome."""
         del consumer_repo_root, state_root
         invoked.append(record.molecule_id)

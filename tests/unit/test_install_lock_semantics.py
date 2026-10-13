@@ -84,11 +84,18 @@ def test_accepts_bare_root_relative_filename() -> None:
     assert lock.molecules[0].paths == ("README.md",)
 
 
-def test_rejects_nested_path_without_leading_dot_segment() -> None:
-    """A nested non-dot path is still rejected — only a bare single-segment filename widened."""
+def test_accepts_nested_relative_path_for_local_hook_outputs() -> None:
+    """Spec 029: a local lock records files a local hook created, wherever they live."""
     molecules = [_molecule("com.example.molecule", paths=["src/README.md"])]
+    lock = InstallLock.from_json(_payload(molecules))
+    assert lock.molecules[0].paths == ("src/README.md",)
+
+
+@pytest.mark.parametrize("value", ["src/../README.md", "/abs/path", "src//README.md", "src\\x"])
+def test_rejects_non_normalized_nested_paths(value: str) -> None:
+    """The nested branch still refuses `..`, absolute, doubled-slash and backslash paths."""
     with pytest.raises(InstallLockSchemaInvalidError):
-        InstallLock.from_json(_payload(molecules))
+        InstallLock.from_json(_payload([_molecule("com.example.molecule", paths=[value])]))
 
 
 def test_rejects_dot_and_dotdot_as_bare_path() -> None:

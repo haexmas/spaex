@@ -17,7 +17,7 @@ every delivered target via `snapshot_delivered_targets` before writing and
 restores that snapshot (`restore_delivered_targets`) if anything in the same
 `post_write_verify` call fails afterward, including the orphan-cleanup step
 that runs after these writes. Root-file deletion for a retracted molecule
-reuses the existing `_delete_orphaned_paths` orphan-cleanup mechanism
+reuses the existing `delete_orphaned_paths` orphan-cleanup mechanism
 (extended for FR-007's content-hash check), since it already deletes any
 path no longer present in `install.lock` once a generation publishes
 successfully.
@@ -206,7 +206,7 @@ def snapshot_delivered_targets(
     """Capture every delivered file's destination content before any writes.
 
     `None` content records that the target did not exist (or was a symlink,
-    left untouched the same way `_delete_orphaned_paths` leaves symlinks
+    left untouched the same way `delete_orphaned_paths` leaves symlinks
     alone) prior to this generation, so `restore_delivered_targets` knows to
     delete it rather than rewrite it during rollback.
     """

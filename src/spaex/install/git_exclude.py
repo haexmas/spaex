@@ -78,7 +78,7 @@ def _split_blocks(lines: list[str], target: Path) -> list[tuple[str, int, int]]:
                 raise malformed(open_key)
             open_key, open_index = start.group("key"), index
         elif (end := _END_RE.match(line)) is not None:
-            if open_key != end.group("key"):
+            if open_key is None or open_key != end.group("key"):
                 raise malformed(end.group("key"))
             blocks.append((open_key, open_index, index))
             open_key = None
