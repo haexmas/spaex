@@ -191,7 +191,7 @@ def test_json_format_shape(tmp_path: Path, capsys) -> None:
     out = capsys.readouterr().out
     assert rc == 0
     payload = json.loads(out)
-    assert payload["format_version"] == 1
+    assert payload["format_version"] == 2
     assert payload["query"] == "flake.nix"
     assert payload["kind"] == "file"
     assert payload["error"] is None
@@ -202,6 +202,7 @@ def test_json_format_shape(tmp_path: Path, capsys) -> None:
         "molecule_id": "com.example.atoms.nix-python",
         "source": _SOURCE,
         "revision": _REV_NIX_PYTHON,
+        "scope": "project",
     }
 
 
@@ -267,6 +268,6 @@ def test_trace_json_is_versioned_and_matches_sorted_by_path(tmp_path: Path, caps
 
     assert rc == 0
     payload = json.loads(out)
-    assert payload["format_version"] == 1
+    assert payload["format_version"] == 2
     paths = [m["path"] for m in payload["matches"]]
     assert paths == sorted(paths)

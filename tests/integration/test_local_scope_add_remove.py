@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from spaex.cli import install as install_cli
+from spaex.cli import status as status_cli
 from spaex.install import git_exclude
 from spaex.util.errors import UnknownMoleculeIdError
 
@@ -136,3 +138,28 @@ def test_remove_without_local_hints_for_local_only_id(scene: SimpleNamespace) ->
         scene.remove(_MINE_ID)
 
     assert "--local" in caught.value.hint
+
+
+def test_status_and_trace_label_scope(
+    scene: SimpleNamespace, capsys: pytest.CaptureFixture[str]
+) -> None:
+    consumer = scene.consumer
+    assert scene.add(_MINE_ID, local=True) == 0
+    capsys.readouterr()
+
+    assert status_cli.run_status(SimpleNamespace(repo_root=str(consumer), format="json")) == 0
+    status = json.loads(capsys.readouterr().out)
+    scopes = {m["molecule_id"]: m["scope"] for m in status["molecules"]}
+    assert status["format_version"] == 2
+    assert scopes == {_PROJECT_ID: "project", _MINE_ID: "local"}
+    assert status["drift"] == []
+
+    assert status_cli.run_status(SimpleNamespace(repo_root=str(consumer), format="text")) == 0
+    assert f"{_MINE_ID}@" in (text := capsys.readouterr().out) and "[local]" in text
+
+    for path, scope in (("mine.txt", "local"), ("project.txt", "project")):
+        assert status_cli.run_trace(
+            SimpleNamespace(repo_root=str(consumer), path=path, format="json")
+        ) == 0
+        owners = json.loads(capsys.readouterr().out)["matches"][0]["owners"]
+        assert [owner["scope"] for owner in owners] == [scope]

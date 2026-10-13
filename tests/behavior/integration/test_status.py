@@ -198,7 +198,7 @@ def test_status_json_format(tmp_path: Path, capsys) -> None:
 
     assert rc == 0
     payload = json.loads(out)
-    assert payload["format_version"] == 1
+    assert payload["format_version"] == 2
     assert payload["drift"] == []
 
     molecules = {m["molecule_id"]: m for m in payload["molecules"]}
@@ -404,7 +404,7 @@ def test_status_json_is_versioned_and_sorted(tmp_path: Path, capsys) -> None:
     main(["--repo-root", str(repo), "status", "--format", "json"])
     payload = json.loads(capsys.readouterr().out)
 
-    assert payload["format_version"] == 1
+    assert payload["format_version"] == 2
 
     molecule_ids = [m["molecule_id"] for m in payload["molecules"]]
     assert molecule_ids == sorted(molecule_ids)

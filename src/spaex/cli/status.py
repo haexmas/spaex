@@ -59,6 +59,7 @@ def _render_molecule_record(molecule: MoleculeRecord) -> dict[str, object]:
         "installed": _render_source_revision(molecule.installed),
         "install_state": molecule.install_state,
         "hook_status": molecule.hook_status,
+        "scope": molecule.scope,
         "atoms": {
             "behavior_fragments": list(molecule.atoms.behavior_fragments),
             "composed_artifacts": list(molecule.atoms.composed_artifacts),
@@ -87,21 +88,28 @@ def _render_drift_finding(finding: DriftFinding) -> dict[str, object]:
         "molecule_id": finding.molecule_id,
         "pinned": _render_source_revision(finding.pinned),
         "installed": _render_source_revision(finding.installed),
+        "scope": finding.scope,
     }
 
 
 def _build_status_record(report: CompositionReport) -> dict[str, object]:
     return {
-        "format_version": 1,
+        "format_version": 2,
         "molecules": [_render_molecule_record(m) for m in report.molecules],
         "constitution": _render_constitution_summary(report.constitution),
         "drift": [_render_drift_finding(d) for d in report.drift],
+        "shadowed": list(report.shadowed),
     }
 
 
 def _render_status_text(record: dict[str, object]) -> str:
     lines = ["spaex status", ""]
     lines.extend(_render_molecules_text(record["molecules"]))
+    shadowed = record["shadowed"]
+    assert isinstance(shadowed, list)
+    if shadowed:
+        lines.append("Shadowed (adopted locally and in project scope; local entry ignored):")
+        lines.extend(f"  {molecule_id}" for molecule_id in shadowed)
     lines.append("")
     lines.extend(_render_constitution_text(record["constitution"]))
     drift = record["drift"]
@@ -129,7 +137,8 @@ def _render_molecules_text(molecules: object) -> list[str]:
             revision_source = installed or pinned
             revision = f"@{revision_source['revision'][:8]}" if revision_source else ""
         phrase = _INSTALL_STATE_PHRASE[molecule["install_state"]]
-        lines.append(f"  {molecule['molecule_id']}{revision} — {phrase}")
+        scope = " [local]" if molecule["scope"] == "local" else ""
+        lines.append(f"  {molecule['molecule_id']}{revision}{scope} — {phrase}")
         atoms = molecule["atoms"]
         if atoms["behavior_fragments"]:
             lines.append(f"    behavior fragments: {', '.join(atoms['behavior_fragments'])}")
@@ -177,7 +186,8 @@ def _render_drift_text(drift: list[object]) -> list[str]:
                 f"(pinned {pinned['revision']}, installed {installed['revision']})"
             )
         else:
-            lines.append(f"  {finding['molecule_id']}: {_DRIFT_PHRASE[kind]}")
+            scope = " (local)" if finding["scope"] == "local" else ""
+            lines.append(f"  {finding['molecule_id']}{scope}: {_DRIFT_PHRASE[kind]}")
     lines.append("  → run `spaex install` to reconcile")
     return lines
 
@@ -198,7 +208,12 @@ def run_trace(args: argparse.Namespace) -> int:
 
 
 def _render_owner(owner: MoleculeOwner) -> dict[str, object]:
-    return {"molecule_id": owner.molecule_id, "source": owner.source, "revision": owner.revision}
+    return {
+        "molecule_id": owner.molecule_id,
+        "source": owner.source,
+        "revision": owner.revision,
+        "scope": owner.scope,
+    }
 
 
 def _render_path_ownership(match: PathOwnership) -> dict[str, object]:
@@ -211,7 +226,7 @@ def _render_path_ownership(match: PathOwnership) -> dict[str, object]:
 
 def _build_trace_record(attribution: FileAttribution) -> dict[str, object]:
     return {
-        "format_version": 1,
+        "format_version": 2,
         "query": attribution.query,
         "kind": attribution.kind,
         "matches": [_render_path_ownership(m) for m in attribution.matches],
@@ -239,14 +254,22 @@ def _render_path_ownership_text(match: object) -> str:
     if len(owners) == 1:
         owner = owners[0]
         lines.append("Owner:")
+        recorded = (
+            ".spaex/local/install.lock" if owner["scope"] == "local" else ".spaex/install.lock"
+        )
         lines.append(
-            f"  {owner['molecule_id']}@{owner['revision'][:8]} (recorded in .spaex/install.lock)"
+            f"  {owner['molecule_id']}@{owner['revision'][:8]}{_scope_suffix(owner)} "
+            f"(recorded in {recorded})"
         )
     else:
         lines.append(f"Owners ({len(owners)}):")
         for owner in owners:
-            lines.append(f"  {owner['molecule_id']}@{owner['revision'][:8]}")
+            lines.append(f"  {owner['molecule_id']}@{owner['revision'][:8]}{_scope_suffix(owner)}")
     if match["constitution_trace_hint"]:
         lines.append("")
         lines.append("For clause-level provenance, run `spaex constitution trace <query>`.")
     return "\n".join(lines)
+
+
+def _scope_suffix(owner: dict[str, object]) -> str:
+    return " (local)" if owner["scope"] == "local" else ""

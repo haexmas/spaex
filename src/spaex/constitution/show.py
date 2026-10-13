@@ -9,6 +9,7 @@ from typing import BinaryIO
 from spaex.constitution.publish import CONSTITUTION_PATH
 from spaex.io import transaction
 from spaex.model.install_lock import InstallLock, MoleculeEntry
+from spaex.paths import local_constitution_path
 from spaex.util.errors import (
     ConstitutionNotAssembledError,
     InstallLockMissingError,
@@ -29,6 +30,9 @@ def _render_preface(molecules: tuple[MoleculeEntry, ...]) -> bytes:
     return f"# Assembled from\n{lines}\n---\n\n".encode()
 
 
+LOCAL_SECTION_HEADING = b"## Local (this checkout only)\n\n"
+
+
 def show(
     repo_root: Path,
     *,
@@ -36,12 +40,21 @@ def show(
     out: BinaryIO | None = None,
     state_root: Path | None = None,
 ) -> None:
-    """Render the currently published constitution without modifying state."""
+    """Render the currently published constitution without modifying state.
+
+    Spec 029: the checkout's local behavior document follows under its own
+    heading when present.
+    """
     hive_dir = repo_root / transaction.SPAEX_DIR
     del state_root  # show is read-only; stale-sibling cleanup is a writer concern.
 
     constitution_path = hive_dir / transaction.CONSTITUTION_NAME
+    local_path = local_constitution_path(repo_root)
+    stream = out if out is not None else sys.stdout.buffer
     if not constitution_path.exists():
+        if local_path.exists():
+            stream.write(LOCAL_SECTION_HEADING + local_path.read_bytes())
+            return
         raise ConstitutionNotAssembledError(
             message=".spaex/constitution.md does not exist",
         )
@@ -56,7 +69,8 @@ def show(
     constitution_molecules = _constitution_molecules(lock)
     body = constitution_path.read_bytes()
 
-    stream = out if out is not None else sys.stdout.buffer
     if not no_preface:
         stream.write(_render_preface(constitution_molecules))
     stream.write(body)
+    if local_path.exists():
+        stream.write(b"\n" + LOCAL_SECTION_HEADING + local_path.read_bytes())

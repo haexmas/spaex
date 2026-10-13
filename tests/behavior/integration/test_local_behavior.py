@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,6 +11,7 @@ import pytest
 
 from spaex.behavior import orchestrate as behavior_orchestrate
 from spaex.cli import install as install_cli
+from spaex.constitution.show import show
 from spaex.install.local_scope import LOCAL_PREAMBLE
 
 from .test_project_local_fragments import _stub_invoke_composer
@@ -102,3 +104,16 @@ def test_removing_local_rules_drops_the_document(scene: SimpleNamespace) -> None
 
     assert not (consumer / ".spaex/local").exists()
     assert (consumer / ".spaex/constitution.md").read_bytes() == team
+
+
+def test_constitution_show_prints_local_section_last(scene: SimpleNamespace) -> None:
+    consumer = scene.consumer
+    assert scene.add(_MINE_ID, local=True) == 0
+    out = io.BytesIO()
+
+    show(consumer, no_preface=True, out=out)
+
+    text = out.getvalue().decode()
+    team_at = text.index(f"{_TEAM_ID}/team-rule")
+    local_at = text.index("## Local (this checkout only)")
+    assert team_at < local_at < text.index(f"{_MINE_ID}/mine-rule")

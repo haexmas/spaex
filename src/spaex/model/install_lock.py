@@ -269,12 +269,21 @@ def read_with_consistent_generation(
             return InstallLock(spaex_version="4", generation_id="", molecules=())
         return InstallLock.from_json(lock_path.read_bytes())
 
+    local_lock_path = lock_path.parent / "local" / transaction.INSTALL_LOCK_NAME
+
+    def _generation(lock: InstallLock) -> str:
+        """Spec 029: a local-only publish keeps the project id, so include the local one."""
+        if not local_lock_path.exists():
+            return lock.generation_id
+        local = InstallLock.from_json(local_lock_path.read_bytes())
+        return f"{lock.generation_id}+{local.generation_id}"
+
     first_id = second_id = ""
     for _attempt in range(2):
         lock = _read_lock()
-        first_id = lock.generation_id
+        first_id = _generation(lock)
         result = build(lock)
-        second_id = _read_lock().generation_id
+        second_id = _generation(_read_lock())
         if second_id == first_id:
             return result
 
