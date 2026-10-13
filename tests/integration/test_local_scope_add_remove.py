@@ -10,6 +10,7 @@ import pytest
 
 from spaex.cli import install as install_cli
 from spaex.install import git_exclude
+from spaex.util.errors import UnknownMoleculeIdError
 
 _PROJECT_ID = "com.example.publisher.proj"
 _MINE_ID = "com.example.publisher.mine"
@@ -111,3 +112,27 @@ def test_fresh_clone_ignores_local_scope(scene: SimpleNamespace, tmp_path: Path)
     assert not (clone / ".spaex/local").exists()
     assert _snapshot(clone) == _snapshot(scene.consumer)
     assert _git(clone, "status", "--porcelain", "--untracked-files=all") == ""
+
+
+def test_later_project_adoption_shadows_but_keeps_local_entry(
+    scene: SimpleNamespace, capsys: pytest.CaptureFixture[str]
+) -> None:
+    consumer = scene.consumer
+    assert scene.add(_MINE_ID, local=True) == 0
+    overlay = (consumer / ".spaex/local/manifest.json").read_bytes()
+
+    assert scene.add(_MINE_ID) == 0
+
+    assert f"shadowed: {_MINE_ID}" in capsys.readouterr().out
+    assert (consumer / ".spaex/local/manifest.json").read_bytes() == overlay
+    assert (consumer / "mine.txt").is_file()
+    assert git_exclude.block_paths(consumer) == ()
+
+
+def test_remove_without_local_hints_for_local_only_id(scene: SimpleNamespace) -> None:
+    assert scene.add(_MINE_ID, local=True) == 0
+
+    with pytest.raises(UnknownMoleculeIdError) as caught:
+        scene.remove(_MINE_ID)
+
+    assert "--local" in caught.value.hint
