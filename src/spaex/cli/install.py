@@ -34,7 +34,7 @@ from spaex.constitution.resolve import (
     ResolvedMolecule,
     resolve_install_inputs,
 )
-from spaex.install import inflight, local_scope
+from spaex.install import inflight, local_publish, local_scope
 from spaex.install.generic_atoms import DeliveredFile, collect_exclusive_atoms
 from spaex.install.hook_runner import HookOutcomeKind, run_install_hook
 from spaex.install.lock import OwnerToken
@@ -61,10 +61,8 @@ from spaex.model.install_lock import (
     SpeckitLockRecord,
 )
 from spaex.paths import (
-    LOCAL_CONSTITUTION_RELATIVE_PATH,
     MANIFEST_RELATIVE_PATH,
     composed_constitution_path,
-    local_dir,
     manifest_path,
 )
 from spaex.skills.installer import pending_external_skill_molecules
@@ -286,7 +284,7 @@ def run(
             preserved_files = (
                 *preserved_project_local_files,
                 *preserved_behavior_files,
-                *_preserved_local_scope_files(repo_root),
+                *local_publish.preserved_files(repo_root),
             )
             contributing_ids = {contribution.source.id for contribution in contributions}
             existing_lock = _read_live_lock(repo_root)
@@ -662,7 +660,7 @@ def _publish_local_scope(
     """
     if plan.is_no_op:
         return
-    local_scope.publish(repo_root, plan, state_root=state_root)
+    local_publish.publish(repo_root, plan, state_root=state_root)
     if plan.overlay_bytes is not None:
         sys.stdout.write(f"local: {len(plan.records)} molecule(s) installed\n")
     else:
@@ -782,23 +780,6 @@ def _preserved_project_local_files(
             relative_name, configured.read_bytes()
         )
     return tuple(preserved.values())
-
-
-def _preserved_local_scope_files(repo_root: Path) -> tuple[transaction.StagedFile, ...]:
-    """Carry `.spaex/local/**` verbatim through a project publication (Spec 029).
-
-    A project publish never changes local scope; the local publish that may
-    follow replaces these files itself.
-    """
-    live_root = repo_root / transaction.SPAEX_DIR
-    local_root = local_dir(repo_root)
-    if not local_root.is_dir():
-        return ()
-    return tuple(
-        transaction.StagedFile(path.relative_to(live_root).as_posix(), path.read_bytes())
-        for path in sorted(local_root.rglob("*"))
-        if path.is_file() and not path.is_symlink()
-    )
 
 
 def _read_live_lock(repo_root: Path) -> InstallLock | None:
@@ -1017,49 +998,13 @@ def _run_behavior_pipeline(
 
         behavior_commands.maybe_emit_no_bootstrap_hint()
     if local_plan is not None and local_plan.overlay_bytes is not None:
-        _run_local_behavior_pass(
+        local_publish.compose_local_behavior(
             repo_root=repo_root,
             state_root=state_root,
             local_plan=local_plan,
             abort_on_contradiction=abort_on_contradiction,
         )
     return outcome
-
-
-def _run_local_behavior_pass(
-    *,
-    repo_root: Path,
-    state_root: Path,
-    local_plan: local_scope.LocalPlan,
-    abort_on_contradiction: bool,
-) -> None:
-    """Spec 029: compose local behavior fragments into `.spaex/local/constitution.md`.
-
-    The project constitution is never recomposed for local changes; the local
-    document carries a preamble stating that project rules prevail.
-    """
-    outcome = behavior_orchestrate.run(
-        repo_root=repo_root,
-        state_root=state_root,
-        resolved=list(local_plan.resolution.resolved),
-        abort_on_contradiction=abort_on_contradiction,
-        spaex_dir=local_dir(repo_root),
-        preamble=local_scope.LOCAL_PREAMBLE,
-    )
-    path = LOCAL_CONSTITUTION_RELATIVE_PATH
-    if outcome.published and not outcome.skipped_composer:
-        sys.stdout.write(f"composed {path} ({outcome.fragment_count} fragment(s))\n")
-    elif outcome.skipped_composer:
-        sys.stdout.write(f"reused {path} ({outcome.fragment_count} fragment(s))\n")
-    elif outcome.stale:
-        sys.stdout.write(
-            f"local fragments contradict each other; {path} left unchanged, "
-            "marked stale (see .spaex/local/.stale)\n"
-        )
-    if outcome.published or outcome.skipped_composer:
-        from spaex.cli import behavior_commands  # local import to avoid cycles
-
-        behavior_commands.maybe_emit_local_bootstrap_hint()
 
 
 def _behavior_publication_deferred(

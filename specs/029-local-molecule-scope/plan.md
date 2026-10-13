@@ -90,6 +90,11 @@ src/spaex/
 │   │                              #   stage .spaex/local/** files, build local lock
 │   ├── git_exclude.py             # NEW: read/rewrite the per-worktree spaex block in
 │   │                              #   info/exclude; ponytail ceiling note (R7)
+│   ├── local_publish.py           # NEW (split during implementation): local `.spaex`
+│   │                              #   generation, `.spaex/local/**` carry-over, local
+│   │                              #   behavior pass (R2, R5)
+│   ├── side_effects.py            # NEW (added during implementation): repository
+│   │                              #   side-effect guard for local hooks and Spec Kit (R10, R11)
 │   ├── generic_atoms.py           # accept an owner-scope set; refuse local→project overlap
 │   ├── nix_packages.py            # compose local contributions into .spaex/local/generated/
 │   └── hook_runner.py             # pass SPAEX_SCOPE (R11)
