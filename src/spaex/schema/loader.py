@@ -12,6 +12,7 @@ _KNOWN_SCHEMAS = frozenset(
         "publisher-manifest.v4.schema.json",
         "molecule-manifest.v4.schema.json",
         "install-lock.v4.schema.json",
+        "local-manifest.v1.schema.json",
     }
 )
 

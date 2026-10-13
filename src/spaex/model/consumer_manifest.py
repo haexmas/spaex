@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -89,39 +89,7 @@ class ConsumerManifest:
         if "spaex_min_version" in data:
             min_version = VersionConstraint.parse(data["spaex_min_version"])
 
-        compounds: list[CompoundEntry] = []
-        for entry in data.get("compounds", []):
-            source = entry["source"]
-            canonical = canonicalize(source)
-            if canonical != source:
-                raise ValueError(
-                    f"compounds[].source must be canonical: got {source!r}, expected {canonical!r}"
-                )
-            if not _SHA40_RE.match(entry["revision"]):
-                raise ValueError(
-                    f"compounds[].revision must be 40 lowercase hex: {entry['revision']!r}"
-                )
-            molecules = tuple(MoleculeId.parse(m) for m in entry["molecules"])
-            if len(set(molecules)) != len(molecules):
-                raise ValueError("compounds[].molecules must be unique")
-            config: dict[str, ConfigEntry] = {}
-            for key, value in entry.get("config", {}).items():
-                MoleculeId.parse(key)
-                if key not in set(molecules):
-                    raise ValueError(f"compounds[].config[{key!r}] not resolved via molecules")
-                config[key] = ConfigEntry(
-                    priority=value.get("priority"),
-                    values=freeze_json(value.get("values", {})),
-                )
-            compounds.append(
-                CompoundEntry(
-                    source=source,
-                    revision=entry["revision"],
-                    molecules=molecules,
-                    track=entry.get("track"),
-                    config=freeze_json(config),
-                )
-            )
+        compounds = parse_compounds(data.get("compounds", []))
 
         local_fragments = tuple(
             freeze_json(entry)
@@ -141,7 +109,7 @@ class ConsumerManifest:
         return ConsumerManifest(
             spaex_version=data["spaex_version"],
             identity=data["identity"],
-            compounds=tuple(compounds),
+            compounds=compounds,
             spaex_min_version=min_version,
             groups=tuple(data.get("groups", [])),
             active_feature=data.get("active_feature"),
@@ -155,32 +123,7 @@ class ConsumerManifest:
         obj: dict[str, Any] = {
             "spaex_version": self.spaex_version,
             "identity": self.identity,
-            "compounds": [
-                {
-                    **(
-                        {
-                            "source": c.source,
-                            "revision": c.revision,
-                            "molecules": list(c.molecules),
-                        }
-                    ),
-                    **({"track": c.track} if c.track else {}),
-                    **(
-                        {
-                            "config": {
-                                k: {
-                                    **({"priority": v.priority} if v.priority is not None else {}),
-                                    **({"values": thaw_json(v.values)} if v.values else {}),
-                                }
-                                for k, v in c.config.items()
-                            }
-                        }
-                        if c.config
-                        else {}
-                    ),
-                }
-                for c in self.compounds
-            ],
+            "compounds": compounds_to_json(self.compounds),
         }
         if self.spaex_min_version is not None:
             op = self.spaex_min_version.operator
@@ -209,6 +152,74 @@ class ConsumerManifest:
                 policy_obj["agents"] = list(policy.agents)
             obj["skill_installation"] = policy_obj
         return json_deterministic.dumps(obj)
+
+
+def parse_compounds(entries: Sequence[Mapping[str, Any]]) -> tuple[CompoundEntry, ...]:
+    """Parse schema-validated `compounds[]` entries into `CompoundEntry` values.
+
+    Shared by the committed consumer manifest and the Spec 029 local overlay,
+    which use the same compound shape and pinning rules.
+    """
+    compounds: list[CompoundEntry] = []
+    for entry in entries:
+        source = entry["source"]
+        canonical = canonicalize(source)
+        if canonical != source:
+            raise ValueError(
+                f"compounds[].source must be canonical: got {source!r}, expected {canonical!r}"
+            )
+        if not _SHA40_RE.match(entry["revision"]):
+            raise ValueError(
+                f"compounds[].revision must be 40 lowercase hex: {entry['revision']!r}"
+            )
+        molecules = tuple(MoleculeId.parse(m) for m in entry["molecules"])
+        if len(set(molecules)) != len(molecules):
+            raise ValueError("compounds[].molecules must be unique")
+        config: dict[str, ConfigEntry] = {}
+        for key, value in entry.get("config", {}).items():
+            MoleculeId.parse(key)
+            if key not in set(molecules):
+                raise ValueError(f"compounds[].config[{key!r}] not resolved via molecules")
+            config[key] = ConfigEntry(
+                priority=value.get("priority"),
+                values=freeze_json(value.get("values", {})),
+            )
+        compounds.append(
+            CompoundEntry(
+                source=source,
+                revision=entry["revision"],
+                molecules=molecules,
+                track=entry.get("track"),
+                config=freeze_json(config),
+            )
+        )
+    return tuple(compounds)
+
+
+def compounds_to_json(compounds: Sequence[CompoundEntry]) -> list[dict[str, Any]]:
+    """Serialize compounds to the canonical JSON object shape."""
+    return [
+        {
+            "source": c.source,
+            "revision": c.revision,
+            "molecules": list(c.molecules),
+            **({"track": c.track} if c.track else {}),
+            **(
+                {
+                    "config": {
+                        k: {
+                            **({"priority": v.priority} if v.priority is not None else {}),
+                            **({"values": thaw_json(v.values)} if v.values else {}),
+                        }
+                        for k, v in c.config.items()
+                    }
+                }
+                if c.config
+                else {}
+            ),
+        }
+        for c in compounds
+    ]
 
 
 def flatten_compound_pins(manifest: ConsumerManifest) -> dict[str, tuple[str, str]]:
