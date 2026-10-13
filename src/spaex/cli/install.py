@@ -662,7 +662,7 @@ def _publish_local_scope(
     if plan.is_no_op:
         return
     local_scope.publish(repo_root, plan, state_root=state_root)
-    if plan.records:
+    if plan.overlay_bytes is not None:
         sys.stdout.write(f"local: {len(plan.records)} molecule(s) installed\n")
     else:
         sys.stdout.write("local: no molecules adopted; local scope removed\n")

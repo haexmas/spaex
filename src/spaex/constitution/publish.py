@@ -61,6 +61,8 @@ def delete_orphaned_paths(
     repo_root: Path,
     previous_lock: InstallLock | None,
     current_lock: InstallLock,
+    *,
+    keep: frozenset[str] = frozenset(),
 ) -> None:
     """Delete recorded files no longer owned by the newly published lock.
 
@@ -75,6 +77,9 @@ def delete_orphaned_paths(
     since install. A path absent from `content_hashes` (every pre-Spec-027
     orphaned path; e.g. a stale `behavior`-molecule leftover) is deleted
     unconditionally, exactly as before this feature.
+
+    Spec 029: ``keep`` names paths another scope owns right now (a molecule
+    moved from local to project scope); they are never deleted here.
     """
     if previous_lock is None:
         return
@@ -85,7 +90,7 @@ def delete_orphaned_paths(
     current_paths = {path for molecule in current_lock.molecules for path in molecule.paths}
     deleted: list[tuple[Path, bytes, int]] = []
     try:
-        for path in sorted(previous_paths - current_paths):
+        for path in sorted(previous_paths - current_paths - keep):
             if path.startswith(f"{transaction.SPAEX_DIR}/"):
                 continue
             target = resolved_root / path

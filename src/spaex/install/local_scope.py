@@ -244,6 +244,7 @@ class LocalPlan:
     packages: ComposedFile | None = None
     previous_lock: InstallLock | None = None
     on_disk_packages: bytes | None = None
+    delivered_on_disk: bool = False
 
     @property
     def packages_bytes(self) -> bytes | None:
@@ -254,14 +255,16 @@ class LocalPlan:
         """True when publishing would not change any local file."""
         if not self.active:
             return True
+        if self.overlay_bytes is None:
+            # Local scope was emptied (or never completed): publish its removal.
+            return False
         previous = self.previous_lock
-        if not self.records:
-            return previous is None and self.overlay_bytes is None
         return (
             previous is not None
             and previous.molecules == self.records
             and dict(previous.content_hashes) == dict(self.content_hashes)
             and self.packages_bytes == self.on_disk_packages
+            and self.delivered_on_disk
         )
 
 
@@ -352,7 +355,11 @@ def prepare(
     generated = repo_root / LOCAL_GENERATED_PACKAGES_PATH
     return LocalPlan(
         active=True,
-        overlay_bytes=local_manifest_path(repo_root).read_bytes() if overlay else None,
+        overlay_bytes=(
+            local_manifest_path(repo_root).read_bytes()
+            if overlay is not None and overlay.compounds
+            else None
+        ),
         resolution=resolution,
         records=entries,
         content_hashes=hashes,
@@ -360,6 +367,12 @@ def prepare(
         packages=packages,
         previous_lock=previous,
         on_disk_packages=generated.read_bytes() if generated.is_file() else None,
+        # A crash after the swap but before root files were written leaves the
+        # lock current and the files missing; rewrite them on the next install.
+        delivered_on_disk=all(
+            (repo_root / f.path).is_file() and (repo_root / f.path).read_bytes() == f.content
+            for f in delivered
+        ),
     )
 
 
@@ -418,6 +431,15 @@ def _build_records(
     return tuple(entries), hashes
 
 
+def _project_paths(live: Path) -> frozenset[str]:
+    """Paths the published project lock owns; local orphan cleanup must keep them."""
+    path = live / transaction.INSTALL_LOCK_NAME
+    if not path.is_file():
+        return frozenset()
+    lock = InstallLock.from_json(path.read_bytes())
+    return frozenset(p for molecule in lock.molecules for p in molecule.paths)
+
+
 def publish(repo_root: Path, plan: LocalPlan, *, state_root: Path) -> None:
     """Publish local scope as its own `.spaex` generation.
 
@@ -435,8 +457,9 @@ def publish(repo_root: Path, plan: LocalPlan, *, state_root: Path) -> None:
         and path.relative_to(live).parts[0] != LOCAL_DIRNAME
     ]
     new_lock: InstallLock | None = None
-    if plan.records:
-        assert plan.overlay_bytes is not None
+    # Kept while the overlay lists anything, even when every entry is shadowed:
+    # spaex never drops the developer's adoption record on its own (R9).
+    if plan.overlay_bytes is not None:
         existing = live / LOCAL_DIRNAME
         if existing.is_dir():
             for path in sorted(existing.rglob("*")):
@@ -481,7 +504,12 @@ def publish(repo_root: Path, plan: LocalPlan, *, state_root: Path) -> None:
         snapshot = snapshot_delivered_targets(plan.delivered, repo_root=repo_root)
         try:
             write_delivered_files(plan.delivered, repo_root=repo_root)
-            delete_orphaned_paths(repo_root, plan.previous_lock, new_lock or empty_lock)
+            delete_orphaned_paths(
+                repo_root,
+                plan.previous_lock,
+                new_lock or empty_lock,
+                keep=_project_paths(live),
+            )
             git_exclude.reconcile(repo_root, exclusion_paths(new_lock))
         except (OSError, HaexError):
             restore_delivered_targets(snapshot)
