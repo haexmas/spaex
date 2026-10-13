@@ -553,8 +553,9 @@ def _commit_behavior_artifacts(
 ) -> EmitOutcome | None:
     """Publish behavior outputs as one rollback boundary."""
     spaex_dir = spaex_dir if spaex_dir is not None else repo_root / SPAEX_DIR
+    spaex_dir.mkdir(parents=True, exist_ok=True)
     spaex_md = spaex_dir / CONSTITUTION_NAME
-    backup_dir = Path(tempfile.mkdtemp(prefix=".behavior-backup-", dir=repo_root))
+    backup_dir = Path(tempfile.mkdtemp(prefix=".behavior-backup-", dir=spaex_dir))
     backups: dict[Path, Path | None] = {}
     for path in (spaex_md, clarifications_path):
         if path is None or path in backups:

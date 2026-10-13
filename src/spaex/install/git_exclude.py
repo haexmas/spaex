@@ -19,6 +19,7 @@ import subprocess
 from collections.abc import Iterable
 from pathlib import Path
 
+from spaex.install.git_env import git_environment
 from spaex.io import atomic
 from spaex.util.errors import LocalExcludeMalformedError
 
@@ -33,6 +34,7 @@ def _git(repo_root: Path, *args: str) -> str | None:
         capture_output=True,
         check=False,
         text=True,
+        env=git_environment(),
     )
     if proc.returncode != 0:
         return None

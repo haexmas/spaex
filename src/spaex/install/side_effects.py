@@ -21,9 +21,10 @@ from pathlib import Path
 from types import TracebackType
 from typing import Literal
 
+from spaex.install.git_env import git_environment
 from spaex.io import atomic
 from spaex.paths import SPAEX_DIRNAME
-from spaex.util.errors import LocalHookSideEffectError
+from spaex.util.errors import LocalHookRestorationError, LocalHookSideEffectError
 
 
 def _git(repo_root: Path, *args: str) -> bytes | None:
@@ -31,6 +32,7 @@ def _git(repo_root: Path, *args: str) -> bytes | None:
         ["git", "--literal-pathspecs", "-C", str(repo_root), *args],
         capture_output=True,
         check=False,
+        env=git_environment(),
     )
     return proc.stdout if proc.returncode == 0 else None
 
@@ -110,8 +112,6 @@ class RepoSideEffectGuard:
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> Literal[False]:
-        if exc_type is not None:
-            return False
         changed = {
             path for path, before in self._saved.items() if _read(self._root / path) != before
         }
@@ -142,6 +142,8 @@ class RepoSideEffectGuard:
         changed |= inside_spaex
         if changed:
             self._revert(changed)
+            if exc_type is not None:
+                return False
             raise LocalHookSideEffectError(
                 message=(
                     f"{self._actor} changed team-owned path(s) "
@@ -175,8 +177,14 @@ class RepoSideEffectGuard:
         for path in new_files:
             (self._root / path).unlink(missing_ok=True)
         tracked = [path for path in restore_from_index if path not in new_files]
-        if tracked:
-            _git(self._root, "checkout", "--", *tracked)
+        if tracked and _git(self._root, "checkout", "--", *tracked) is None:
+            raise LocalHookRestorationError(
+                message=(
+                    f"could not restore {self._actor} changes to tracked path(s) "
+                    f"{', '.join(sorted(tracked))}"
+                ),
+                context={"actor": self._actor, "paths": ",".join(sorted(tracked))},
+            )
 
 
 __all__ = ["RepoSideEffectGuard"]
