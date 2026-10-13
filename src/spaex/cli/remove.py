@@ -19,8 +19,8 @@ import sys
 from pathlib import Path
 from typing import TypeVar
 
-from spaex.install import local_scope
 from spaex.cli.reinstall_options import add_reinstall_arguments, reinstall_kwargs
+from spaex.install import local_scope
 from spaex.install.manifest_lock import (
     DEFAULT_LOCK_TIMEOUT_SECONDS,
     ManifestLockContext,
@@ -253,6 +253,7 @@ def run(args: argparse.Namespace) -> int:
             repo_root,
             new_bytes,
             lock,
+            **reinstall_kwargs(args),
             # FR-024a: add-time plausibility check, identical treatment to
             # `spaex add` (contracts/cli-surface.md §add/remove).
             abort_on_behavior_contradiction=False,
