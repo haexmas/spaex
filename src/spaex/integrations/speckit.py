@@ -377,41 +377,53 @@ def _detect_drift(
     return _Drift(refresh=refresh, reinstall=reinstall)
 
 
-def _clear_stale_registrations(repo_root: Path, keys: frozenset[str]) -> None:
+def _clear_stale_registrations(repo_root: Path, keys: frozenset[str]) -> str | None:
     """Drop drifted keys from the official CLI's own installation record.
 
     As of specify-cli 1.0.6, ``specify integration install <key>`` refuses
     to touch a key it already considers installed — even with ``--force``,
-    it just reports "no files changed" and exits 0. This path only serves
-    keys without a usable manifest (``_Drift.reinstall``); keys that merely
-    miss files are refreshed through ``integration upgrade`` instead, which
-    also covers the default integration this cannot unregister. Clearing only the
-    drifted key's own entry in ``.specify/integration.json`` (never
-    touching sibling keys) is what makes the official CLI treat the
-    follow-up ``install`` call in ``install_selected`` as a genuine fresh
-    install instead of a no-op.
+    it just reports "no files changed" and exits 0, and the default
+    integration counts as installed on its own. This path only serves keys
+    without a usable manifest (``_Drift.reinstall``), for example in a fresh
+    clone that commits ``.specify/integration.json`` but ignores the
+    per-integration manifests; keys that merely miss files are refreshed
+    through ``integration upgrade`` instead. Clearing only the drifted keys'
+    own entries in ``.specify/integration.json`` (never touching sibling
+    keys), including the default when it is one of them, is what makes the
+    official CLI treat the follow-up ``install`` call in
+    ``install_selected`` as a genuine fresh install instead of a no-op.
+
+    Returns the cleared default key, which must be reinstalled first so the
+    official CLI records it as the default again.
     """
     path = repo_root / ".specify" / "integration.json"
     if not path.is_file():
-        return
+        return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return
+        return None
     if not isinstance(data, dict):
-        return
+        return None
     installed = data.get("installed_integrations")
     if not isinstance(installed, list):
-        return
+        return None
+    default = data.get("default_integration", data.get("integration"))
+    cleared_default = default if isinstance(default, str) and default in keys else None
     remaining = [key for key in installed if key not in keys]
-    if remaining == installed:
-        return
+    if remaining == installed and cleared_default is None:
+        return None
     data["installed_integrations"] = remaining
     settings = data.get("integration_settings")
     if isinstance(settings, dict):
         for key in keys:
             settings.pop(key, None)
+    if cleared_default is not None:
+        for field in ("integration", "default_integration"):
+            if data.get(field) == cleared_default:
+                del data[field]
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    return cleared_default
 
 
 def install_selected(
@@ -421,11 +433,16 @@ def install_selected(
     repo_root: Path,
     cli_version: str,
     executable: CliExecutable | None = None,
+    first_key: str | None = None,
 ) -> dict[str, SpeckitOutcomeStatus]:
-    """Install selected integrations serially through the official CLI."""
+    """Install selected integrations serially through the official CLI.
+
+    ``first_key`` is installed before the others; the official CLI makes the
+    first integration installed into an empty record the default.
+    """
     outcomes: dict[str, SpeckitOutcomeStatus] = {}
     cli_executable = resolve_cli_executable(declaration, executable)
-    for key in sorted(selected):
+    for key in sorted(selected, key=lambda key: (key != first_key, key)):
         result = run_cli(
             build_install_argv(
                 cli_executable,
@@ -616,18 +633,18 @@ def prepare_install(
     previous_selected = (
         existing_for_first.selected if already_selected and existing_for_first else ()
     )
-    carried_over = tuple(key for key in selected if already_selected and key in previous_selected)
-    drift = (
-        _detect_drift(carried_over, repo_root=repo_root, executable=cli_executable)
-        if carried_over
-        else _Drift()
+    # Checked for every selected key, not only those the lock carries over:
+    # a fresh clone has no install.lock, but a committed
+    # `.specify/integration.json` can still register keys whose output is gone.
+    drift = _detect_drift(selected, repo_root=repo_root, executable=cli_executable)
+    default_key = (
+        _clear_stale_registrations(repo_root, drift.reinstall) if drift.reinstall else None
     )
-    if drift.reinstall:
-        _clear_stale_registrations(repo_root, drift.reinstall)
     new_keys = tuple(
         key
         for key in selected
-        if not already_selected or key not in previous_selected or key in drift.reinstall
+        if key not in drift.refresh
+        and (not already_selected or key not in previous_selected or key in drift.reinstall)
     )
     outcomes = refresh_selected(
         first, tuple(drift.refresh), repo_root=repo_root, executable=cli_executable
@@ -638,6 +655,7 @@ def prepare_install(
         repo_root=repo_root,
         cli_version=cli_version,
         executable=cli_executable,
+        first_key=default_key,
     )
     if existing_for_first is not None and already_selected:
         outcomes = {
