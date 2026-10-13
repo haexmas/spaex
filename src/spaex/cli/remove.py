@@ -17,7 +17,9 @@ import argparse
 import dataclasses
 import sys
 from pathlib import Path
+from typing import TypeVar
 
+from spaex.install import local_scope
 from spaex.cli.reinstall_options import add_reinstall_arguments, reinstall_kwargs
 from spaex.install.manifest_lock import (
     DEFAULT_LOCK_TIMEOUT_SECONDS,
@@ -31,7 +33,14 @@ from spaex.model.consumer_manifest import (
     ConsumerManifest,
 )
 from spaex.model.install_lock import InstallLock
-from spaex.paths import MANIFEST_RELATIVE_PATH, manifest_path
+from spaex.model.local_manifest import LocalManifest
+from spaex.paths import (
+    LOCAL_MANIFEST_RELATIVE_PATH,
+    MANIFEST_RELATIVE_PATH,
+    local_lock_path,
+    local_manifest_path,
+    manifest_path,
+)
 from spaex.util import exit_codes
 from spaex.util.errors import HaexError, UnknownMoleculeIdError
 
@@ -47,26 +56,36 @@ def _parse_ids(raw: str) -> tuple[str, ...]:
     return ids
 
 
+ManifestT = TypeVar("ManifestT", ConsumerManifest, LocalManifest)
+
+
+def _adopted_ids(manifest: ConsumerManifest | LocalManifest | None) -> set[str]:
+    compounds = manifest.compounds if manifest is not None else ()
+    return {mid for compound in compounds for mid in compound.molecules}
+
+
 def _preflight_ids_present(
-    manifest: ConsumerManifest, requested: tuple[str, ...]
+    manifest: ConsumerManifest | LocalManifest,
+    requested: tuple[str, ...],
+    *,
+    hint: str | None = None,
 ) -> None:
-    present: set[str] = set()
-    for compound in manifest.compounds:
-        present.update(compound.molecules)
+    present = _adopted_ids(manifest)
     missing = [mid for mid in requested if mid not in present]
     if missing:
-        raise UnknownMoleculeIdError(
+        error = UnknownMoleculeIdError(
             message=(
                 "no adopted compound lists the requested molecule id(s): "
                 + ", ".join(missing)
             ),
             context={"missing": ",".join(missing)},
         )
+        if hint is not None:
+            error.hint = hint
+        raise error
 
 
-def _apply_removal(
-    manifest: ConsumerManifest, remove_ids: tuple[str, ...]
-) -> ConsumerManifest:
+def _apply_removal(manifest: ManifestT, remove_ids: tuple[str, ...]) -> ManifestT:
     """Return a manifest without the requested molecules or empty compounds."""
     removal_set = set(remove_ids)
     new_compounds: list[CompoundEntry] = []
@@ -93,9 +112,11 @@ def _apply_removal(
     return dataclasses.replace(manifest, compounds=tuple(new_compounds))
 
 
-def _warn_external_carriers(repo_root: Path, remove_ids: tuple[str, ...]) -> None:
+def _warn_external_carriers(
+    repo_root: Path, remove_ids: tuple[str, ...], lock_path: Path | None = None
+) -> None:
     """Warn when removed molecules left hook or external Spec Kit artifacts."""
-    lock_path = repo_root / ".spaex" / "install.lock"
+    lock_path = lock_path or repo_root / ".spaex" / "install.lock"
     if not lock_path.exists():
         return
     lock = InstallLock.from_json(lock_path.read_bytes())
@@ -140,7 +161,42 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=DEFAULT_LOCK_TIMEOUT_SECONDS,
         help="Manifest-lock timeout in seconds (default 30; 0 = fail-fast)",
     )
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        help="Retract molecules adopted for this checkout only (Spec 029).",
+    )
     add_reinstall_arguments(parser, command="remove")
+
+
+def _remove_local(
+    args: argparse.Namespace,
+    repo_root: Path,
+    lock: ManifestLockContext,
+    remove_ids: tuple[str, ...],
+) -> int:
+    """Spec 029: retract from the local overlay; the project manifest is never written."""
+    overlay = local_scope.load_overlay(repo_root) or LocalManifest(
+        spaex_version="4", compounds=()
+    )
+    _preflight_ids_present(
+        overlay,
+        remove_ids,
+        hint=f"The molecule id is not adopted in `{LOCAL_MANIFEST_RELATIVE_PATH}`.",
+    )
+    _warn_external_carriers(repo_root, remove_ids, local_lock_path(repo_root))
+    exit_code = write_and_reinstall(
+        repo_root,
+        _apply_removal(overlay, remove_ids).to_json_bytes(),
+        lock,
+        **reinstall_kwargs(args),
+        abort_on_behavior_contradiction=False,
+        target=local_manifest_path(repo_root),
+    )
+    sys.stdout.write(f"retracted {len(remove_ids)} local molecule(s):\n")
+    for mid in remove_ids:
+        sys.stdout.write(f"  {mid}\n")
+    return exit_code
 
 
 def run(args: argparse.Namespace) -> int:
@@ -164,6 +220,8 @@ def run(args: argparse.Namespace) -> int:
         timeout_seconds=args.lock_timeout,
     )
     with lock:
+        if getattr(args, "local", False):
+            return _remove_local(args, repo_root, lock, remove_ids)
         try:
             current = ConsumerManifest.from_json(path.read_bytes())
         except (ValueError, KeyError) as exc:
@@ -174,7 +232,17 @@ def run(args: argparse.Namespace) -> int:
                 exit_code=exit_codes.INCOMPLETE_TRANSACTION,
                 hint=f"Repair `{MANIFEST_RELATIVE_PATH}` before retracting molecules.",
             ) from exc
-        _preflight_ids_present(current, remove_ids)
+        locally_adopted = _adopted_ids(local_scope.load_overlay(repo_root))
+        _preflight_ids_present(
+            current,
+            remove_ids,
+            hint=(
+                f"Adopted only in `{LOCAL_MANIFEST_RELATIVE_PATH}`; "
+                "use `spaex remove --local`."
+                if locally_adopted & set(remove_ids)
+                else None
+            ),
+        )
 
         new_manifest = _apply_removal(current, remove_ids)
         new_bytes = new_manifest.to_json_bytes()
@@ -185,7 +253,6 @@ def run(args: argparse.Namespace) -> int:
             repo_root,
             new_bytes,
             lock,
-            **reinstall_kwargs(args),
             # FR-024a: add-time plausibility check, identical treatment to
             # `spaex add` (contracts/cli-surface.md §add/remove).
             abort_on_behavior_contradiction=False,

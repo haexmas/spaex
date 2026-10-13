@@ -156,6 +156,7 @@ def haex_add_helpers() -> dict:
                 "version": info["version"],
                 "priority": info.get("priority", 100),
                 "atoms": info["atoms"],
+                **info.get("manifest_extra", {}),
             }
             (mol_dir / "manifest.json").write_text(
                 json.dumps(molecule_manifest, indent=2)
@@ -164,6 +165,9 @@ def haex_add_helpers() -> dict:
                 for path in paths:
                     (mol_dir / path).parent.mkdir(parents=True, exist_ok=True)
                     (mol_dir / path).write_text(f"# {mid} {category} {path}\n")
+            for path, content in info.get("files", {}).items():
+                (mol_dir / path).parent.mkdir(parents=True, exist_ok=True)
+                (mol_dir / path).write_text(content)
         _local_git(working, "add", ".")
         _local_git(working, "commit", "-q", "-m", "publisher")
         head = _local_git(working, "rev-parse", "HEAD")
@@ -205,6 +209,7 @@ def haex_add_helpers() -> dict:
             revision=kwargs.get("revision"),
             all=kwargs.get("all", False),
             lock_timeout=kwargs.get("lock_timeout", 1.0),
+            local=kwargs.get("local", False),
         )
         return add_cli.run(ns)
 
@@ -216,6 +221,7 @@ def haex_add_helpers() -> dict:
             repo_root=str(consumer),
             molecule_ids=molecule_ids,
             lock_timeout=kwargs.get("lock_timeout", 1.0),
+            local=kwargs.get("local", False),
         )
         return remove_cli.run(ns)
 

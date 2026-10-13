@@ -19,6 +19,7 @@ the 2026-09-04 clarification: any install failure rolls back the edit.
 from __future__ import annotations
 
 import argparse
+from contextlib import suppress
 from pathlib import Path
 
 from spaex.install.manifest_lock import ManifestLockContext
@@ -45,8 +46,13 @@ def write_and_reinstall(
     speckit_agents: str | None = None,
     no_speckit_integrations: bool = False,
     abort_on_behavior_contradiction: bool = True,
+    target: Path | None = None,
 ) -> int:
     """Publish the mutated manifest and delegate to ``haex install`` in-process.
+
+    ``target`` defaults to `.spaex/manifest.json`; Spec 029 passes the local
+    overlay `.spaex/local/manifest.json` instead, whose directory is created
+    on demand and removed again on rollback when this call created it.
 
     ``abort_on_behavior_contradiction=False`` (passed by `spaex add`/`spaex
     remove`, Spec 023 FR-024a) requests the add-time plausibility check: a
@@ -55,12 +61,14 @@ def write_and_reinstall(
     """
     from spaex.cli import install as install_cli
 
-    manifest_target = manifest_path(repo_root)
+    manifest_target = target if target is not None else manifest_path(repo_root)
     previous_bytes: bytes | None = (
         manifest_target.read_bytes() if manifest_target.exists() else None
     )
+    created_parent = not manifest_target.parent.exists()
 
     try:
+        manifest_target.parent.mkdir(parents=True, exist_ok=True)
         atomic.write_replace(manifest_target, new_manifest_bytes)
         return install_cli.run(
             argparse.Namespace(
@@ -76,6 +84,9 @@ def write_and_reinstall(
         try:
             if previous_bytes is None:
                 _atomic_delete(manifest_target)
+                if created_parent and manifest_target.parent.is_dir():
+                    with suppress(OSError):
+                        manifest_target.parent.rmdir()
             else:
                 atomic.write_replace(manifest_target, previous_bytes)
         except OSError as rollback_exc:

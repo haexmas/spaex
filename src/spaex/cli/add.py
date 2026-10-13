@@ -13,10 +13,12 @@ import argparse
 import dataclasses
 import sys
 from pathlib import Path
+from typing import TypeVar
 
 from spaex.cli.reinstall_options import add_reinstall_arguments, reinstall_kwargs
 from spaex.git import publisher_fetch
 from spaex.git import show as git_show
+from spaex.install import local_scope
 from spaex.install.manifest_lock import (
     DEFAULT_LOCK_TIMEOUT_SECONDS,
     ManifestLockContext,
@@ -25,16 +27,18 @@ from spaex.install.manifest_lock import (
 )
 from spaex.install.write_and_reinstall import write_and_reinstall
 from spaex.io.state import default_state_root
-from spaex.model.consumer_manifest import ConsumerManifest
+from spaex.model.consumer_manifest import ConsumerManifest, flatten_compound_pins
+from spaex.model.local_manifest import LocalManifest
 from spaex.model.molecule_manifest import MoleculeManifest
 from spaex.model.publisher_manifest import PublisherManifest
 from spaex.model.source_url import canonicalize
-from spaex.paths import MANIFEST_RELATIVE_PATH, manifest_path
+from spaex.paths import MANIFEST_RELATIVE_PATH, local_manifest_path, manifest_path
 from spaex.util import exit_codes
 from spaex.util.errors import (
     ConstitutionAlreadyAdoptedError,
     HaexError,
     InteractiveSelectionUnavailableError,
+    LocalAdoptionShadowedError,
     MoleculeIdNotInSourceError,
     PublisherManifestInvalidError,
     PublisherManifestMissingError,
@@ -278,13 +282,16 @@ def _refuse_singleton_conflict(
             )
 
 
+ManifestT = TypeVar("ManifestT", ConsumerManifest, LocalManifest)
+
+
 def _mutate_compounds(
-    manifest: ConsumerManifest,
+    manifest: ManifestT,
     source: str,
     revision: str,
     added_ids: tuple[str, ...],
-) -> ConsumerManifest:
-    """Return a new ConsumerManifest with the compound merged/replaced/appended."""
+) -> ManifestT:
+    """Return the manifest (project or local overlay) with the compound merged/replaced/added."""
     from spaex.model.consumer_manifest import CompoundEntry
 
     new_compounds: list[CompoundEntry] = []
@@ -343,6 +350,14 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--revision", default=None, help="Full 40-hex SHA to pin")
     parser.add_argument("--all", action="store_true", help="Adopt every molecule at the pinned SHA")
     parser.add_argument(
+        "--local",
+        action="store_true",
+        help=(
+            "Adopt for this checkout only (Spec 029): recorded in the uncommitted "
+            ".spaex/local/manifest.json; nothing it installs is committed."
+        ),
+    )
+    parser.add_argument(
         "--lock-timeout",
         dest="lock_timeout",
         type=parse_lock_timeout,
@@ -383,6 +398,10 @@ def run(args: argparse.Namespace) -> int:
         _verify_ids_in_source(molecule_ids, publisher)
 
         current_manifest = ConsumerManifest.from_json(path.read_bytes())
+        if getattr(args, "local", False):
+            return _add_local(
+                args, repo_root, lock, current_manifest, canonical_source, sha, molecule_ids
+            )
 
         added_category_declarers = _categories_declared_by(
             molecule_ids, publisher, repo_dir, sha
@@ -424,6 +443,52 @@ def run(args: argparse.Namespace) -> int:
         for mid in molecule_ids:
             sys.stdout.write(f"  {mid}\n")
         return exit_code
+
+
+def _add_local(
+    args: argparse.Namespace,
+    repo_root: Path,
+    lock: ManifestLockContext,
+    project: ConsumerManifest,
+    canonical_source: str,
+    sha: str,
+    molecule_ids: tuple[str, ...],
+) -> int:
+    """Spec 029: adopt into the local overlay; the project manifest is never written."""
+    shadowed = sorted(set(molecule_ids) & set(flatten_compound_pins(project)))
+    if shadowed:
+        raise LocalAdoptionShadowedError(
+            message=(
+                f"{', '.join(shadowed)} already adopted in project scope "
+                f"({MANIFEST_RELATIVE_PATH}); nothing to adopt locally"
+            ),
+            context={"molecules": ",".join(shadowed)},
+        )
+    overlay = local_scope.load_overlay(repo_root) or LocalManifest(spaex_version="4", compounds=())
+    new_overlay = _mutate_compounds(overlay, canonical_source, sha, molecule_ids)
+    exit_code = write_and_reinstall(
+        repo_root,
+        new_overlay.to_json_bytes(),
+        lock,
+        skip_hooks=bool(getattr(args, "skip_hooks", False)),
+        speckit_agents=getattr(args, "speckit_agents", None),
+        no_speckit_integrations=bool(getattr(args, "no_speckit_integrations", False)),
+        abort_on_behavior_contradiction=False,
+        target=local_manifest_path(repo_root),
+    )
+    local_lock = local_scope.read_local_lock(repo_root)
+    hook_ids = {
+        m.id for m in (local_lock.molecules if local_lock else ()) if m.hook_status is not None
+    }
+    for molecule_id in molecule_ids:
+        if molecule_id in hook_ids:
+            sys.stdout.write(local_scope.HOOK_WARNING.format(molecule_id=molecule_id))
+    sys.stdout.write(
+        f"added {len(molecule_ids)} molecule(s) locally at {canonical_source}@{sha[:12]}:\n"
+    )
+    for mid in molecule_ids:
+        sys.stdout.write(f"  {mid}\n")
+    return exit_code
 
 
 __all__ = ["add_arguments", "run"]
