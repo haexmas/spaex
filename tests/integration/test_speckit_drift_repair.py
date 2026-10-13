@@ -187,6 +187,26 @@ def test_clear_stale_registrations_removes_only_the_drifted_key(tmp_path: Path) 
     assert data["default_integration"] == "claude"
 
 
+def test_clear_stale_registrations_unregisters_a_drifted_default(tmp_path: Path) -> None:
+    """Drop the default fields when the default key itself drifted, and report it."""
+    state = tmp_path / ".specify" / "integration.json"
+    state.parent.mkdir(parents=True)
+    state.write_text(
+        json.dumps(
+            {
+                "installed_integrations": ["claude", "codex"],
+                "integration_settings": {"claude": {}, "codex": {}},
+                "integration": "claude",
+                "default_integration": "claude",
+            }
+        )
+    )
+    cleared = _clear_stale_registrations(tmp_path, frozenset({"claude", "codex"}))
+    data = json.loads(state.read_text())
+    assert cleared == "claude"
+    assert data == {"installed_integrations": [], "integration_settings": {}}
+
+
 def test_clear_stale_registrations_is_a_noop_without_a_state_file(tmp_path: Path) -> None:
     """Leave the repository untouched when no integration state file exists."""
     # Must not raise even though `.specify/integration.json` doesn't exist.
@@ -304,6 +324,7 @@ if args[:2] == ["integration", "install"]:
     marker = _marker(key)
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.touch()
+    (Path.cwd() / ".specify" / "integrations" / f"{{key}}.broken").unlink(missing_ok=True)
     data.setdefault("installed_integrations", []).append(key)
     data.setdefault("default_integration", key)
     _save(data)
@@ -446,3 +467,44 @@ def test_prepare_install_reinstalls_an_integration_with_an_unreadable_manifest(
     calls = (tmp_path / "calls.log").read_text().splitlines()
     assert calls.count("integration install codex") == 2
     assert "integration upgrade codex" not in calls
+
+
+def test_prepare_install_restores_output_in_a_fresh_clone(tmp_path: Path) -> None:
+    """Reinstall committed registrations whose manifests and output are ignored."""
+    executable = _stateful_fake_cli(tmp_path)
+    resolved = [
+        _resolved(tmp_path, molecule_id="com.example.speckit", options={"claude": "", "codex": ""})
+    ]
+    # A fresh clone: `.specify/integration.json` is committed and registers
+    # both keys, while their manifests, their output and install.lock are not.
+    state = tmp_path / ".specify" / "integration.json"
+    state.write_text(
+        json.dumps(
+            {
+                "installed_integrations": ["claude", "codex"],
+                "integration_settings": {"claude": {}, "codex": {}},
+                "default_integration": "claude",
+            }
+        )
+    )
+    integrations = tmp_path / ".specify" / "integrations"
+    integrations.mkdir()
+    for key in ("claude", "codex"):
+        (integrations / f"{key}.broken").touch()
+
+    records = prepare_install(
+        resolved,
+        repo_root=tmp_path,
+        existing_lock=None,
+        explicit_selection="claude,codex",
+        executable=executable,
+    )
+
+    assert (tmp_path / ".claude" / "skills" / "specify.md").exists()
+    assert (tmp_path / ".agents" / "skills" / "specify.md").exists()
+    calls = (tmp_path / "calls.log").read_text().splitlines()
+    installs = [call for call in calls if call.startswith("integration install")]
+    assert installs == ["integration install claude", "integration install codex"]
+    assert json.loads(state.read_text())["default_integration"] == "claude"
+    outcomes = records[resolved[0].molecule_id].outcomes
+    assert outcomes == {"claude": "installed", "codex": "installed"}

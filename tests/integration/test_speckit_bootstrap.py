@@ -102,6 +102,7 @@ def test_fresh_repo_is_initialized_once_before_integrations_install(tmp_path: Pa
         "init --here --force --non-interactive --ignore-agent-tools"
         " --integration codex --integration-options=--skills",
         "integration list",
+        "integration status --json",
         "integration install codex --integration-options=--skills",
     ]
 
