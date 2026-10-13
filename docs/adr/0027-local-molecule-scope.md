@@ -1,6 +1,6 @@
 # ADR 0027: Local (per-developer) molecule scope and per-checkout git exclusion
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-10-12
 **Related**: Spec 029 (local molecule scope), ADR 0013 (global bootstrap block), ADR 0026 (generic atom root write boundary)
 
@@ -16,7 +16,7 @@ Two existing invariants are affected:
 
 1. **Second adoption scope.** spaex gains a `local` scope next to the default `project` scope. Local adoptions are recorded in `.spaex/local/manifest.json`. Everything local scope installs is recorded in `.spaex/local/install.lock` and is never committed.
 2. **Project scope prevails.** A molecule adopted in both scopes is installed from project scope only. Local writes to project-owned or git-tracked paths are refused before anything is written. Local behavior rules are composed into a separate `.spaex/local/constitution.md`, which states that the project constitution prevails on conflict. Only one Spec Kit policy is active per checkout.
-3. **One generation.** Both scopes publish in the same `.spaex` rename-swap generation, so crash safety and rollback stay a single mechanism.
+3. **Own local generation.** Local scope publishes its own `.spaex` rename-swap generation, which re-stages every project file byte-for-byte, after the project generation when both change. The project publish allocates a new `generation_id` every time, so a local-only change must never trigger it. The local lock therefore carries its own generation id. Every local refusal happens before any publication, and both publications run inside the existing `.spaex` rollback context.
 4. **Extended write boundary.** To keep local outputs out of git without touching committed ignore files, spaex:
    - writes `.spaex/local/.gitignore` containing `*`;
    - maintains a marker-delimited, per-worktree block in git's per-clone exclude file (`git rev-parse --git-path info/exclude`).
@@ -32,6 +32,8 @@ Two existing invariants are affected:
 - Local hooks receive `SPAEX_SCOPE`; tracked or project-owned hook changes are refused, and newly created repository-local paths are captured in the local lock and exclusion block. Side effects outside the repository remain outside this feature's guarantee.
 - An older spaex without this feature drops `.spaex/local/` on its next install, because it does not stage that directory.
 - `spaex status` / `spaex trace` JSON output moves to `format_version: 2` (adds `scope`).
+- The `install-lock.v4` `paths` pattern gains a third, purely syntactic branch for any normalized repo-relative path. Only a local lock uses it, to record files a local hook or the local Spec Kit run created. What spaex itself writes is still bounded by code (ADR 0026), not by the schema.
+- Install hooks receive `SPAEX_SCOPE=project|local` in addition to the inherited environment.
 
 ## Alternatives considered
 

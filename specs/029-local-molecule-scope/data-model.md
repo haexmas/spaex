@@ -52,7 +52,7 @@ Composed from `.spaex/local/constitution.d/<molecule>/*.md` only, with the stand
 ```
 
 - Exactly one block per worktree key; entries sorted, de-duplicated, anchored with a leading `/`.
-- Contents = every path in the local lock's `molecules[].paths` that is outside `.spaex/local/`, plus Spec Kit output paths (research R10).
+- Contents = every path in the local lock's `molecules[].paths` outside `.spaex/`: exclusive root files plus files a local hook or the local Spec Kit run created (research R10, R11).
 - Block is removed when empty. Text outside spaex blocks is never modified. A malformed block (start without end) refuses install before any write, like malformed bootstrap markers.
 
 ## `.spaex/local/.gitignore`

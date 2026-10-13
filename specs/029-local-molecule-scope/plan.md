@@ -6,7 +6,7 @@
 
 ## Summary
 
-Add a second adoption scope, `local`, next to today's project scope. A developer adopts molecules for themselves with `spaex add --local`; the adoption is recorded in an uncommitted overlay at `.spaex/local/manifest.json`, and everything local scope installs is kept out of git automatically: files under `.spaex/local/` via a self-ignoring `.gitignore` (`*`), repo-root files via a per-worktree, marker-delimited block in git's per-clone `info/exclude` (research R1, R7). Both scopes publish in one `.spaex` generation, so the existing rename-swap transaction keeps installs atomic (R2). Local behavior fragments are composed by the existing orchestrator into a separate `.spaex/local/constitution.md` that agents read after the project constitution via a version-3 bootstrap block (R5, R6). Project scope wins every conflict: duplicate adoptions are shadowed, and writes to project-owned or git-tracked paths are refused before anything is written (R8, R9).
+Add a second adoption scope, `local`, next to today's project scope. A developer adopts molecules for themselves with `spaex add --local`; the adoption is recorded in an uncommitted overlay at `.spaex/local/manifest.json`, and everything local scope installs is kept out of git automatically: files under `.spaex/local/` via a self-ignoring `.gitignore` (`*`), repo-root files via a per-worktree, marker-delimited block in git's per-clone `info/exclude` (research R1, R7). Local scope publishes its own `.spaex` generation that re-stages every project file byte-for-byte, inside the same rollback context as the project publication, so a local-only change never rewrites the committed install lock (R2). Local behavior fragments are composed by the existing orchestrator into a separate `.spaex/local/constitution.md` that agents read after the project constitution via a version-3 bootstrap block (R5, R6). Project scope wins every conflict: duplicate adoptions are shadowed, and writes to project-owned or git-tracked paths are refused before anything is written (R8, R9).
 
 ## Technical Context
 
@@ -24,7 +24,7 @@ Add a second adoption scope, `local`, next to today's project scope. A developer
 
 **Performance Goals**: Install without a local overlay does no extra work beyond one `is_file()` check (SC-002 byte-identity also implies no extra git calls). With an overlay: one extra `git ls-files` and one `git rev-parse` per install; local behavior composition costs one composer pass over local fragments only.
 
-**Constraints**: Project outputs byte-identical with and without an overlay (SC-002); deterministic outputs in both scopes (FR-015); single atomic publish (FR-016); no edits to committed ignore files (FR-005); local hook side effects are checked at the repository boundary (FR-014).
+**Constraints**: Project outputs byte-identical with and without an overlay (SC-002); deterministic outputs in both scopes (FR-015); consistent publication of both scopes (FR-016); no edits to committed ignore files (FR-005); local hook side effects are checked at the repository boundary (FR-014).
 
 **Scale/Scope**: Same molecule counts as project scope (single digits to low tens per checkout).
 

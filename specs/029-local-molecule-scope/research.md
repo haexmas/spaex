@@ -22,11 +22,11 @@ All file references are repo-relative to `src/spaex/` unless marked otherwise.
 
 ## R2. Surviving the `.spaex/` rename-swap
 
-**Decision**: Local-scope files are staged into the same `.spaex` generation as project files. `.spaex/local/**` is added to the set the install stages on every publish (today's `_preserved_project_local_files` and `extra_spaex_files` paths in `cli/install.py`), so one `transaction.publish_generation` publishes both scopes atomically.
+**Decision** (revised during implementation): a project publication carries `.spaex/local/**` through its swap verbatim (`_preserved_local_scope_files`). Local scope then publishes its own `.spaex` generation (`local_scope.publish`), which re-stages every live project file byte-for-byte and replaces only `local/`. Root-file writes, orphan cleanup and the exclusion block run in that generation's `post_write_verify`, with snapshot and restore. Both publications run inside the existing `.spaex` rollback context, and every local refusal (R8–R11) happens before either one.
 
-**Rationale**: `io/transaction.py` rename-swaps the whole `.spaex/` directory; any unstaged file is dropped. Staging both scopes into one generation reuses the existing crash safety (`.spaex.prev` restore, `SPAEX_CRASH_AFTER` seam) and satisfies FR-016 without a second transaction. Repo-root writes for local exclusive atoms run in the same `post_write_verify` snapshot/restore step as project ones (`constitution/publish.py:231-246`).
+**Rationale**: `io/transaction.py` rename-swaps the whole `.spaex/` directory; any unstaged file is dropped. The originally planned single generation turned out to be wrong: `constitution/publish.py` allocates a new project `generation_id` on every publication, so a local-only change would rewrite the committed `.spaex/install.lock` and break SC-001/SC-002. A separate local generation keeps the project lock byte-identical. Crash safety still comes from the same transaction primitive (`SPAEX_CRASH_AFTER` tests in `tests/integration/test_local_scope_crash_safety.py`). After a crash between the swap and the root-file writes, the next install sees missing local files and rewrites them (`LocalPlan.delivered_on_disk`).
 
-**Alternatives considered**: a second, nested swap of `.spaex/local/` after the project swap. Rejected: two commit points need a compensating rollback of the first when the second fails, which is the problem the single swap already solves.
+**Alternatives considered**: one shared generation for both scopes (rejected, see above); a nested swap of `.spaex/local/` alone (rejected: the transaction primitive swaps `.spaex/` as a unit and is not designed for nested live roots).
 
 **Known ceiling**: an older spaex version (without this feature) running `spaex install` in the same checkout drops `.spaex/local/` because it does not stage it. The overlay itself is small and recreatable with `spaex add --local`; documented in the quickstart.
 
@@ -101,15 +101,17 @@ current local lock before reporting success.
 
 ## R10. Spec Kit in local scope
 
-**Decision**: If project scope has a `speckit` declaration, a local molecule with a `speckit` declaration is refused at `add --local` and at install (FR-013). If only local scope declares it, the existing `integrations/speckit.prepare_install` runs with the local lock as its `existing_lock`. Output paths to exclude are read from the official CLI's per-integration manifests (`.specify/integrations/<key>.manifest.json`) after install, plus `/.specify/` when local scope created it.
+**Decision**: If project scope has a `speckit` declaration, a local molecule with a `speckit` declaration is refused at `add --local` and at install (FR-013). If only local scope declares it, the existing `integrations/speckit.prepare_install` runs with the local lock as its `existing_lock`, wrapped in the same repository side-effect guard as local hooks (R11). Every file the official CLI creates is recorded and excluded. A change to a tracked file (for example a committed `.specify/`) is reverted and refused.
 
-**Rationale**: one Spec Kit policy per checkout, matching the existing `SpeckitDeclarationConflictError` rule across molecules; the official CLI owns the file list, so spaex reads it instead of guessing.
+**Rationale**: one Spec Kit policy per checkout, matching the existing `SpeckitDeclarationConflictError` rule across molecules. Observing the CLI's effects (revised during implementation, replacing parsing `.specify/integrations/<key>.manifest.json`) covers `specify init`'s bootstrap files as well, and needs no knowledge of the CLI's layout.
 
 ## R11. Install hooks in local scope
 
 **Decision**: Local hooks run through `install/hook_runner.run_install_hook` like project hooks, after project hooks, with an added environment variable `SPAEX_SCOPE=local` (`project` for project hooks). The local install snapshots repository state around each hook: a changed tracked or project-owned path refuses the publish and restores the pre-hook state; newly created untracked repository paths are added to the local lock and the per-worktree exclusion block before publication. `spaex add --local` of a hook-bearing molecule prints a one-time warning that side effects outside the repository are not covered by these checks (FR-014).
 
 **Rationale**: hooks are arbitrary code, so the repository boundary must be enforced by observing their side effects rather than trusting hook authors. `SPAEX_SCOPE` still lets a hook author place outputs appropriately; the snapshot also prevents a hook from silently modifying committed or project-owned files.
+
+**Implementation notes**: `install/side_effects.RepoSideEffectGuard` uses `git status --porcelain=v1 -z --untracked-files=no` and `git ls-files --others --exclude-standard -z` before and after. Created files may live anywhere in the repository, so `install-lock.v4` `paths` gains a third, syntactic pattern branch for normalized repo-relative paths. Created files get content hashes, so `spaex remove --local` deletes only unmodified ones. Files a hook writes under `.spaex/` count as violations, because the next swap would drop them.
 
 ## R12. Composable categories
 
