@@ -461,7 +461,9 @@ def publish(repo_root: Path, plan: LocalPlan, *, state_root: Path) -> None:
     # spaex never drops the developer's adoption record on its own (R9).
     if plan.overlay_bytes is not None:
         existing = live / LOCAL_DIRNAME
-        if existing.is_dir():
+        # Carried-over files are behavior outputs; drop them once no local
+        # molecule declares behavior any more.
+        if existing.is_dir() and any(map(record_declares_behavior, plan.resolution.resolved)):
             for path in sorted(existing.rglob("*")):
                 relative = path.relative_to(existing)
                 if (

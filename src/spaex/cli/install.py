@@ -61,6 +61,7 @@ from spaex.model.install_lock import (
     SpeckitLockRecord,
 )
 from spaex.paths import (
+    LOCAL_CONSTITUTION_RELATIVE_PATH,
     MANIFEST_RELATIVE_PATH,
     composed_constitution_path,
     local_dir,
@@ -1015,7 +1016,50 @@ def _run_behavior_pipeline(
         from spaex.cli import behavior_commands  # local import to avoid cycles
 
         behavior_commands.maybe_emit_no_bootstrap_hint()
+    if local_plan is not None and local_plan.overlay_bytes is not None:
+        _run_local_behavior_pass(
+            repo_root=repo_root,
+            state_root=state_root,
+            local_plan=local_plan,
+            abort_on_contradiction=abort_on_contradiction,
+        )
     return outcome
+
+
+def _run_local_behavior_pass(
+    *,
+    repo_root: Path,
+    state_root: Path,
+    local_plan: local_scope.LocalPlan,
+    abort_on_contradiction: bool,
+) -> None:
+    """Spec 029: compose local behavior fragments into `.spaex/local/constitution.md`.
+
+    The project constitution is never recomposed for local changes; the local
+    document carries a preamble stating that project rules prevail.
+    """
+    outcome = behavior_orchestrate.run(
+        repo_root=repo_root,
+        state_root=state_root,
+        resolved=list(local_plan.resolution.resolved),
+        abort_on_contradiction=abort_on_contradiction,
+        spaex_dir=local_dir(repo_root),
+        preamble=local_scope.LOCAL_PREAMBLE,
+    )
+    path = LOCAL_CONSTITUTION_RELATIVE_PATH
+    if outcome.published and not outcome.skipped_composer:
+        sys.stdout.write(f"composed {path} ({outcome.fragment_count} fragment(s))\n")
+    elif outcome.skipped_composer:
+        sys.stdout.write(f"reused {path} ({outcome.fragment_count} fragment(s))\n")
+    elif outcome.stale:
+        sys.stdout.write(
+            f"local fragments contradict each other; {path} left unchanged, "
+            "marked stale (see .spaex/local/.stale)\n"
+        )
+    if outcome.published or outcome.skipped_composer:
+        from spaex.cli import behavior_commands  # local import to avoid cycles
+
+        behavior_commands.maybe_emit_local_bootstrap_hint()
 
 
 def _behavior_publication_deferred(

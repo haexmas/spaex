@@ -41,7 +41,7 @@ def test_install_creates_missing_claude_target(tmp_path: Path) -> None:
     target = home / ".claude" / "CLAUDE.md"
     assert target.exists()
     text = target.read_text(encoding="utf-8")
-    assert '<!-- spaex-bootstrap:start version="2" -->' in text
+    assert '<!-- spaex-bootstrap:start version="3" -->' in text
     assert bootstrap.END_MARKER in text
     assert "## spaex per-project constitution" in text
 
@@ -55,7 +55,7 @@ def test_install_appends_when_target_has_content_but_no_markers(tmp_path: Path) 
     assert [o.action for o in outcomes] == ["appended"]
     text = target.read_text(encoding="utf-8")
     assert text.startswith("existing operator content\n")
-    assert '<!-- spaex-bootstrap:start version="2" -->' in text
+    assert '<!-- spaex-bootstrap:start version="3" -->' in text
 
 
 def test_install_preserves_symlink_and_mode(tmp_path: Path) -> None:
@@ -127,7 +127,7 @@ def test_install_upgrades_older_version_and_preserves_surrounding_content(
     assert [o.action for o in outcomes] == ["upgraded"]
     text = target.read_text(encoding="utf-8")
     assert text.startswith("preamble\n")
-    assert '<!-- spaex-bootstrap:start version="2" -->' in text
+    assert '<!-- spaex-bootstrap:start version="3" -->' in text
     assert "old body" not in text
     assert text.endswith("trailing operator notes\n")
 
@@ -282,3 +282,25 @@ def test_install_all_three_runtimes_hits_expected_targets(tmp_path: Path) -> Non
     assert (home / ".claude" / "CLAUDE.md") in written
     assert (home / ".codex" / "AGENTS.md") in written
     assert (home / ".gemini" / "GEMINI.md") in written
+
+
+def test_install_upgrades_a_version_2_block_to_mention_the_local_document(
+    tmp_path: Path,
+) -> None:
+    """Spec 029: v3 tells agents to read `.spaex/local/constitution.md` too."""
+    home = _fake_home(tmp_path)
+    target = home / ".claude" / "CLAUDE.md"
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        '<!-- spaex-bootstrap:start version="2" -->\n\nold body\n\n<!-- spaex-bootstrap:end -->\n',
+        encoding="utf-8",
+    )
+    assert not bootstrap.check([bootstrap.Runtime.CLAUDE], home=home, env={})
+
+    outcomes = bootstrap.install([bootstrap.Runtime.CLAUDE], home=home, env={})
+
+    assert [o.action for o in outcomes] == ["upgraded"]
+    text = target.read_text(encoding="utf-8")
+    assert '<!-- spaex-bootstrap:start version="3" -->' in text
+    assert ".spaex/local/constitution.md" in text
+    assert "the project constitution prevails" in text

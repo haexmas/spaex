@@ -75,8 +75,8 @@ from spaex.behavior.precheck import PrecheckOutcome
 from spaex.behavior.stale import STALE_FILENAME, clear_stale, write_stale
 from spaex.constitution.resolve import ResolvedMolecule
 from spaex.git import molecule_store
+from spaex.io.transaction import CONSTITUTION_NAME
 from spaex.model.molecule_manifest import MoleculeManifest
-from spaex.paths import composed_constitution_path
 from spaex.util import exit_codes
 from spaex.util.errors import HaexError
 
@@ -112,8 +112,14 @@ def run(
     operator_answer: Callable[[ClarificationQuestion], str] | None = None,
     abort_on_contradiction: bool = True,
     force_composer: bool = False,
+    spaex_dir: Path | None = None,
+    preamble: str = "",
 ) -> BehaviorOutcome:
     """Execute the behavior-harness transaction for one install.
+
+    Spec 029: ``spaex_dir`` (default `.spaex/`) relocates every behavior
+    output for the local pass (`.spaex/local/`), and ``preamble`` is written
+    after the composed document's header line.
 
     Fast-path: no orchestration when no resolved molecule declares
     `atoms.behavior` / inline `constitution_fragments` AND the caller
@@ -152,7 +158,7 @@ def run(
     caller (`spaex install`, the internal install `spaex add`/`spaex
     remove` trigger) leaves this at its default and is unaffected.
     """
-    spaex_dir = repo_root / SPAEX_DIR
+    spaex_dir = spaex_dir if spaex_dir is not None else repo_root / SPAEX_DIR
     if not project_local and not _any_declares_behavior(resolved):
         # The install transaction owns `.spaex/constitution.md` for
         # atoms.constitution molecules as well as behavior composition. With
@@ -179,6 +185,7 @@ def run(
     if not fragments:
         removed = _publish_empty_artifacts(
             repo_root=repo_root,
+            spaex_dir=spaex_dir,
             staging=staging,
             target=target,
             prev=prev,
@@ -207,7 +214,7 @@ def run(
         valid_clarifications=store.entries.values(),
     )
 
-    existing = read_header_hashes(repo_root)
+    existing = read_header_hashes(repo_root, spaex_dir / CONSTITUTION_NAME)
     if (
         existing is not None
         and existing == (source_hash, build_input_hash)
@@ -216,6 +223,7 @@ def run(
     ):
         _commit_behavior_artifacts(
             repo_root=repo_root,
+            spaex_dir=spaex_dir,
             staging=staging,
             target=target,
             prev=prev,
@@ -323,6 +331,8 @@ def run(
 
     emit_outcome = _commit_behavior_artifacts(
         repo_root=repo_root,
+        spaex_dir=spaex_dir,
+        preamble=preamble,
         staging=staging,
         target=target,
         prev=prev,
@@ -510,12 +520,13 @@ def _warn_stale_contradiction(questions: Sequence[ClarificationQuestion]) -> Non
 
 
 def _publish_empty_artifacts(
-    *, repo_root: Path, staging: Path, target: Path, prev: Path
+    *, repo_root: Path, spaex_dir: Path, staging: Path, target: Path, prev: Path
 ) -> bool:
     """Commit an empty behavior generation with rollback protection."""
-    removed = composed_constitution_path(repo_root).exists()
+    removed = (spaex_dir / CONSTITUTION_NAME).exists()
     _commit_behavior_artifacts(
         repo_root=repo_root,
+        spaex_dir=spaex_dir,
         staging=staging,
         target=target,
         prev=prev,
@@ -527,6 +538,8 @@ def _publish_empty_artifacts(
 def _commit_behavior_artifacts(
     *,
     repo_root: Path,
+    spaex_dir: Path | None = None,
+    preamble: str = "",
     staging: Path,
     target: Path,
     prev: Path,
@@ -539,7 +552,8 @@ def _commit_behavior_artifacts(
     remove_spaex_md: bool = False,
 ) -> EmitOutcome | None:
     """Publish behavior outputs as one rollback boundary."""
-    spaex_md = composed_constitution_path(repo_root)
+    spaex_dir = spaex_dir if spaex_dir is not None else repo_root / SPAEX_DIR
+    spaex_md = spaex_dir / CONSTITUTION_NAME
     backup_dir = Path(tempfile.mkdtemp(prefix=".behavior-backup-", dir=repo_root))
     backups: dict[Path, Path | None] = {}
     for path in (spaex_md, clarifications_path):
@@ -558,7 +572,7 @@ def _commit_behavior_artifacts(
         _publish_constitution_d(staging=staging, target=target, prev=prev)
         constitution_published = True
         if remove_spaex_md:
-            remove_if_exists(repo_root)
+            remove_if_exists(repo_root, spaex_md)
             _clear_target(target)
         elif composed is not None:
             if expected_source_hash is None or expected_build_input_hash is None:
@@ -568,6 +582,8 @@ def _commit_behavior_artifacts(
                 repo_root=repo_root,
                 expected_source_hash=expected_source_hash,
                 expected_build_input_hash=expected_build_input_hash,
+                target=spaex_md,
+                preamble=preamble,
             )
             assert emit_outcome is not None
 
@@ -587,7 +603,7 @@ def _commit_behavior_artifacts(
         # empty-fragment-set path) now reflects the current fragment set, so
         # any FR-024a stale marker left by a prior `spaex add`/`spaex remove`
         # no longer applies.
-        clear_stale(repo_root / SPAEX_DIR / STALE_FILENAME)
+        clear_stale(spaex_dir / STALE_FILENAME)
         return emit_outcome
     finally:
         shutil.rmtree(backup_dir, ignore_errors=True)
