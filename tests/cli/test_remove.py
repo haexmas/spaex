@@ -225,3 +225,39 @@ def test_malformed_manifest_is_a_typed_refusal(
         )
 
     assert exc_info.value.diagnostic_key == "spaex-manifest-invalid"
+
+
+def test_remove_forwards_install_controls_to_internal_install(
+    adopted_repo, monkeypatch
+) -> None:
+    """`spaex remove` accepts the Spec Kit and hook controls `spaex add` has.
+
+    Without `--speckit-agents`/`--no-speckit-integrations`, a non-interactive
+    remove could not complete when the lock held no Spec Kit selection.
+    """
+    from spaex.cli import remove as remove_cli
+    from spaex.cli.main import _build_parser
+
+    captured: dict = {}
+
+    def fake_write_and_reinstall(repo_root, new_bytes, lock, **kwargs):
+        captured.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(remove_cli, "write_and_reinstall", fake_write_and_reinstall)
+    args = _build_parser().parse_args(
+        [
+            "--repo-root",
+            str(adopted_repo["consumer"]),
+            "remove",
+            _SKILL_ID,
+            "--speckit-agents",
+            "claude,codex",
+            "--no-install-hooks",
+        ]
+    )
+
+    assert remove_cli.run(args) == 0
+    assert captured["speckit_agents"] == "claude,codex"
+    assert captured["skip_hooks"] is True
+    assert captured["no_speckit_integrations"] is False
