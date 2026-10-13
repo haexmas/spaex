@@ -15,6 +15,7 @@ from spaex.util.errors import InstallTransactionFailedError
 
 _CREATES_ID = "com.example.publisher.creates"
 _EDITS_ID = "com.example.publisher.edits"
+_EDITS_LOCAL_ID = "com.example.publisher.edits-local"
 
 _CREATES_HOOK = """import os, pathlib
 target = pathlib.Path("generated/out.txt")
@@ -23,6 +24,9 @@ target.write_text(os.environ["SPAEX_SCOPE"])
 """
 _EDITS_HOOK = """import pathlib
 pathlib.Path("README.md").write_text("hijacked\\n")
+"""
+_EDITS_LOCAL_HOOK = """import pathlib
+pathlib.Path(".spaex/local/sentinel.txt").write_text("hijacked\\n")
 """
 
 
@@ -55,6 +59,7 @@ def scene(tmp_path: Path, haex_add_helpers, monkeypatch, git_binary: str) -> Sim
         {
             _CREATES_ID: _hook_molecule("creates", _CREATES_HOOK),
             _EDITS_ID: _hook_molecule("edits", _EDITS_HOOK),
+            _EDITS_LOCAL_ID: _hook_molecule("edits-local", _EDITS_LOCAL_HOOK),
         },
     )
     consumer = haex_add_helpers["make_consumer"](tmp_path)
@@ -103,3 +108,19 @@ def test_hook_editing_a_tracked_file_is_reverted_and_refused(scene: SimpleNamesp
     assert (consumer / "README.md").read_text() == "team readme\n"
     assert not (consumer / ".spaex/local").exists()
     assert _git(consumer, "status", "--porcelain", "--untracked-files=all") == ""
+
+
+def test_hook_editing_an_ignored_local_spaex_file_is_reverted_and_refused(
+    scene: SimpleNamespace,
+) -> None:
+    consumer = scene.consumer
+    assert scene.add(_CREATES_ID) == 0
+    sentinel = consumer / ".spaex/local/sentinel.txt"
+    sentinel.write_text("keep me\n")
+    before = sentinel.read_bytes()
+
+    with pytest.raises(InstallTransactionFailedError) as caught:
+        scene.add(_EDITS_LOCAL_ID)
+
+    assert caught.value.context["install_key"] == "local-hook-side-effect"
+    assert sentinel.read_bytes() == before
