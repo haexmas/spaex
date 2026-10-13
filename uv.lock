@@ -363,7 +363,7 @@ wheels = [
 
 [[package]]
 name = "spaex"
-version = "5.4.1"
+version = "5.4.2"
 source = { editable = "." }
 dependencies = [
     { name = "jsonschema" },
