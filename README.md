@@ -16,6 +16,19 @@ spaex composes a coding harness for a single repo out of reusable pieces (MCPs, 
 - `spaex trace <path>`: print which molecule(s) wrote a given file, or every recorded file under a directory. Read-only.
 - `spaex skills install`: activate the consumer's `skill_installation` policy for pending `external_skills` references, prompting once (interactively) if none is persisted yet, then running the selected adapter. `spaex install` never does this on its own.
 - `spaex skills configure`: change the persisted `skill_installation` policy (mode, adapter, scope, agents) without installing anything or removing already-installed skills.
+- `spaex add --local …` / `spaex remove --local …`: adopt or retract molecules for this checkout only (see [Local scope](#local-scope)).
+
+## Local scope
+
+Every adoption above is **project scope**: recorded in the committed `.spaex/manifest.json` and shared with the whole team. `spaex add --local <source-url> <molecule-ids>` adopts molecules for one developer in one checkout instead ([Spec 029](specs/029-local-molecule-scope/), [ADR 0027](docs/adr/0027-local-molecule-scope.md)):
+
+- The adoption lives in the uncommitted overlay `.spaex/local/manifest.json`; `.spaex/manifest.json` and every project output stay byte-identical.
+- Nothing local reaches git, and no committed ignore file is edited. Files under `.spaex/local/` are hidden by a self-ignoring `.spaex/local/.gitignore`. Local files elsewhere (exclusive atoms, files a local hook or the local Spec Kit run created) are listed in a spaex-owned, per-worktree block in git's `info/exclude`.
+- Local behavior fragments compose into `.spaex/local/constitution.md`, which agents read after `.spaex/constitution.md` (bootstrap block version 3: rerun `spaex install --global`). Project rules prevail on conflict.
+- Project scope always wins. A molecule already adopted in project scope cannot be adopted locally, and a later project adoption shadows the local entry. A local write to a project-owned or git-tracked path, including one made by a local install hook, refuses the install and is reverted.
+- `spaex status`, `spaex trace` and `spaex constitution show` label every molecule, file and section with its scope (`status`/`trace` JSON `format_version: 2`).
+
+`info/exclude` is shared by all worktrees of a clone, so a local entry from one worktree also hides an untracked file at the same path in the others. A spaex version without local scope drops `.spaex/local/` on its next install; recreate it with `spaex add --local`.
 
 ## Molecule install-hooks
 
