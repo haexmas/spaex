@@ -530,6 +530,25 @@ def maybe_emit_no_bootstrap_hint() -> None:
     )
 
 
+def maybe_emit_local_bootstrap_hint() -> None:
+    """Spec 029: a local behavior document needs bootstrap block version 3.
+
+    Emits one stderr hint when no runtime carries the current block, so the
+    operator's agents would not read `.spaex/local/constitution.md`.
+    """
+    for runtime in bootstrap.ALL_RUNTIMES:
+        try:
+            if bootstrap.check([runtime]):
+                return
+        except HaexError:
+            continue
+    sys.stderr.write(
+        "hint: run `spaex install --global` so agent runtimes also read "
+        ".spaex/local/constitution.md (bootstrap block version "
+        f"{bootstrap.BLOCK_VERSION})\n"
+    )
+
+
 def _parse_runtimes(raw: str | None) -> list[bootstrap.Runtime]:
     if not raw:
         return list(bootstrap.ALL_RUNTIMES)

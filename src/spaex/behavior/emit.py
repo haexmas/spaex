@@ -124,12 +124,17 @@ def emit_composed(
     repo_root: Path,
     expected_source_hash: str,
     expected_build_input_hash: str,
+    target: Path | None = None,
+    preamble: str = "",
 ) -> EmitOutcome:
     """Verify the Composer's header hashes, then atomically write the artifact.
 
     Mismatches (missing header, wrong hash, wrong version) raise
     `ComposerInvalidOutputError` (exit 32) so the fail-fast contract holds
     (FR-012a) and no `.spaex/constitution.md` is published from a suspect Composer output.
+
+    Spec 029: ``target`` redirects the artifact (the local behavior document)
+    and ``preamble`` is inserted right after the header line.
     """
     header = _parse_header(shape.body)
     if header is None:
@@ -162,8 +167,12 @@ def emit_composed(
             f"Composer header version {header['version']!r} is not '1'",
         )
 
-    target = composed_constitution_path(repo_root)
-    _atomic_write(target, shape.body)
+    target = target if target is not None else composed_constitution_path(repo_root)
+    body = shape.body
+    if preamble:
+        header_line, _, rest = body.partition("\n")
+        body = f"{header_line}\n{preamble}\n{rest}"
+    _atomic_write(target, body)
     return EmitOutcome(
         path=target,
         source_hash=header["source_hash"],
@@ -171,27 +180,27 @@ def emit_composed(
     )
 
 
-def remove_if_exists(repo_root: Path) -> bool:
+def remove_if_exists(repo_root: Path, target: Path | None = None) -> bool:
     """FR-017d empty-set path: remove the composed Constitution when present.
 
     Returns True iff a file was removed. Callers use the return value to
     surface a "removed" hint at the end of install.
     """
-    target = composed_constitution_path(repo_root)
+    target = target if target is not None else composed_constitution_path(repo_root)
     if not target.exists():
         return False
     target.unlink()
     return True
 
 
-def read_header_hashes(repo_root: Path) -> tuple[str, str] | None:
+def read_header_hashes(repo_root: Path, target: Path | None = None) -> tuple[str, str] | None:
     """Return hashes from the existing composed Constitution artifact.
 
     Used by the reproducibility skip-path (FR-009, Phase 8): if the on-disk
     hashes match the freshly computed ones for the current fragment set and
     effective prompt, the Composer is not invoked.
     """
-    target = composed_constitution_path(repo_root)
+    target = target if target is not None else composed_constitution_path(repo_root)
     if not target.exists():
         return None
     header = _parse_header(target.read_text(encoding="utf-8"))

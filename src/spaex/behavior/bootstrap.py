@@ -36,7 +36,7 @@ from pathlib import Path
 from spaex.util import exit_codes
 from spaex.util.errors import HaexError
 
-BLOCK_VERSION = "2"
+BLOCK_VERSION = "3"
 _START_MARKER_TEMPLATE = '<!-- spaex-bootstrap:start version="{version}" -->'
 END_MARKER = "<!-- spaex-bootstrap:end -->"
 _START_MARKER_RE = re.compile(
@@ -55,6 +55,11 @@ BLOCK_BODY = (
     "rendered clauses each cite their source molecule and atom. This spaex "
     "constitution is independent of Spec Kit's `.specify/memory/constitution.md`; "
     "do not copy either policy layer into the other.\n"
+    "\n"
+    "If `.spaex/local/constitution.md` also exists, read it after the project "
+    "constitution and follow it the same way: it holds the operator's personal "
+    "rules for this checkout only. Where it conflicts with `.spaex/constitution.md`, "
+    "the project constitution prevails.\n"
 )
 
 
