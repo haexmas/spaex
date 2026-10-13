@@ -14,6 +14,7 @@ import dataclasses
 import sys
 from pathlib import Path
 
+from spaex.cli.reinstall_options import add_reinstall_arguments, reinstall_kwargs
 from spaex.git import publisher_fetch
 from spaex.git import show as git_show
 from spaex.install.manifest_lock import (
@@ -348,31 +349,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=DEFAULT_LOCK_TIMEOUT_SECONDS,
         help="Manifest-lock timeout in seconds (default 30; 0 = fail-fast)",
     )
-    parser.add_argument(
-        "--no-install-hooks",
-        dest="skip_hooks",
-        action="store_true",
-        help=(
-            "Skip per-molecule install_hook execution during the internal "
-            "install triggered by this add. Every molecule declaring "
-            "install_hook records hook_status='skipped' in install.lock; "
-            "atoms still materialize. Per-invocation only; a later "
-            "`spaex install` without this flag runs the hooks (Spec 016 "
-            "FR-027)."
-        ),
-    )
-    parser.add_argument(
-        "--speckit-agents",
-        dest="speckit_agents",
-        default=None,
-        help="Select declared Spec Kit integrations for the internal install.",
-    )
-    parser.add_argument(
-        "--no-speckit-integrations",
-        dest="no_speckit_integrations",
-        action="store_true",
-        help="Skip declared Spec Kit integrations for the internal install.",
-    )
+    add_reinstall_arguments(parser, command="add")
 
 
 def run(args: argparse.Namespace) -> int:
@@ -433,11 +410,7 @@ def run(args: argparse.Namespace) -> int:
             repo_root,
             new_bytes,
             lock,
-            skip_hooks=bool(getattr(args, "skip_hooks", False)),
-            speckit_agents=getattr(args, "speckit_agents", None),
-            no_speckit_integrations=bool(
-                getattr(args, "no_speckit_integrations", False)
-            ),
+            **reinstall_kwargs(args),
             # FR-024a: add-time plausibility check. A cross-molecule Composer
             # contradiction warns and marks `.spaex/.stale` instead of
             # aborting this `spaex add`; reconciliation is deferred to the
