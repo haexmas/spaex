@@ -85,6 +85,13 @@ class RepoSideEffectGuard:
         )
         watched = self._protected | (self._dirty_before or set())
         self._saved = {path: _read(self._root / path) for path in watched}
+        spaex_root = self._root / SPAEX_DIRNAME
+        self._spaex_before = {
+            path.relative_to(self._root).as_posix(): path.read_bytes()
+            for path in spaex_root.rglob("*")
+            if path.is_file() and not path.is_symlink()
+        }
+        self._saved.update(self._spaex_before)
         return self
 
     def __exit__(
@@ -102,6 +109,17 @@ class RepoSideEffectGuard:
         if self._dirty_before is not None:
             changed |= (_dirty_tracked(self._root, self._prefix) or set()) - self._dirty_before
             created = _untracked(self._root) - self._untracked_before
+        spaex_root = self._root / SPAEX_DIRNAME
+        spaex_after = {
+            path.relative_to(self._root).as_posix(): path.read_bytes()
+            for path in spaex_root.rglob("*")
+            if path.is_file() and not path.is_symlink()
+        }
+        changed |= {
+            path
+            for path in self._spaex_before.keys() | spaex_after.keys()
+            if self._spaex_before.get(path) != spaex_after.get(path)
+        }
         inside_spaex = {path for path in created if path.split("/", 1)[0] == SPAEX_DIRNAME}
         changed |= inside_spaex
         if changed:
