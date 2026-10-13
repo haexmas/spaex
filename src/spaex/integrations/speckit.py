@@ -23,6 +23,7 @@ from spaex.integrations.runner import (
     CliExecutable,
     build_init_argv,
     build_install_argv,
+    build_upgrade_argv,
     resolve_cli_executable,
 )
 from spaex.model.install_lock import InstallLock, SpeckitLockRecord, SpeckitOutcomeStatus
@@ -321,12 +322,25 @@ def _ensure_project_initialized(
         )
 
 
-def _detect_drifted_keys(
+@dataclass(frozen=True)
+class _Drift:
+    """Previously-installed integrations whose managed output needs repair.
+
+    ``refresh`` keys still have a readable official manifest and only miss
+    managed files, so ``integration upgrade`` restores them in place.
+    ``reinstall`` keys have no usable manifest and need a fresh install.
+    """
+
+    refresh: frozenset[str] = frozenset()
+    reinstall: frozenset[str] = frozenset()
+
+
+def _detect_drift(
     keys: Sequence[str],
     *,
     repo_root: Path,
     executable: Sequence[str],
-) -> frozenset[str]:
+) -> _Drift:
     """Flag previously-installed integrations whose managed files are gone.
 
     ``install.lock`` only remembers that an integration was *selected*; it
@@ -337,26 +351,30 @@ def _detect_drifted_keys(
     noticing — the next install would otherwise skip these keys forever.
     This asks the official CLI's own health check instead of trusting the
     record.
+
+    The exit code is not consulted: specify-cli 1.0.11 exits 1 exactly when
+    it reports missing managed files, alongside a well-formed JSON payload.
+    Only output that is not a status payload counts as a failed check.
     """
     result = run_cli([*executable, "integration", "status", "--json"], repo_root=repo_root)
-    if result.returncode != 0:
-        return frozenset()
     try:
         payload = json.loads(result.stdout)
     except json.JSONDecodeError:
-        return frozenset()
+        return _Drift()
     if not isinstance(payload, dict):
-        return frozenset()
+        return _Drift()
     manifests = payload.get("manifests")
     if not isinstance(manifests, dict):
-        return frozenset()
-    return frozenset(
+        return _Drift()
+    reinstall = frozenset(
         key
         for key in keys
-        if not isinstance(manifests.get(key), dict)
-        or not manifests[key].get("readable", False)
-        or manifests[key].get("missing_files")
+        if not isinstance(manifests.get(key), dict) or not manifests[key].get("readable", False)
     )
+    refresh = frozenset(
+        key for key in keys if key not in reinstall and manifests[key].get("missing_files")
+    )
+    return _Drift(refresh=refresh, reinstall=reinstall)
 
 
 def _clear_stale_registrations(repo_root: Path, keys: frozenset[str]) -> None:
@@ -364,7 +382,10 @@ def _clear_stale_registrations(repo_root: Path, keys: frozenset[str]) -> None:
 
     As of specify-cli 1.0.6, ``specify integration install <key>`` refuses
     to touch a key it already considers installed — even with ``--force``,
-    it just reports "no files changed" and exits 0. Clearing only the
+    it just reports "no files changed" and exits 0. This path only serves
+    keys without a usable manifest (``_Drift.reinstall``); keys that merely
+    miss files are refreshed through ``integration upgrade`` instead, which
+    also covers the default integration this cannot unregister. Clearing only the
     drifted key's own entry in ``.specify/integration.json`` (never
     touching sibling keys) is what makes the official CLI treat the
     follow-up ``install`` call in ``install_selected`` as a genuine fresh
@@ -418,6 +439,31 @@ def install_selected(
         if result.returncode != 0:
             raise SpeckitCliFailedError(
                 message=f"official Spec Kit installation failed for {key!r}",
+                context={"integration": key, "exit_code": str(result.returncode)},
+            )
+        outcomes[key] = "installed"
+    return outcomes
+
+
+def refresh_selected(
+    declaration: SpeckitDeclaration,
+    keys: Sequence[str],
+    *,
+    repo_root: Path,
+    executable: CliExecutable | None = None,
+) -> dict[str, SpeckitOutcomeStatus]:
+    """Restore missing managed files of installed integrations through the official CLI."""
+    outcomes: dict[str, SpeckitOutcomeStatus] = {}
+    cli_executable = resolve_cli_executable(declaration, executable)
+    for key in sorted(keys):
+        result = run_cli(
+            build_upgrade_argv(cli_executable, key, declaration.integrations[key]),
+            repo_root=repo_root,
+            capture_output=False,
+        )
+        if result.returncode != 0:
+            raise SpeckitCliFailedError(
+                message=f"official Spec Kit refresh failed for {key!r}",
                 context={"integration": key, "exit_code": str(result.returncode)},
             )
         outcomes[key] = "installed"
@@ -571,19 +617,22 @@ def prepare_install(
         existing_for_first.selected if already_selected and existing_for_first else ()
     )
     carried_over = tuple(key for key in selected if already_selected and key in previous_selected)
-    drifted = (
-        _detect_drifted_keys(carried_over, repo_root=repo_root, executable=cli_executable)
+    drift = (
+        _detect_drift(carried_over, repo_root=repo_root, executable=cli_executable)
         if carried_over
-        else frozenset()
+        else _Drift()
     )
-    if drifted:
-        _clear_stale_registrations(repo_root, drifted)
+    if drift.reinstall:
+        _clear_stale_registrations(repo_root, drift.reinstall)
     new_keys = tuple(
         key
         for key in selected
-        if not already_selected or key not in previous_selected or key in drifted
+        if not already_selected or key not in previous_selected or key in drift.reinstall
     )
-    outcomes = install_selected(
+    outcomes = refresh_selected(
+        first, tuple(drift.refresh), repo_root=repo_root, executable=cli_executable
+    )
+    outcomes |= install_selected(
         first,
         new_keys,
         repo_root=repo_root,
@@ -629,6 +678,7 @@ __all__ = [
     "parse_selection",
     "parse_supported_integrations",
     "parse_version_output",
+    "refresh_selected",
     "run_cli",
     "resolve_cli_executable",
     "select_integrations",
