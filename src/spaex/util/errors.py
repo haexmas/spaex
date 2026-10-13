@@ -476,3 +476,55 @@ class SkillAdapterFailedError(HaexError):
     diagnostic_key: str = "skill-adapter-failed"
     exit_code: int = exit_codes.INPUT_REFUSE
     hint: str = "The adapter exited with an error; atom files and install.lock are unaffected."
+
+
+# --- Spec 029 local (per-developer) scope -------------------------------------
+
+
+@dataclass
+class LocalManifestInvalidError(HaexError):
+    diagnostic_key: str = "local-manifest-invalid"
+    exit_code: int = exit_codes.INCOMPLETE_TRANSACTION
+    hint: str = (
+        "Repair `.spaex/local/manifest.json`, or delete it to drop every local adoption."
+    )
+
+
+@dataclass
+class LocalAdoptionShadowedError(HaexError):
+    diagnostic_key: str = "local-adoption-shadowed"
+    exit_code: int = exit_codes.VALIDATION_REFUSE
+    hint: str = (
+        "The molecule is already adopted in project scope; project adoptions apply to "
+        "everyone, so a local adoption would never take effect."
+    )
+
+
+@dataclass
+class LocalPathConflictError(HaexError):
+    diagnostic_key: str = "local-path-conflict"
+    exit_code: int = exit_codes.VALIDATION_REFUSE
+    hint: str = (
+        "Local scope never writes project-owned or git-tracked paths; "
+        "run `spaex remove --local <id>` for the conflicting molecule."
+    )
+
+
+@dataclass
+class LocalExcludeMalformedError(HaexError):
+    diagnostic_key: str = "local-exclude-malformed"
+    exit_code: int = exit_codes.VALIDATION_REFUSE
+    hint: str = (
+        "Repair or delete the `# spaex-local:start` / `# spaex-local:end` block in "
+        "git's info/exclude file and retry."
+    )
+
+
+@dataclass
+class LocalHookSideEffectError(HaexError):
+    diagnostic_key: str = "local-hook-side-effect"
+    exit_code: int = exit_codes.VALIDATION_REFUSE
+    hint: str = (
+        "A local-scope install hook changed a git-tracked or project-owned file; "
+        "the change was reverted. Run `spaex remove --local <id>` for that molecule."
+    )

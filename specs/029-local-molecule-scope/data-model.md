@@ -18,7 +18,7 @@ Lifecycle: created by the first `spaex add --local`; compounds that become empty
 ## Local install record (`.spaex/local/install.lock`)
 
 Same `InstallLock` model and `install-lock.v4` schema as `.spaex/install.lock`.
-- `generation_id` equals the project lock's `generation_id` of the same publish.
+- `generation_id` is allocated independently from the local seed (`allocate_generation_id` over the local records), so a local-only change never rewrites the committed project `install.lock` (SC-001, SC-002).
 - `molecules[].paths` lists every path local scope wrote, including `.spaex/local/constitution.md`, `.spaex/local/generated/nix-packages.json` and repo-root exclusive files.
 - `content_hashes` covers local repo-root exclusive files, as for project scope.
 - `molecules[].speckit` holds the local Spec Kit record when local scope owns the Spec Kit policy.

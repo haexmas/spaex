@@ -40,9 +40,9 @@ All file references are repo-relative to `src/spaex/` unless marked otherwise.
 
 ## R4. Local install record
 
-**Decision**: `.spaex/local/install.lock`, same `install-lock.v4` schema and `InstallLock` model as the project lock. Its `generation_id` equals the project lock's generation id of the same publish. Orphan deletion for local scope reuses `_delete_orphaned_paths` with the previous and current local locks.
+**Decision**: `.spaex/local/install.lock`, same `install-lock.v4` schema and `InstallLock` model as the project lock. Its `generation_id` is allocated independently from the local records, because the project publish allocates a new id on every publish and a local-only change must not rewrite the committed project lock. Orphan deletion for local scope reuses `_delete_orphaned_paths` with the previous and current local locks.
 
-**Rationale**: Same semantics (paths, hook status, speckit record, content hashes), zero new model code. One generation id across both files makes `status` consistency checks (`read_with_consistent_generation`) cover both reads.
+**Rationale**: Same semantics (paths, hook status, speckit record, content hashes), zero new model code. `status` re-checks both generation ids after reading (`read_with_consistent_generation`), so a concurrent publish of either scope triggers the existing retry.
 
 ## R5. Local behavior composition
 
