@@ -1,18 +1,16 @@
 name: release
 
 on:
-  # release-please publishes the GitHub release with a GitHub App token, so
-  # this event fires exactly once per release. A tag push is deliberately
-  # not a trigger as well: the release creates its tag, and both triggers
-  # together would publish twice.
-  release:
-    types: [published]
+  push:
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       version:
         description: >-
-          Version to publish (must match pyproject.toml). Catches up a
-          release whose publish never ran.
+          Version to publish (must match pyproject.toml). Passed by
+          release-please.yml's dispatch step, since a GITHUB_TOKEN tag push
+          doesn't trigger this workflow's own push trigger. Also usable to
+          catch up a tag whose push-triggered publish never ran.
         required: false
 
 permissions: {}
