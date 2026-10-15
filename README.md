@@ -8,7 +8,7 @@ spaex composes a coding harness for a single repo out of reusable pieces (MCPs, 
 
 ## What you can do today
 
-- `spaex add <source-url> <molecule-ids...>`: adopt one or more molecules from a publisher repo into `.spaex/manifest.json` and install them in one invocation.
+- `spaex add <source-url> <molecule-ids...>`: adopt one or more molecules from a publisher repo into `.spaex/manifest.json` and install them in one invocation. `add` only adds: when the source resolves to a newer revision, molecules already adopted from it are kept and re-pinned to that revision (listed in the output); only `spaex remove` retracts a molecule.
 - `spaex remove <molecule-ids...>`: retract one or more molecules from `.spaex/manifest.json` and re-run install (files that only the retracted molecule contributed are deleted).
 - `spaex install`: publish adopted molecules atomically into their participating roots. Writes `.spaex/install.lock`.
 - `spaex constitution show`: print the effective spaex constitution to stdout, assembled from adopted molecules per `install.lock`.

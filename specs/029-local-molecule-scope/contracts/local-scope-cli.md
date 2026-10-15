@@ -4,6 +4,7 @@
 
 - Without `--local`: unchanged.
 - With `--local`: mutates `.spaex/local/manifest.json` (created when missing), then runs install. The committed `.spaex/manifest.json` is never written.
+- The overlay compound for the same source follows the Spec 013 FR-018 rules (amended 2026-10-15): a different resolved revision keeps every existing molecule and re-pins the whole compound; a carried-over molecule missing at the new revision refuses with `molecule-id-not-in-source`.
 - Refusals (nothing written, manifest restored):
 
 | Condition | Error key | Exit code |

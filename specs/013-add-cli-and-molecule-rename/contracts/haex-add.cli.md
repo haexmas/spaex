@@ -36,11 +36,11 @@ haex add <source-url> [<molecule-id>[,<molecule-id>...]]
    - Interactive selection from a TTY prompt, otherwise. Non-TTY invocation refuses with `interactive-selection-unavailable` and asks for explicit molecule ids or `--all`.
 6. Merge or replace the compound entry for `<source-url>`:
    - Same source and same revision: merge new molecule ids into the existing `molecules[]` array (deduplicated).
-   - Same source, different revision: replace the existing compound with the new one atomically after the new publisher manifest has validated.
+   - Same source, different revision: keep every existing molecule, add the new molecule ids, and re-pin the whole compound to the new revision (deduplicated, sorted) atomically after the new publisher manifest has validated. `track` and `config` are preserved. Every carried-over molecule must exist in the publisher manifest at the new revision; otherwise refuse with `molecule-id-not-in-source` naming it, writing nothing. `haex add` never removes a molecule; only `haex remove` does.
    - No existing compound for this source: append.
 7. Write the updated `.haex-hive.json` via `.haex-hive.json.tmp` + rename-in-place.
 8. Call `haex install` in-process with the held manifest-lock context. Any diagnostic surfaced by install (missing publisher clone, invalid molecule manifest, delete-orphans conflict, etc.) surfaces here with its own exit code. Note: multi-source constitution merges are refused pre-write in step 6 (`constitution-already-adopted`), so install never sees a review-pending state under Spec 013.
-9. On install success: report the resolved SHA, the added molecule ids, and the participating output roots that changed. Exit 0.
+9. On install success: report the resolved SHA, the added molecule ids, any carried-over molecule ids re-pinned from the previous revision (listed separately, as `<old-short-sha> -> <new-short-sha>`), and the participating output roots that changed. Exit 0.
 10. Release the manifest lock.
 
 ### Refusal keys
@@ -51,7 +51,7 @@ haex add <source-url> [<molecule-id>[,<molecule-id>...]]
 | `revision-not-found` | `--revision=<SHA>` was given, but the remote does not have that SHA. Nothing written. | 2 |
 | `publisher-manifest-missing` | The resolved revision has no `manifest.json` at repo root. Nothing written. | 2 |
 | `publisher-manifest-invalid` | The publisher `manifest.json` at the resolved revision does not validate against `publisher-manifest.v3.schema.json` (schema violation, or `haex_hive_version` is not `"3"`). Nothing written. | 2 |
-| `molecule-id-not-in-source` | A positional molecule-id is not listed in the publisher manifest at that revision. Nothing written. | 2 |
+| `molecule-id-not-in-source` | A positional molecule-id, or a molecule carried over from an existing compound for the same source at a different revision, is not listed in the publisher manifest at that revision. Nothing written; for a carried-over molecule the operator runs `haex remove <id>` first. | 2 |
 | `interactive-selection-unavailable` | No positional ids, no `--all`, and stdin is not a TTY. Nothing written. | 2 |
 | `workflow-molecule-already-adopted` | The added molecule set includes a workflow molecule while `.haex-hive.json` already resolves to a different workflow molecule. Names the currently adopted workflow molecule; asks the operator to `haex remove <current-id>` first. Nothing written. | 2 |
 | `constitution-already-adopted` | The added molecule set includes a constitution-contributing molecule while `.haex-hive.json` already resolves to another constitution-contributing molecule. Names the currently adopted constitution-contributing molecule; asks the operator to `haex remove <current-id>` first, or to combine the two constitutions into one atom externally. haex-hive does NOT perform multi-source constitution merges (ADR 0010, Spec 014). Nothing written. | 2 |
@@ -69,7 +69,7 @@ Note: exit code `5` is intentionally not used by Spec 013. A prior draft reserve
 
 ## Determinism
 
-- The written `.haex-hive.json` is byte-deterministic for a given (existing content, source, revision, molecule id set): the compound entries preserve their previous order except for the added/updated one, which sorts to the end of `compounds[]` on first append and stays in place on merge/replace. Within a compound, `molecules[]` is deduplicated and lexically sorted.
+- The written `.haex-hive.json` is byte-deterministic for a given (existing content, source, revision, molecule id set): the compound entries preserve their previous order except for the added/updated one, which sorts to the end of `compounds[]` on first append and stays in place on merge/re-pin. Within a compound, `molecules[]` is deduplicated and lexically sorted.
 - Concurrent `haex add` invocations serialize via `.haex-hive.json.lock`; the second either waits or refuses (based on the configured lock policy) and never observes a half-written manifest.
 
 ## Non-goals

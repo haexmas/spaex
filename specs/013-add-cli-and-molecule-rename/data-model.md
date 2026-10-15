@@ -36,7 +36,7 @@ Every entity below has its authoritative JSON Schema under [`contracts/`](contra
 **Invariants**:
 
 - Every `revision` is a full 40-hex SHA (no branch names, no `HEAD`, no short SHAs). Enforced at write time by `haex add` and at read time by the schema.
-- The pair `(source, revision)` is unique across `compounds[]`; two entries with identical `source` MUST resolve to the same `revision`, or one of them was replaced atomically by `haex add`.
+- The pair `(source, revision)` is unique across `compounds[]`; two entries with identical `source` MUST resolve to the same `revision`, or one of them was re-pinned atomically by `haex add` (which keeps all existing molecules of that source).
 - Every molecule id in a compound's `molecules[]` MUST exist in the publisher-root manifest at that compound's `revision`. `haex install` refuses otherwise (`molecule-id-not-in-source` before the input reaches the resolver).
 
 ---

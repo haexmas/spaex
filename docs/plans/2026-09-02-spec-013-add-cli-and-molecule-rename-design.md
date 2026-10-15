@@ -90,7 +90,7 @@ Molecule-manifest transition (v2 → v3):
 ## What this does NOT cover (deliberately)
 
 - **New molecule-resolution semantics**: `haex add` and `haex remove` only edit the JSON and call the existing resolver. No new resolution rules, no new dependency graph. If Spec 010 or Spec 011 change how resolution works, Spec 013 inherits those changes.
-- **`haex update`**: an explicit revision-bump command remains deferred. The current `haex add <source-url>` flow replaces the existing compound for that source when it resolves a new SHA, as defined above.
+- **`haex update`**: an explicit revision-bump command remains deferred. The current `haex add <source-url>` flow re-pins the existing compound for that source to the new SHA while keeping its existing molecules (amended 2026-10-15; it originally replaced the compound).
 - **`haex ls`**: listing installed molecules and atoms. Trivial to add later; not blocking the primary UX.
 - **Registry mirroring**: `haex add` does not consult a central molecule registry. `<source-url>` remains a direct git URL, and the publisher-manifest's `molecules` map is fetched from that repo at that revision.
 - **Backwards-compatible v2 read**: v3 refuses v2 files at load-time. The operator must run `haex migrate` (extended in Spec 013 to also handle v2→v3) before `haex add` or `haex install` will accept the file. Pre-user policy (haex-hive has no external adopters yet) makes this acceptable; a hard refuse plus a `haex migrate` hint is clearer than mixed-vocabulary tolerance.
