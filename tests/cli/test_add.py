@@ -379,6 +379,56 @@ def test_add_local_at_new_revision_keeps_existing_overlay_molecules(
     assert json.loads((consumer / ".spaex/manifest.json").read_text())["compounds"] == []
 
 
+def test_add_local_at_new_revision_checks_singleton_conflicts(
+    tmp_path, monkeypatch, haex_add_helpers
+) -> None:
+    canonical, head1, state_root = haex_add_helpers["make_publisher"](
+        tmp_path, _three_molecules()
+    )
+    consumer = haex_add_helpers["make_consumer"](tmp_path)
+    haex_add_helpers["run_add"](
+        consumer,
+        state_root,
+        monkeypatch,
+        source_url=canonical,
+        molecule_ids=_HELLO_ID,
+        revision=head1,
+        local=True,
+    )
+
+    def hello_and_gamma_gain_constitution(working: Path) -> None:
+        for molecule_id in (_HELLO_ID, _GAMMA_ID):
+            molecule_dir = working / molecule_id.rsplit(".", 1)[-1]
+            (molecule_dir / "constitution.md").write_text("# rules\n")
+            manifest_file = molecule_dir / "manifest.json"
+            manifest = json.loads(manifest_file.read_text())
+            manifest["atoms"]["constitution"] = ["constitution.md"]
+            manifest_file.write_text(json.dumps(manifest))
+
+    head2 = _advance_publisher(
+        tmp_path,
+        haex_add_helpers,
+        canonical,
+        state_root,
+        hello_and_gamma_gain_constitution,
+    )
+    overlay_file = consumer / ".spaex/local/manifest.json"
+    before = overlay_file.read_bytes()
+
+    with pytest.raises(ConstitutionAlreadyAdoptedError):
+        haex_add_helpers["run_add"](
+            consumer,
+            state_root,
+            monkeypatch,
+            source_url=canonical,
+            molecule_ids=_GAMMA_ID,
+            revision=head2,
+            local=True,
+        )
+
+    assert overlay_file.read_bytes() == before
+
+
 def test_all_rejects_multiple_singleton_declarers(
     tmp_path, monkeypatch, haex_add_helpers
 ) -> None:

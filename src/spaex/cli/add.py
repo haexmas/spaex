@@ -464,7 +464,7 @@ def run(args: argparse.Namespace) -> int:
         if getattr(args, "local", False):
             return _add_local(
                 args, repo_root, lock, current_manifest, canonical_source, sha,
-                molecule_ids, publisher,
+                molecule_ids, publisher, repo_dir, state_root,
             )
 
         carried = _carried_over(current_manifest, canonical_source, sha, molecule_ids)
@@ -510,6 +510,8 @@ def _add_local(
     sha: str,
     molecule_ids: tuple[str, ...],
     publisher: PublisherManifest,
+    repo_dir: Path,
+    state_root: Path,
 ) -> int:
     """Spec 029: adopt into the local overlay; the project manifest is never written."""
     shadowed = sorted(set(molecule_ids) & set(flatten_compound_pins(project)))
@@ -524,6 +526,16 @@ def _add_local(
     overlay = local_scope.load_overlay(repo_root) or LocalManifest(spaex_version="4", compounds=())
     carried = _carried_over(overlay, canonical_source, sha, molecule_ids)
     _verify_carried_over_in_source(carried, publisher)
+    incoming_ids = molecule_ids + (carried[1] if carried else ())
+    added_category_declarers = _categories_declared_by(
+        incoming_ids, publisher, repo_dir, sha
+    )
+    _refuse_singleton_conflict(
+        added_category_declarers,
+        overlay.as_consumer_manifest(project.identity),
+        state_root,
+        incoming_set=set(incoming_ids),
+    )
     new_overlay = _mutate_compounds(overlay, canonical_source, sha, molecule_ids)
     exit_code = write_and_reinstall(
         repo_root,
