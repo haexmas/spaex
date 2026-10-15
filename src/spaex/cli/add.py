@@ -177,7 +177,7 @@ def _categories_declared_by(
     repo_dir: Path,
     sha: str,
 ) -> dict[str, tuple[str, ...]]:
-    """Return {category: (molecule_ids that declare it)} for the added set."""
+    """Return {category: (molecule_ids that declare it)} for ``molecule_ids``."""
     result: dict[str, list[str]] = {}
     for mid in molecule_ids:
         entry = publisher.molecules[mid]
@@ -239,10 +239,14 @@ def _refuse_singleton_conflict(
     added_category_declarers: dict[str, tuple[str, ...]],
     existing_manifest: ConsumerManifest,
     state_root: Path,
-    added_set: set[str],
-    retracted_set: set[str],
+    incoming_set: set[str],
 ) -> None:
-    """Refuse pre-write when a singleton-category rule is violated."""
+    """Refuse pre-write when a singleton-category rule is violated.
+
+    ``incoming_set`` is every molecule the same-source compound will hold after
+    the add (added plus carried-over), so its old-revision entries are not
+    counted as current owners.
+    """
     for category, refuse_exc in (
         (_CONSTITUTION_CATEGORY, ConstitutionAlreadyAdoptedError),
         (_WORKFLOW_CATEGORY, WorkflowMoleculeAlreadyAdoptedError),
@@ -266,7 +270,7 @@ def _refuse_singleton_conflict(
         current_owners = tuple(
             owner
             for owner in _existing_category_owners(existing_manifest, state_root, category)
-            if owner not in added_set and owner not in retracted_set
+            if owner not in incoming_set
         )
         if current_owners:
             raise refuse_exc(
@@ -282,6 +286,66 @@ def _refuse_singleton_conflict(
             )
 
 
+def _carried_over(
+    manifest: ConsumerManifest | LocalManifest,
+    source: str,
+    revision: str,
+    added_ids: tuple[str, ...],
+) -> tuple[str, tuple[str, ...]] | None:
+    """Return ``(old_revision, ids)`` re-pinned implicitly by this add, else ``None``.
+
+    Only a compound for ``source`` at a different revision carries molecules
+    over; ``add`` never removes an adopted molecule.
+    """
+    for compound in manifest.compounds:
+        if compound.source == source and compound.revision != revision:
+            ids = tuple(sorted(set(compound.molecules) - set(added_ids)))
+            return (compound.revision, ids) if ids else None
+    return None
+
+
+def _verify_carried_over_in_source(
+    carried: tuple[str, tuple[str, ...]] | None, publisher: PublisherManifest
+) -> None:
+    if carried is None:
+        return
+    missing = [mid for mid in carried[1] if mid not in publisher.molecules]
+    if missing:
+        raise MoleculeIdNotInSourceError(
+            message=(
+                f"already adopted molecule(s) no longer declared by publisher "
+                f"{publisher.publisher!r} at the new revision: {', '.join(missing)}"
+            ),
+            context={"publisher": publisher.publisher, "missing": ",".join(missing)},
+            hint=(
+                "`spaex add` never drops an adopted molecule; run "
+                "`spaex remove <molecule-id>` first, then add again."
+            ),
+        )
+
+
+def _write_report(
+    scope: str,
+    source: str,
+    revision: str,
+    added_ids: tuple[str, ...],
+    carried: tuple[str, tuple[str, ...]] | None,
+) -> None:
+    sys.stdout.write(
+        f"added {len(added_ids)} molecule(s){scope} at {source}@{revision[:12]}:\n"
+    )
+    for mid in added_ids:
+        sys.stdout.write(f"  {mid}\n")
+    if carried is not None:
+        old_revision, carried_ids = carried
+        sys.stdout.write(
+            f"re-pinned {len(carried_ids)} carried-over molecule(s) "
+            f"({old_revision[:12]} -> {revision[:12]}):\n"
+        )
+        for mid in carried_ids:
+            sys.stdout.write(f"  {mid}\n")
+
+
 ManifestT = TypeVar("ManifestT", ConsumerManifest, LocalManifest)
 
 
@@ -291,7 +355,7 @@ def _mutate_compounds(
     revision: str,
     added_ids: tuple[str, ...],
 ) -> ManifestT:
-    """Return the manifest (project or local overlay) with the compound merged/replaced/added."""
+    """Return the manifest (project or local overlay) with the compound merged/re-pinned/added."""
     from spaex.model.consumer_manifest import CompoundEntry
 
     new_compounds: list[CompoundEntry] = []
@@ -310,17 +374,16 @@ def _mutate_compounds(
                     )
                 )
             else:
+                # Different revision: `add` only adds. Carry every existing
+                # molecule over and re-pin the whole compound.
+                merged = tuple(sorted(set(compound.molecules) | set(added_ids)))
                 new_compounds.append(
                     CompoundEntry(
                         source=source,
                         revision=revision,
-                        molecules=tuple(sorted(set(added_ids))),
+                        molecules=merged,
                         track=compound.track,
-                        config={
-                            molecule_id: config
-                            for molecule_id, config in compound.config.items()
-                            if molecule_id in added_ids
-                        },
+                        config=compound.config,
                     )
                 )
             consumed = True
@@ -400,24 +463,21 @@ def run(args: argparse.Namespace) -> int:
         current_manifest = ConsumerManifest.from_json(path.read_bytes())
         if getattr(args, "local", False):
             return _add_local(
-                args, repo_root, lock, current_manifest, canonical_source, sha, molecule_ids
+                args, repo_root, lock, current_manifest, canonical_source, sha,
+                molecule_ids, publisher,
             )
 
+        carried = _carried_over(current_manifest, canonical_source, sha, molecule_ids)
+        _verify_carried_over_in_source(carried, publisher)
+        incoming_ids = molecule_ids + (carried[1] if carried else ())
         added_category_declarers = _categories_declared_by(
-            molecule_ids, publisher, repo_dir, sha
+            incoming_ids, publisher, repo_dir, sha
         )
-        retracted_set = {
-            molecule_id
-            for compound in current_manifest.compounds
-            if compound.source == canonical_source and compound.revision != sha
-            for molecule_id in compound.molecules
-        }
         _refuse_singleton_conflict(
             added_category_declarers,
             current_manifest,
             state_root,
-            added_set=set(molecule_ids),
-            retracted_set=retracted_set,
+            incoming_set=set(incoming_ids),
         )
 
         new_manifest = _mutate_compounds(
@@ -437,11 +497,7 @@ def run(args: argparse.Namespace) -> int:
             abort_on_behavior_contradiction=False,
         )
 
-        sys.stdout.write(
-            f"added {len(molecule_ids)} molecule(s) at {canonical_source}@{sha[:12]}:\n"
-        )
-        for mid in molecule_ids:
-            sys.stdout.write(f"  {mid}\n")
+        _write_report("", canonical_source, sha, molecule_ids, carried)
         return exit_code
 
 
@@ -453,6 +509,7 @@ def _add_local(
     canonical_source: str,
     sha: str,
     molecule_ids: tuple[str, ...],
+    publisher: PublisherManifest,
 ) -> int:
     """Spec 029: adopt into the local overlay; the project manifest is never written."""
     shadowed = sorted(set(molecule_ids) & set(flatten_compound_pins(project)))
@@ -465,6 +522,8 @@ def _add_local(
             context={"molecules": ",".join(shadowed)},
         )
     overlay = local_scope.load_overlay(repo_root) or LocalManifest(spaex_version="4", compounds=())
+    carried = _carried_over(overlay, canonical_source, sha, molecule_ids)
+    _verify_carried_over_in_source(carried, publisher)
     new_overlay = _mutate_compounds(overlay, canonical_source, sha, molecule_ids)
     exit_code = write_and_reinstall(
         repo_root,
@@ -483,11 +542,7 @@ def _add_local(
     for molecule_id in molecule_ids:
         if molecule_id in hook_ids:
             sys.stdout.write(local_scope.HOOK_WARNING.format(molecule_id=molecule_id))
-    sys.stdout.write(
-        f"added {len(molecule_ids)} molecule(s) locally at {canonical_source}@{sha[:12]}:\n"
-    )
-    for mid in molecule_ids:
-        sys.stdout.write(f"  {mid}\n")
+    _write_report(" locally", canonical_source, sha, molecule_ids, carried)
     return exit_code
 
 
