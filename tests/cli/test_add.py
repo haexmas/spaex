@@ -126,81 +126,118 @@ def test_merge_into_existing_compound_same_source_and_revision(
     assert written["compounds"][0]["molecules"] == sorted([_HELLO_ID, _WORLD_ID])
 
 
-def test_replace_compound_when_same_source_different_revision(
-    tmp_path, monkeypatch, haex_add_helpers
-) -> None:
+_GAMMA_ID = "com.example.publisher.gamma"
+
+
+def _three_molecules() -> dict:
+    return {
+        _HELLO_ID: {
+            "path": "hello",
+            "version": "1.0.0",
+            "atoms": {"instructions": ["hello.md"]},
+        },
+        _WORLD_ID: {
+            "path": "world",
+            "version": "1.0.0",
+            "atoms": {"instructions": ["world.md"]},
+        },
+        _GAMMA_ID: {
+            "path": "gamma",
+            "version": "1.0.0",
+            "atoms": {"instructions": ["gamma.md"]},
+        },
+    }
+
+
+def _advance_publisher(tmp_path: Path, helpers, canonical: str, state_root: Path, edit) -> str:
+    """Push one more commit to the fixture publisher; `edit(working_dir)` mutates it."""
     import subprocess
 
-    canonical, head1, state_root = haex_add_helpers["make_publisher"](
-        tmp_path,
-        {
-            _HELLO_ID: {
-                "path": "hello",
-                "version": "1.0.0",
-                "atoms": {"constitution": ["constitution.md"]},
-            },
-        },
+    bare = helpers["clone_dir"](state_root, canonical)
+    working = tmp_path / "advance-working"
+    subprocess.run(["git", "clone", "-q", str(bare), str(working)], check=True)
+    helpers["git"](working, "config", "user.email", "t@e")
+    helpers["git"](working, "config", "user.name", "t")
+    helpers["git"](working, "config", "commit.gpgsign", "false")
+    edit(working)
+    helpers["git"](working, "add", "-A")
+    helpers["git"](working, "commit", "-q", "-m", "advance")
+    helpers["git"](working, "push", "-q", "origin", "HEAD:main")
+    return helpers["git"](working, "rev-parse", "HEAD")
+
+
+def _touch_hello(working: Path) -> None:
+    (working / "hello" / "hello.md").write_text("# v2\n")
+
+
+def _adopt_hello_and_world(tmp_path, monkeypatch, helpers):
+    canonical, head1, state_root = helpers["make_publisher"](
+        tmp_path, _three_molecules()
     )
-    consumer = haex_add_helpers["make_consumer"](tmp_path)
-    haex_add_helpers["run_add"](
+    consumer = helpers["make_consumer"](tmp_path)
+    helpers["run_add"](
         consumer,
         state_root,
         monkeypatch,
         source_url=canonical,
-        molecule_ids=_HELLO_ID,
+        molecule_ids=f"{_HELLO_ID},{_WORLD_ID}",
         revision=head1,
     )
-    existing = json.loads((consumer / ".spaex/manifest.json").read_text())
-    existing["compounds"][0]["molecules"] = [_HELLO_ID, _WORLD_ID]
+    manifest_file = consumer / ".spaex/manifest.json"
+    existing = json.loads(manifest_file.read_text())
     existing["compounds"][0]["track"] = "stable"
     existing["compounds"][0]["config"] = {
         _HELLO_ID: {"priority": 7, "values": {"mode": "strict"}},
         _WORLD_ID: {"priority": 3, "values": {"mode": "legacy"}},
     }
-    (consumer / ".spaex/manifest.json").write_text(json.dumps(existing))
+    manifest_file.write_text(json.dumps(existing))
+    return canonical, head1, state_root, consumer
 
-    bare = haex_add_helpers["clone_dir"](state_root, canonical)
-    advance = tmp_path / "advance-working"
-    subprocess.run(["git", "clone", "-q", str(bare), str(advance)], check=True)
-    haex_add_helpers["git"](advance, "config", "user.email", "t@e")
-    haex_add_helpers["git"](advance, "config", "user.name", "t")
-    haex_add_helpers["git"](advance, "config", "commit.gpgsign", "false")
-    (advance / "hello" / "constitution.md").write_text("# v2\n")
-    haex_add_helpers["git"](advance, "commit", "-q", "-am", "advance")
-    haex_add_helpers["git"](advance, "push", "-q", "origin", "HEAD:main")
-    head2 = haex_add_helpers["git"](advance, "rev-parse", "HEAD")
 
-    haex_add_helpers["run_add"](
+def test_add_at_new_revision_keeps_existing_molecules(
+    tmp_path, monkeypatch, haex_add_helpers, capsys
+) -> None:
+    canonical, head1, state_root, consumer = _adopt_hello_and_world(
+        tmp_path, monkeypatch, haex_add_helpers
+    )
+    head2 = _advance_publisher(tmp_path, haex_add_helpers, canonical, state_root, _touch_hello)
+    capsys.readouterr()
+
+    rc = haex_add_helpers["run_add"](
         consumer,
         state_root,
         monkeypatch,
         source_url=canonical,
-        molecule_ids=_HELLO_ID,
+        molecule_ids=_GAMMA_ID,
         revision=head2,
     )
+
+    assert rc == 0
     written = json.loads((consumer / ".spaex/manifest.json").read_text())
     assert len(written["compounds"]) == 1
-    assert written["compounds"][0]["revision"] == head2
-    assert written["compounds"][0]["track"] == "stable"
-    assert written["compounds"][0]["config"] == {
-        _HELLO_ID: {"priority": 7, "values": {"mode": "strict"}}
+    compound = written["compounds"][0]
+    assert compound["revision"] == head2
+    assert compound["molecules"] == sorted([_HELLO_ID, _WORLD_ID, _GAMMA_ID])
+    assert compound["track"] == "stable"
+    assert compound["config"] == {
+        _HELLO_ID: {"priority": 7, "values": {"mode": "strict"}},
+        _WORLD_ID: {"priority": 3, "values": {"mode": "legacy"}},
     }
+    out = capsys.readouterr().out
+    added_part, _, carried_part = out.partition("re-pinned")
+    assert _GAMMA_ID in added_part
+    assert _HELLO_ID not in added_part
+    assert f"{head1[:12]} -> {head2[:12]}" in carried_part
+    assert _HELLO_ID in carried_part
+    assert _WORLD_ID in carried_part
+    assert _GAMMA_ID not in carried_part
 
 
-def test_replace_compound_allows_renamed_singleton_molecule(
-    tmp_path, monkeypatch, haex_add_helpers
+def test_add_at_new_revision_without_carried_over_molecules_has_no_repin_section(
+    tmp_path, monkeypatch, haex_add_helpers, capsys
 ) -> None:
-    import subprocess
-
     canonical, head1, state_root = haex_add_helpers["make_publisher"](
-        tmp_path,
-        {
-            _HELLO_ID: {
-                "path": "hello",
-                "version": "1.0.0",
-                "atoms": {"constitution": ["constitution.md"]},
-            },
-        },
+        tmp_path, _three_molecules()
     )
     consumer = haex_add_helpers["make_consumer"](tmp_path)
     haex_add_helpers["run_add"](
@@ -211,54 +248,135 @@ def test_replace_compound_allows_renamed_singleton_molecule(
         molecule_ids=_HELLO_ID,
         revision=head1,
     )
-
-    bare = haex_add_helpers["clone_dir"](state_root, canonical)
-    advance = tmp_path / "advance-renamed-working"
-    subprocess.run(["git", "clone", "-q", str(bare), str(advance)], check=True)
-    haex_add_helpers["git"](advance, "config", "user.email", "t@e")
-    haex_add_helpers["git"](advance, "config", "user.name", "t")
-    haex_add_helpers["git"](advance, "config", "commit.gpgsign", "false")
-    manifest_path = advance / "manifest.json"
-    manifest = json.loads(manifest_path.read_text())
-    manifest["molecules"] = {
-        _WORLD_ID: {
-            "path": "world",
-            "version": "1.0.0",
-        }
-    }
-    manifest_path.write_text(json.dumps(manifest))
-    (advance / "world").mkdir()
-    (advance / "world" / "manifest.json").write_text(
-        json.dumps(
-            {
-                "spaex_version": "4",
-                "id": _WORLD_ID,
-                "version": "1.0.0",
-                "priority": 100,
-                "atoms": {"constitution": ["constitution.md"]},
-            }
-        )
-    )
-    (advance / "world" / "constitution.md").write_text("# renamed\n")
-    haex_add_helpers["git"](advance, "add", "manifest.json", "world")
-    haex_add_helpers["git"](
-        advance, "commit", "-q", "-m", "rename constitution molecule"
-    )
-    haex_add_helpers["git"](advance, "push", "-q", "origin", "HEAD:main")
-    head2 = haex_add_helpers["git"](advance, "rev-parse", "HEAD")
+    head2 = _advance_publisher(tmp_path, haex_add_helpers, canonical, state_root, _touch_hello)
+    capsys.readouterr()
 
     haex_add_helpers["run_add"](
         consumer,
         state_root,
         monkeypatch,
         source_url=canonical,
-        molecule_ids=_WORLD_ID,
+        molecule_ids=_HELLO_ID,
         revision=head2,
     )
+
     written = json.loads((consumer / ".spaex/manifest.json").read_text())
     assert written["compounds"] == [
-        {"source": canonical, "revision": head2, "molecules": [_WORLD_ID]}
+        {"source": canonical, "revision": head2, "molecules": [_HELLO_ID]}
     ]
+    assert "re-pinned" not in capsys.readouterr().out
+
+
+def test_add_at_new_revision_refuses_when_carried_over_molecule_is_gone(
+    tmp_path, monkeypatch, haex_add_helpers
+) -> None:
+    canonical, _, state_root, consumer = _adopt_hello_and_world(
+        tmp_path, monkeypatch, haex_add_helpers
+    )
+
+    def drop_world(working: Path) -> None:
+        manifest_file = working / "manifest.json"
+        manifest = json.loads(manifest_file.read_text())
+        del manifest["molecules"][_WORLD_ID]
+        manifest_file.write_text(json.dumps(manifest))
+
+    head2 = _advance_publisher(tmp_path, haex_add_helpers, canonical, state_root, drop_world)
+    manifest_file = consumer / ".spaex/manifest.json"
+    before = manifest_file.read_bytes()
+
+    with pytest.raises(MoleculeIdNotInSourceError) as exc_info:
+        haex_add_helpers["run_add"](
+            consumer,
+            state_root,
+            monkeypatch,
+            source_url=canonical,
+            molecule_ids=_GAMMA_ID,
+            revision=head2,
+        )
+
+    assert _WORLD_ID in exc_info.value.message
+    assert "remove" in exc_info.value.hint
+    assert manifest_file.read_bytes() == before
+
+
+def test_add_at_new_revision_checks_carried_over_molecules_for_singleton_conflicts(
+    tmp_path, monkeypatch, haex_add_helpers
+) -> None:
+    canonical, _, state_root, consumer = _adopt_hello_and_world(
+        tmp_path, monkeypatch, haex_add_helpers
+    )
+
+    def hello_gains_constitution(working: Path) -> None:
+        (working / "hello" / "constitution.md").write_text("# rules\n")
+        manifest_file = working / "hello" / "manifest.json"
+        manifest = json.loads(manifest_file.read_text())
+        manifest["atoms"]["constitution"] = ["constitution.md"]
+        manifest_file.write_text(json.dumps(manifest))
+        (working / "gamma" / "constitution.md").write_text("# other rules\n")
+        gamma_file = working / "gamma" / "manifest.json"
+        gamma = json.loads(gamma_file.read_text())
+        gamma["atoms"]["constitution"] = ["constitution.md"]
+        gamma_file.write_text(json.dumps(gamma))
+
+    head2 = _advance_publisher(
+        tmp_path, haex_add_helpers, canonical, state_root, hello_gains_constitution
+    )
+    manifest_file = consumer / ".spaex/manifest.json"
+    before = manifest_file.read_bytes()
+
+    with pytest.raises(ConstitutionAlreadyAdoptedError):
+        haex_add_helpers["run_add"](
+            consumer,
+            state_root,
+            monkeypatch,
+            source_url=canonical,
+            molecule_ids=_GAMMA_ID,
+            revision=head2,
+        )
+
+    assert manifest_file.read_bytes() == before
+
+
+def test_add_local_at_new_revision_keeps_existing_overlay_molecules(
+    tmp_path, monkeypatch, haex_add_helpers, capsys
+) -> None:
+    canonical, head1, state_root = haex_add_helpers["make_publisher"](
+        tmp_path, _three_molecules()
+    )
+    consumer = haex_add_helpers["make_consumer"](tmp_path)
+    haex_add_helpers["run_add"](
+        consumer,
+        state_root,
+        monkeypatch,
+        source_url=canonical,
+        molecule_ids=f"{_HELLO_ID},{_WORLD_ID}",
+        revision=head1,
+        local=True,
+    )
+    head2 = _advance_publisher(tmp_path, haex_add_helpers, canonical, state_root, _touch_hello)
+    capsys.readouterr()
+
+    haex_add_helpers["run_add"](
+        consumer,
+        state_root,
+        monkeypatch,
+        source_url=canonical,
+        molecule_ids=_GAMMA_ID,
+        revision=head2,
+        local=True,
+    )
+
+    overlay = json.loads((consumer / ".spaex/local/manifest.json").read_text())
+    assert overlay["compounds"] == [
+        {
+            "source": canonical,
+            "revision": head2,
+            "molecules": sorted([_HELLO_ID, _WORLD_ID, _GAMMA_ID]),
+        }
+    ]
+    out = capsys.readouterr().out
+    assert f"{head1[:12]} -> {head2[:12]}" in out
+    assert json.loads((consumer / ".spaex/manifest.json").read_text())["compounds"] == []
 
 
 def test_all_rejects_multiple_singleton_declarers(
