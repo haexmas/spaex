@@ -1,5 +1,23 @@
 # Changelog
 
+## [5.4.3](https://github.com/haexmas/spaex/compare/v5.4.2...v5.4.3) (2026-10-15)
+
+
+### Bug Fixes
+
+* **add:** enforce local singleton rules ([556568e](https://github.com/haexmas/spaex/commit/556568e9a0fb7f65784f73d81acbdcaaf2784cbe))
+* **add:** keep adopted molecules when re-pinning a source ([f201de4](https://github.com/haexmas/spaex/commit/f201de4746111223f2afa91992104adc59040c9f))
+
+
+### Reverts
+
+* run release-please with GITHUB_TOKEN again ([f7249e1](https://github.com/haexmas/spaex/commit/f7249e188b0edd4123b2884b81ac20b6c2637479))
+
+
+### Documentation
+
+* **spec:** amend 013 so add keeps adopted molecules on re-pin ([d420ebf](https://github.com/haexmas/spaex/commit/d420ebfdb4c4a461df378aafd647643c6bbf5bc2))
+
 ## [5.4.2](https://github.com/haexmas/spaex/compare/v5.4.1...v5.4.2) (2026-10-13)
 
 
