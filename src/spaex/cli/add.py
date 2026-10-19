@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TypeVar
 
 from spaex.cli.reinstall_options import add_reinstall_arguments, reinstall_kwargs
+from spaex.cli.singleton_categories import refuse_singleton_conflict
 from spaex.git import publisher_fetch
 from spaex.git import show as git_show
 from spaex.install import local_scope
@@ -29,13 +30,11 @@ from spaex.install.write_and_reinstall import write_and_reinstall
 from spaex.io.state import default_state_root
 from spaex.model.consumer_manifest import ConsumerManifest, flatten_compound_pins
 from spaex.model.local_manifest import LocalManifest
-from spaex.model.molecule_manifest import MoleculeManifest
 from spaex.model.publisher_manifest import PublisherManifest
 from spaex.model.source_url import canonicalize
 from spaex.paths import MANIFEST_RELATIVE_PATH, local_manifest_path, manifest_path
 from spaex.util import exit_codes
 from spaex.util.errors import (
-    ConstitutionAlreadyAdoptedError,
     HaexError,
     InteractiveSelectionUnavailableError,
     LocalAdoptionShadowedError,
@@ -43,11 +42,7 @@ from spaex.util.errors import (
     PublisherManifestInvalidError,
     PublisherManifestMissingError,
     UsageError,
-    WorkflowMoleculeAlreadyAdoptedError,
 )
-
-_WORKFLOW_CATEGORY = "workflow"
-_CONSTITUTION_CATEGORY = "constitution"
 
 
 def _load_publisher_manifest(repo_dir: Path, sha: str, source: str) -> PublisherManifest:
@@ -74,27 +69,6 @@ def _load_publisher_manifest(repo_dir: Path, sha: str, source: str) -> Publisher
         raise PublisherManifestInvalidError(
             message=f"publisher manifest invalid at {source}@{sha[:12]}: {exc}",
             context={"source": source, "revision": sha},
-        ) from exc
-
-
-def _load_molecule_manifest(
-    repo_dir: Path, sha: str, molecule_dir_path: str, molecule_id: str
-) -> MoleculeManifest:
-    molecule_bytes = git_show.show_bytes(
-        repo_dir,
-        sha,
-        f"{molecule_dir_path}/manifest.json",
-        not_found_error=PublisherManifestInvalidError,
-    )
-    try:
-        return MoleculeManifest.from_json(molecule_bytes)
-    except (ValueError, KeyError) as exc:
-        raise PublisherManifestInvalidError(
-            message=(
-                f"molecule manifest for {molecule_id!r} at "
-                f"{molecule_dir_path}/manifest.json is invalid: {exc}"
-            ),
-            context={"molecule_id": molecule_id, "path": molecule_dir_path},
         ) from exc
 
 
@@ -171,119 +145,12 @@ def _verify_ids_in_source(molecule_ids: tuple[str, ...], publisher: PublisherMan
         )
 
 
-def _categories_declared_by(
-    molecule_ids: tuple[str, ...],
-    publisher: PublisherManifest,
-    repo_dir: Path,
-    sha: str,
-) -> dict[str, tuple[str, ...]]:
-    """Return {category: (molecule_ids that declare it)} for ``molecule_ids``."""
-    result: dict[str, list[str]] = {}
-    for mid in molecule_ids:
-        entry = publisher.molecules[mid]
-        molecule = _load_molecule_manifest(repo_dir, sha, entry.path, mid)
-        for category, paths in molecule.atoms.items():
-            if paths:
-                result.setdefault(category, []).append(mid)
-    return {k: tuple(v) for k, v in result.items()}
+@dataclasses.dataclass(frozen=True)
+class _CarriedOver:
+    """Already adopted molecules an add re-pins from ``old_revision`` (never empty)."""
 
-
-def _existing_category_owners(
-    manifest: ConsumerManifest,
-    state_root: Path,
-    category: str,
-) -> tuple[str, ...]:
-    """Return currently-adopted molecule ids that declare ``category``.
-
-    Reads publisher and molecule manifests from the existing publisher clones.
-    A missing clone is treated as "no owner" for this pre-check — install
-    itself will surface any clone-availability refusal downstream.
-    """
-    from spaex.git.cache import clone_dir
-
-    owners: list[str] = []
-    for compound in manifest.compounds:
-        repo_dir = clone_dir(state_root, compound.source)
-        if not repo_dir.is_dir():
-            continue
-        try:
-            publisher_bytes = git_show.show_bytes(
-                repo_dir,
-                compound.revision,
-                "manifest.json",
-                not_found_error=PublisherManifestInvalidError,
-            )
-            publisher = PublisherManifest.from_json(publisher_bytes)
-        except (ValueError, KeyError, HaexError):
-            continue
-        for mid in compound.molecules:
-            entry = publisher.molecules.get(mid)
-            if entry is None:
-                continue
-            try:
-                molecule_bytes = git_show.show_bytes(
-                    repo_dir,
-                    compound.revision,
-                    f"{entry.path}/manifest.json",
-                    not_found_error=PublisherManifestInvalidError,
-                )
-                molecule = MoleculeManifest.from_json(molecule_bytes)
-            except (ValueError, KeyError, HaexError):
-                continue
-            if molecule.atoms.get(category):
-                owners.append(mid)
-    return tuple(owners)
-
-
-def _refuse_singleton_conflict(
-    added_category_declarers: dict[str, tuple[str, ...]],
-    existing_manifest: ConsumerManifest,
-    state_root: Path,
-    incoming_set: set[str],
-) -> None:
-    """Refuse pre-write when a singleton-category rule is violated.
-
-    ``incoming_set`` is every molecule the same-source compound will hold after
-    the add (added plus carried-over), so its old-revision entries are not
-    counted as current owners.
-    """
-    for category, refuse_exc in (
-        (_CONSTITUTION_CATEGORY, ConstitutionAlreadyAdoptedError),
-        (_WORKFLOW_CATEGORY, WorkflowMoleculeAlreadyAdoptedError),
-    ):
-        adding = added_category_declarers.get(category, ())
-        if not adding:
-            continue
-        unique_adding = tuple(sorted(set(adding)))
-        if len(unique_adding) > 1:
-            raise refuse_exc(
-                message=(
-                    f"add refuses: category {category!r} would be declared by "
-                    f"multiple molecules: {', '.join(unique_adding)}"
-                ),
-                context={
-                    "category": category,
-                    "adopted_by": "",
-                    "adding": ",".join(unique_adding),
-                },
-            )
-        current_owners = tuple(
-            owner
-            for owner in _existing_category_owners(existing_manifest, state_root, category)
-            if owner not in incoming_set
-        )
-        if current_owners:
-            raise refuse_exc(
-                message=(
-                    f"add refuses: category {category!r} already adopted by "
-                    f"{', '.join(current_owners)}; would-be-added: {', '.join(adding)}"
-                ),
-                context={
-                    "category": category,
-                    "adopted_by": ",".join(current_owners),
-                    "adding": ",".join(adding),
-                },
-            )
+    old_revision: str
+    molecule_ids: tuple[str, ...]
 
 
 def _carried_over(
@@ -291,8 +158,8 @@ def _carried_over(
     source: str,
     revision: str,
     added_ids: tuple[str, ...],
-) -> tuple[str, tuple[str, ...]] | None:
-    """Return ``(old_revision, ids)`` re-pinned implicitly by this add, else ``None``.
+) -> _CarriedOver | None:
+    """Return the molecules re-pinned implicitly by this add, else ``None``.
 
     Only a compound for ``source`` at a different revision carries molecules
     over; ``add`` never removes an adopted molecule.
@@ -300,16 +167,16 @@ def _carried_over(
     for compound in manifest.compounds:
         if compound.source == source and compound.revision != revision:
             ids = tuple(sorted(set(compound.molecules) - set(added_ids)))
-            return (compound.revision, ids) if ids else None
+            return _CarriedOver(compound.revision, ids) if ids else None
     return None
 
 
 def _verify_carried_over_in_source(
-    carried: tuple[str, tuple[str, ...]] | None, publisher: PublisherManifest
+    carried: _CarriedOver | None, publisher: PublisherManifest
 ) -> None:
     if carried is None:
         return
-    missing = [mid for mid in carried[1] if mid not in publisher.molecules]
+    missing = [mid for mid in carried.molecule_ids if mid not in publisher.molecules]
     if missing:
         raise MoleculeIdNotInSourceError(
             message=(
@@ -329,7 +196,7 @@ def _write_report(
     source: str,
     revision: str,
     added_ids: tuple[str, ...],
-    carried: tuple[str, tuple[str, ...]] | None,
+    carried: _CarriedOver | None,
 ) -> None:
     sys.stdout.write(
         f"added {len(added_ids)} molecule(s){scope} at {source}@{revision[:12]}:\n"
@@ -337,12 +204,11 @@ def _write_report(
     for mid in added_ids:
         sys.stdout.write(f"  {mid}\n")
     if carried is not None:
-        old_revision, carried_ids = carried
         sys.stdout.write(
-            f"re-pinned {len(carried_ids)} carried-over molecule(s) "
-            f"({old_revision[:12]} -> {revision[:12]}):\n"
+            f"re-pinned {len(carried.molecule_ids)} carried-over molecule(s) "
+            f"({carried.old_revision[:12]} -> {revision[:12]}):\n"
         )
-        for mid in carried_ids:
+        for mid in carried.molecule_ids:
             sys.stdout.write(f"  {mid}\n")
 
 
@@ -362,30 +228,16 @@ def _mutate_compounds(
     consumed = False
     for compound in manifest.compounds:
         if compound.source == source:
-            if compound.revision == revision:
-                merged = tuple(sorted(set(compound.molecules) | set(added_ids)))
-                new_compounds.append(
-                    CompoundEntry(
-                        source=source,
-                        revision=revision,
-                        molecules=merged,
-                        track=compound.track,
-                        config=compound.config,
-                    )
+            # Same revision merges; a different revision re-pins the whole
+            # compound. Either way `add` only adds: existing molecules, `track`
+            # and `config` are kept.
+            new_compounds.append(
+                dataclasses.replace(
+                    compound,
+                    revision=revision,
+                    molecules=tuple(sorted(set(compound.molecules) | set(added_ids))),
                 )
-            else:
-                # Different revision: `add` only adds. Carry every existing
-                # molecule over and re-pin the whole compound.
-                merged = tuple(sorted(set(compound.molecules) | set(added_ids)))
-                new_compounds.append(
-                    CompoundEntry(
-                        source=source,
-                        revision=revision,
-                        molecules=merged,
-                        track=compound.track,
-                        config=compound.config,
-                    )
-                )
+            )
             consumed = True
         else:
             new_compounds.append(compound)
@@ -469,15 +321,9 @@ def run(args: argparse.Namespace) -> int:
 
         carried = _carried_over(current_manifest, canonical_source, sha, molecule_ids)
         _verify_carried_over_in_source(carried, publisher)
-        incoming_ids = molecule_ids + (carried[1] if carried else ())
-        added_category_declarers = _categories_declared_by(
-            incoming_ids, publisher, repo_dir, sha
-        )
-        _refuse_singleton_conflict(
-            added_category_declarers,
-            current_manifest,
-            state_root,
-            incoming_set=set(incoming_ids),
+        incoming_ids = molecule_ids + (carried.molecule_ids if carried else ())
+        refuse_singleton_conflict(
+            current_manifest, incoming_ids, publisher, repo_dir, sha, state_root
         )
 
         new_manifest = _mutate_compounds(
@@ -526,15 +372,14 @@ def _add_local(
     overlay = local_scope.load_overlay(repo_root) or LocalManifest(spaex_version="4", compounds=())
     carried = _carried_over(overlay, canonical_source, sha, molecule_ids)
     _verify_carried_over_in_source(carried, publisher)
-    incoming_ids = molecule_ids + (carried[1] if carried else ())
-    added_category_declarers = _categories_declared_by(
-        incoming_ids, publisher, repo_dir, sha
-    )
-    _refuse_singleton_conflict(
-        added_category_declarers,
+    incoming_ids = molecule_ids + (carried.molecule_ids if carried else ())
+    refuse_singleton_conflict(
         overlay.as_consumer_manifest(project.identity),
+        incoming_ids,
+        publisher,
+        repo_dir,
+        sha,
         state_root,
-        incoming_set=set(incoming_ids),
     )
     new_overlay = _mutate_compounds(overlay, canonical_source, sha, molecule_ids)
     exit_code = write_and_reinstall(
