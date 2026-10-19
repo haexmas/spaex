@@ -34,7 +34,7 @@ haex add <source-url> [<molecule-id>[,<molecule-id>...]]
    - Positional list, if given.
    - Every id under `manifest.molecules{}` at the resolved SHA, if `--all` given.
    - Interactive selection from a TTY prompt, otherwise. Non-TTY invocation refuses with `interactive-selection-unavailable` and asks for explicit molecule ids or `--all`.
-6. Merge or replace the compound entry for `<source-url>`:
+6. Merge or re-pin the compound entry for `<source-url>`:
    - Same source and same revision: merge new molecule ids into the existing `molecules[]` array (deduplicated).
    - Same source, different revision: keep every existing molecule, add the new molecule ids, and re-pin the whole compound to the new revision (deduplicated, sorted) atomically after the new publisher manifest has validated. `track` and `config` are preserved. Every carried-over molecule must exist in the publisher manifest at the new revision; otherwise refuse with `molecule-id-not-in-source` naming it, writing nothing. `haex add` never removes a molecule; only `haex remove` does.
    - No existing compound for this source: append.
