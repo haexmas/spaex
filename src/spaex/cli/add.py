@@ -172,7 +172,7 @@ def _carried_over(
 
 
 def _verify_carried_over_in_source(
-    carried: _CarriedOver | None, publisher: PublisherManifest
+    carried: _CarriedOver | None, publisher: PublisherManifest, remove_command: str
 ) -> None:
     if carried is None:
         return
@@ -186,7 +186,7 @@ def _verify_carried_over_in_source(
             context={"publisher": publisher.publisher, "missing": ",".join(missing)},
             hint=(
                 "`spaex add` never drops an adopted molecule; run "
-                "`spaex remove <molecule-id>` first, then add again."
+                f"`{remove_command} {','.join(missing)}` first, then add again."
             ),
         )
 
@@ -320,7 +320,7 @@ def run(args: argparse.Namespace) -> int:
             )
 
         carried = _carried_over(current_manifest, canonical_source, sha, molecule_ids)
-        _verify_carried_over_in_source(carried, publisher)
+        _verify_carried_over_in_source(carried, publisher, "spaex remove")
         incoming_ids = molecule_ids + (carried.molecule_ids if carried else ())
         refuse_singleton_conflict(
             current_manifest, incoming_ids, publisher, repo_dir, sha, state_root
@@ -371,7 +371,7 @@ def _add_local(
         )
     overlay = local_scope.load_overlay(repo_root) or LocalManifest(spaex_version="4", compounds=())
     carried = _carried_over(overlay, canonical_source, sha, molecule_ids)
-    _verify_carried_over_in_source(carried, publisher)
+    _verify_carried_over_in_source(carried, publisher, "spaex remove --local")
     incoming_ids = molecule_ids + (carried.molecule_ids if carried else ())
     refuse_singleton_conflict(
         overlay.as_consumer_manifest(project.identity),
@@ -386,9 +386,7 @@ def _add_local(
         repo_root,
         new_overlay.to_json_bytes(),
         lock,
-        skip_hooks=bool(getattr(args, "skip_hooks", False)),
-        speckit_agents=getattr(args, "speckit_agents", None),
-        no_speckit_integrations=bool(getattr(args, "no_speckit_integrations", False)),
+        **reinstall_kwargs(args),
         abort_on_behavior_contradiction=False,
         target=local_manifest_path(repo_root),
     )
