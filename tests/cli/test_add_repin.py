@@ -55,6 +55,13 @@ def _touch_hello(working: Path) -> None:
     (working / "hello" / "hello.md").write_text("# v2\n")
 
 
+def _drop_world(working: Path) -> None:
+    manifest_file = working / "manifest.json"
+    manifest = json.loads(manifest_file.read_text())
+    del manifest["molecules"][_WORLD_ID]
+    manifest_file.write_text(json.dumps(manifest))
+
+
 def _adopt_hello_and_world(tmp_path, monkeypatch, helpers):
     canonical, head1, state_root = helpers["make_publisher"](
         tmp_path, _three_molecules()
@@ -158,14 +165,7 @@ def test_add_at_new_revision_refuses_when_carried_over_molecule_is_gone(
     canonical, _, state_root, consumer = _adopt_hello_and_world(
         tmp_path, monkeypatch, haex_add_helpers
     )
-
-    def drop_world(working: Path) -> None:
-        manifest_file = working / "manifest.json"
-        manifest = json.loads(manifest_file.read_text())
-        del manifest["molecules"][_WORLD_ID]
-        manifest_file.write_text(json.dumps(manifest))
-
-    head2 = _advance_publisher(tmp_path, haex_add_helpers, canonical, state_root, drop_world)
+    head2 = _advance_publisher(tmp_path, haex_add_helpers, canonical, state_root, _drop_world)
     manifest_file = consumer / ".spaex/manifest.json"
     before = manifest_file.read_bytes()
 
@@ -311,4 +311,39 @@ def test_add_local_at_new_revision_checks_singleton_conflicts(
             local=True,
         )
 
+    assert overlay_file.read_bytes() == before
+
+
+def test_add_local_refusal_for_gone_carried_over_molecule_hints_local_remove(
+    tmp_path, monkeypatch, haex_add_helpers
+) -> None:
+    canonical, head1, state_root = haex_add_helpers["make_publisher"](
+        tmp_path, _three_molecules()
+    )
+    consumer = haex_add_helpers["make_consumer"](tmp_path)
+    haex_add_helpers["run_add"](
+        consumer,
+        state_root,
+        monkeypatch,
+        source_url=canonical,
+        molecule_ids=f"{_HELLO_ID},{_WORLD_ID}",
+        revision=head1,
+        local=True,
+    )
+    head2 = _advance_publisher(tmp_path, haex_add_helpers, canonical, state_root, _drop_world)
+    overlay_file = consumer / ".spaex/local/manifest.json"
+    before = overlay_file.read_bytes()
+
+    with pytest.raises(MoleculeIdNotInSourceError) as exc_info:
+        haex_add_helpers["run_add"](
+            consumer,
+            state_root,
+            monkeypatch,
+            source_url=canonical,
+            molecule_ids=_GAMMA_ID,
+            revision=head2,
+            local=True,
+        )
+
+    assert f"spaex remove --local {_WORLD_ID}" in exc_info.value.hint
     assert overlay_file.read_bytes() == before
