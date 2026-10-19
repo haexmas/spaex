@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.4.4](https://github.com/haexmas/spaex/compare/v5.4.3...v5.4.4) (2026-10-19)
+
+
+### Bug Fixes
+
+* **add:** hint `spaex remove --local` when a local carried-over molecule is gone ([f51e677](https://github.com/haexmas/spaex/commit/f51e67764acc85e83e0da1cc8c4850555263d766))
+
+
+### Documentation
+
+* **spec:** call step 6 of the 013 add contract merge or re-pin ([28186b3](https://github.com/haexmas/spaex/commit/28186b37f1871941804b5c3d45a5faf28ab5a4db))
+
 ## [5.4.3](https://github.com/haexmas/spaex/compare/v5.4.2...v5.4.3) (2026-10-15)
 
 
