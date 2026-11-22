@@ -19,17 +19,16 @@ from tempfile import TemporaryDirectory
 
 from spaex.behavior import bootstrap
 from spaex.behavior import orchestrate as behavior_orchestrate
-from spaex.behavior.clauses import TracedClause, parse_clauses
-from spaex.behavior.composer.clarifications import CLARIFICATIONS_FILENAME
+from spaex.behavior import render as behavior_render
+from spaex.behavior import state as behavior_state
 from spaex.behavior.composer.invoke import COMPOSER_LOG_ENV, DEFAULT_COMPOSER_LOG
-from spaex.behavior.emit import read_header_hashes
+from spaex.behavior.decisions import DECISIONS_FILENAME
 from spaex.behavior.fragment import (
     PROJECT_SCOPE,
     BehaviorFragment,
     FragmentValidationError,
 )
 from spaex.behavior.materialize import project_local_from_config
-from spaex.behavior.stale import STALE_FILENAME
 from spaex.cli.install import _load_consumer_manifest
 from spaex.constitution.resolve import ResolvedMolecule, resolve_install_inputs
 from spaex.io.state import default_state_root
@@ -72,16 +71,14 @@ def run_install_global(args: argparse.Namespace) -> int:
 
 
 def run_constitution_build(args: argparse.Namespace) -> int:
-    """`spaex constitution build` (T055, contracts/cli-surface.md
-    §"spaex constitution build").
+    """`spaex constitution build` (T055, reworked by Spec 030).
 
-    Explicitly invokes the Composer against the current fragment set and
-    writes `.spaex/constitution.md`, standing in for the behavior-harness slice of a full
+    Renders `.spaex/constitution.md` from the current fragments and the
+    persisted decisions, standing in for the behavior-harness slice of a full
     `spaex install` (no Spec 008 `constitution.md`/hooks/`install.lock`
-    publish here). Reuses `behavior_orchestrate.run()`'s fingerprint
-    comparison and Composer-invocation machinery unchanged; `--force` maps
-    to `run()`'s `force_composer` and `--check` (without `--force`) uses
-    `compute_fingerprints()` to compare without ever invoking the Composer.
+    publish here). The check runs only when no completed one covers the
+    current fragments; `--force` reruns it, and `--check` compares the file
+    with a fresh render and the check state without ever calling the model.
     """
     repo_root = Path(args.repo_root).resolve()
     state_root = default_state_root()
@@ -114,10 +111,18 @@ def run_constitution_build(args: argparse.Namespace) -> int:
         state_root=state_root,
         resolved=resolved,
         project_local=project_local,
-        force_composer=force,
+        force_check=force,
     )
     _report_constitution_build(outcome)
     return exit_codes.SUCCESS
+
+
+_CHECK_MESSAGES = {
+    "missing": "is missing",
+    "version": "is format version 1 (out of date)",
+    "out-of-date": "differs from a fresh render of the fragments and decisions",
+    "unchecked": "is current, but no completed contradiction check covers these fragments",
+}
 
 
 def _check_build(
@@ -127,36 +132,42 @@ def _check_build(
     resolved: Sequence[ResolvedMolecule],
     project_local: Sequence[BehaviorFragment],
 ) -> int:
-    """`--check` without `--force`: fingerprint comparison only.
+    """`--check` without `--force`: compare the file with a fresh render.
 
-    Never invokes the Composer, matching contracts/cli-surface.md's
-    explicit prohibition ("With matching fingerprints it MUST NOT invoke
-    the Composer").
+    Never invokes the model (contracts/cli-surface-delta.md): the expected
+    text is a pure function of the fragments and the valid decisions, and the
+    check state is read from `decisions.json`.
     """
-    fingerprints = behavior_orchestrate.compute_fingerprints(
+    assessment = behavior_orchestrate.current_assessment(
         repo_root=repo_root,
         state_root=state_root,
         resolved=resolved,
         project_local=project_local,
     )
-    spaex_md_exists = composed_constitution_path(repo_root).exists()
-    if fingerprints.source_hash is None:
-        match = not spaex_md_exists
-    else:
-        existing = read_header_hashes(repo_root)
-        match = existing is not None and existing == (
-            fingerprints.source_hash,
-            fingerprints.build_input_hash,
+    path = composed_constitution_path(repo_root)
+    if assessment is None:
+        if not path.exists():
+            sys.stdout.write(
+                "spaex constitution build --check: no active fragments, "
+                ".spaex/constitution.md is absent as expected\n"
+            )
+            return exit_codes.SUCCESS
+        sys.stdout.write(
+            "spaex constitution build --check: .spaex/constitution.md exists but "
+            "no fragment is active; run `spaex constitution build` to remove it\n"
         )
-    if match:
+        return 1
+    existing = path.read_text(encoding="utf-8") if path.exists() else None
+    diagnosis = behavior_state.diagnose(assessment, existing)
+    if diagnosis == "current":
         sys.stdout.write(
             "spaex constitution build --check: .spaex/constitution.md is current\n"
         )
         return exit_codes.SUCCESS
     sys.stdout.write(
-        "spaex constitution build --check: .spaex/constitution.md is stale "
-        "(source_hash/build_input_hash differ); run `spaex constitution "
-        "build` to regenerate\n"
+        f"spaex constitution build --check: .spaex/constitution.md "
+        f"{_CHECK_MESSAGES[diagnosis]}; run `spaex install` or "
+        "`spaex constitution build` to fix it\n"
     )
     return 1
 
@@ -168,11 +179,9 @@ def _force_check_build(
     resolved: Sequence[ResolvedMolecule],
     project_local: Sequence[BehaviorFragment],
 ) -> int:
-    """`--force --check`: an explicit fresh Composer comparison
-    (contracts/cli-surface.md). Forces a real Composer invocation via
-    `force_composer=True`, then reports whether the freshly composed
-    `.spaex/constitution.md` matches what was already on disk (the regenerate-then-diff
-    pattern SC-003 reproducibility verification calls for).
+    """`--force --check`: an explicit fresh comparison. Reruns the check via
+    `force_check=True`, then reports whether the freshly rendered
+    `.spaex/constitution.md` matches what was already on disk.
 
     `--check` never mutates the repository, even combined with `--force`:
     a CI-verification flag that silently rewrites a committed file on
@@ -190,7 +199,7 @@ def _force_check_build(
                 state_root=state_root,
                 resolved=resolved,
                 project_local=project_local,
-                force_composer=True,
+                force_check=True,
             )
             after = spaex_md_path.read_bytes() if spaex_md_path.exists() else None
             matches = before == after
@@ -199,13 +208,13 @@ def _force_check_build(
 
     if matches:
         sys.stdout.write(
-            "spaex constitution build --force --check: a fresh Composer "
-            "rebuild matches the committed .spaex/constitution.md\n"
+            "spaex constitution build --force --check: a fresh check and render "
+            "match the committed .spaex/constitution.md\n"
         )
         return exit_codes.SUCCESS
     sys.stdout.write(
-        "spaex constitution build --force --check: a fresh Composer "
-        "rebuild produced different output; .spaex/constitution.md left unchanged "
+        "spaex constitution build --force --check: a fresh check and render "
+        "produced different output; .spaex/constitution.md left unchanged "
         "(rerun `spaex constitution build --force` to persist it)\n"
     )
     return 1
@@ -272,8 +281,8 @@ def _managed_artifact_paths(repo_root: Path) -> tuple[Path, ...]:
     paths = [
         composed_constitution_path(repo_root),
         spaex_dir / behavior_orchestrate.CONSTITUTION_D_DIRNAME,
-        spaex_dir / CLARIFICATIONS_FILENAME,
-        spaex_dir / STALE_FILENAME,
+        spaex_dir / DECISIONS_FILENAME,
+        *(spaex_dir / name for name in behavior_orchestrate.LEGACY_FILENAMES),
         spaex_dir / behavior_orchestrate.STAGING_DIRNAME,
         spaex_dir / behavior_orchestrate.PREV_DIRNAME,
     ]
@@ -290,14 +299,15 @@ def _managed_artifact_paths(repo_root: Path) -> tuple[Path, ...]:
 
 
 def _report_constitution_build(outcome: behavior_orchestrate.BehaviorOutcome) -> None:
-    if outcome.published and not outcome.skipped_composer:
+    if outcome.published and not outcome.skipped_check:
         sys.stdout.write(
-            f"composed .spaex/constitution.md ({outcome.fragment_count} fragment(s))\n"
+            f"composed .spaex/constitution.md ({outcome.fragment_count} fragment(s), "
+            f"{outcome.decision_count} decision(s))\n"
         )
-    elif outcome.skipped_composer:
+    elif outcome.skipped_check:
         sys.stdout.write(
             f"reused .spaex/constitution.md ({outcome.fragment_count} fragment(s), "
-            "source_hash/build_input_hash unchanged)\n"
+            "fragments and decisions unchanged, no check needed)\n"
         )
     elif outcome.removed_constitution:
         sys.stdout.write("removed .spaex/constitution.md (no active fragments)\n")
@@ -308,14 +318,12 @@ def _report_constitution_build(outcome: behavior_orchestrate.BehaviorOutcome) ->
 
 
 def run_constitution_trace(args: argparse.Namespace) -> int:
-    """`spaex constitution trace <query>` (T056, FR-022,
-    contracts/cli-surface.md §"spaex constitution trace").
+    """`spaex constitution trace <query>` (T056, reworked by Spec 030 research R11).
 
-    `query` is either an exact scoped fragment id (`<molecule-id>/
-    <fragment-id>`, found verbatim in some clause's provenance) or a
-    substring of a clause's text. A bare `<fragment-id>` (no molecule
-    scope) that matches a known fragment id is rejected as ambiguous
-    rather than silently treated as a substring query.
+    `query` is an exact scoped fragment id (`<molecule-id>/<fragment-id>`), a
+    molecule id, or a phrase from a fragment. A bare `<fragment-id>` (no
+    molecule scope) that matches a known fragment id is rejected as ambiguous
+    rather than silently treated as a phrase.
     """
     repo_root = Path(args.repo_root).resolve()
     query = str(args.query)
@@ -332,15 +340,32 @@ def run_constitution_trace(args: argparse.Namespace) -> int:
             ),
         )
 
-    body = spaex_md_path.read_text(encoding="utf-8")
-    clauses = parse_clauses(body)
-    scoped_ids = {scoped_id for clause in clauses for scoped_id in clause.provenance}
-    fragment_ids = {
-        scoped_id.split("/", 1)[1] for scoped_id in scoped_ids if "/" in scoped_id
-    }
+    text = spaex_md_path.read_text(encoding="utf-8")
+    try:
+        document = behavior_render.parse(text)
+    except behavior_render.RenderError as exc:
+        return _emit_trace_result(
+            fmt,
+            matches=(),
+            error=(
+                f".spaex/constitution.md is not a format version 2 constitution ({exc}); "
+                "run `spaex install` or `spaex constitution build`"
+            ),
+        )
+    blocks = document.blocks
+    scoped_ids = {block.scoped_id for block in blocks}
+    molecule_ids = {scoped_id.split("/", 1)[0] for scoped_id in scoped_ids}
+    fragment_ids = {scoped_id.split("/", 1)[1] for scoped_id in scoped_ids if "/" in scoped_id}
 
+    matches: list[_TraceMatch]
     if "/" in query and query in scoped_ids:
-        matches = tuple(c for c in clauses if query in c.provenance)
+        matches = [_TraceMatch(block) for block in blocks if block.scoped_id == query]
+    elif "/" not in query and query in molecule_ids:
+        matches = [
+            _TraceMatch(block)
+            for block in blocks
+            if block.scoped_id.split("/", 1)[0] == query
+        ]
     elif "/" not in query and query in fragment_ids:
         return _emit_trace_result(
             fmt,
@@ -351,28 +376,60 @@ def run_constitution_trace(args: argparse.Namespace) -> int:
             ),
         )
     else:
-        matches = tuple(c for c in clauses if query in c.text)
+        matches = _phrase_matches(text, blocks, query)
 
     if not matches:
-        return _emit_trace_result(
-            fmt, matches=(), error=f"no clause matches {query!r}"
-        )
+        return _emit_trace_result(fmt, matches=(), error=f"no fragment matches {query!r}")
 
     molecule_pins = _load_molecule_pins(repo_root)
     return _emit_trace_result(
-        fmt, matches=matches, molecule_pins=molecule_pins, repo_root=repo_root
+        fmt, matches=tuple(matches), molecule_pins=molecule_pins, repo_root=repo_root
     )
+
+
+@dataclass(frozen=True)
+class _TraceMatch:
+    """A traced fragment block, or one line of it when found by phrase."""
+
+    block: behavior_render.ParsedBlock
+    line: int | None = None
+    line_text: str | None = None
+    excluded_kept: tuple[str, ...] | None = None
+
+
+def _phrase_matches(
+    text: str, blocks: Sequence[behavior_render.ParsedBlock], phrase: str
+) -> list[_TraceMatch]:
+    lines = text.split("\n")
+    found: list[_TraceMatch] = []
+    for block in blocks:
+        for number in range(block.start_line, block.end_line + 1):
+            line = lines[number - 1]
+            if phrase not in line:
+                continue
+            inside = next(
+                (e for e in block.exclusions if e.file_start < number < e.file_end), None
+            )
+            found.append(
+                _TraceMatch(
+                    block,
+                    line=number,
+                    line_text=line,
+                    excluded_kept=inside.kept if inside is not None else None,
+                )
+            )
+    return found
 
 
 def _emit_trace_result(
     fmt: str,
     *,
-    matches: tuple[TracedClause, ...],
+    matches: tuple[_TraceMatch, ...],
     error: str | None = None,
     molecule_pins: dict[str, tuple[str, str]] | None = None,
     repo_root: Path | None = None,
 ) -> int:
-    """Write matching clauses in the requested format and return the trace exit code."""
+    """Write matching fragments in the requested format and return the trace exit code."""
     if not matches:
         if fmt == "json":
             sys.stdout.write(
@@ -385,74 +442,96 @@ def _emit_trace_result(
     assert molecule_pins is not None
     assert repo_root is not None
     records = [
-        _render_clause(clause, repo_root=repo_root, molecule_pins=molecule_pins)
-        for clause in matches
+        _render_match(match, repo_root=repo_root, molecule_pins=molecule_pins)
+        for match in matches
     ]
     if fmt == "json":
         sys.stdout.write(
             json.dumps({"matches": records}, indent=2, sort_keys=True) + "\n"
         )
     else:
-        blocks = [_render_clause_text(record, repo_root=repo_root) for record in records]
+        blocks = [_render_match_text(record, repo_root=repo_root) for record in records]
         sys.stdout.write("\n\n".join(blocks) + "\n")
     return exit_codes.SUCCESS
 
 
-def _render_clause(
-    clause: TracedClause,
+def _render_match(
+    match: _TraceMatch,
     *,
     repo_root: Path,
     molecule_pins: dict[str, tuple[str, str]],
 ) -> dict[str, object]:
-    """Build a provenance record for a composed constitution clause."""
-    sources: list[dict[str, object]] = []
-    for scoped_id in clause.provenance:
-        molecule_id, _, fragment_id = scoped_id.partition("/")
-        atom_source = _lookup_atom_source(repo_root, molecule_id, fragment_id)
-        source: dict[str, object] = {
-            "scoped_id": scoped_id,
-            "atom_source": atom_source,
-        }
-        if molecule_id == PROJECT_SCOPE:
-            source["project_local"] = True
-        else:
-            pin = molecule_pins.get(molecule_id)
-            if pin is not None:
-                source["molecule_source"] = pin[0]
-                source["molecule_revision"] = pin[1]
-                source["pinned_in"] = _manifest_display_path(repo_root)
-        sources.append(source)
-    return {"modality": clause.modality, "text": clause.text, "sources": sources}
+    """Build a provenance record for a fragment block or a line inside it."""
+    scoped_id = match.block.scoped_id
+    molecule_id, _, fragment_id = scoped_id.partition("/")
+    source: dict[str, object] = {
+        "scoped_id": scoped_id,
+        "atom_source": _lookup_atom_source(repo_root, molecule_id, fragment_id),
+    }
+    if molecule_id == PROJECT_SCOPE:
+        source["project_local"] = True
+    else:
+        pin = molecule_pins.get(molecule_id)
+        if pin is not None:
+            source["molecule_source"] = pin[0]
+            source["molecule_revision"] = pin[1]
+            source["pinned_in"] = _manifest_display_path(repo_root)
+    record: dict[str, object] = {
+        "source": source,
+        "modality": match.block.modality,
+        "lines": [match.block.start_line, match.block.end_line],
+        "exclusions": [
+            {"lines": [e.file_start, e.file_end], "kept": list(e.kept)}
+            for e in match.block.exclusions
+        ],
+    }
+    if match.line is not None:
+        record["line"] = match.line
+        record["text"] = match.line_text
+        record["excluded"] = match.excluded_kept is not None
+        if match.excluded_kept is not None:
+            record["kept"] = list(match.excluded_kept)
+    return record
 
 
-def _render_clause_text(record: dict[str, object], *, repo_root: Path) -> str:
-    lines = [
-        f'Directive: "{record["text"]}."',
-        f"Modality:  {record['modality']}",
-        "Sources:",
-    ]
-    sources = record["sources"]
-    assert isinstance(sources, list)
-    for source in sources:
-        lines.append(f"  - {source['scoped_id']}")
-        atom_source = source.get("atom_source") or "(unavailable)"
-        lines.append(f"    Atom:    {atom_source}")
-        if source.get("project_local"):
-            lines.append(
-                "    Molecule: (project-local fragment; declared in "
-                f"{_manifest_display_path(repo_root)}'s constitution.local_fragments)"
-            )
-        elif "molecule_source" in source:
-            lines.append(
-                f"    Molecule: {source['molecule_source']}@"
-                f"{source['molecule_revision']} (pinned in "
-                f"{source['pinned_in']})"
-            )
-        else:
-            lines.append(
-                "    Molecule: (unknown; not found in "
-                f"{_manifest_display_path(repo_root)})"
-            )
+def _render_match_text(record: dict[str, object], *, repo_root: Path) -> str:
+    source = record["source"]
+    assert isinstance(source, dict)
+    lines_range = record["lines"]
+    assert isinstance(lines_range, list)
+    lines = [f"Fragment: {source['scoped_id']}"]
+    if "line" in record:
+        lines.append(f"Line:     {record['line']}: {record['text']}")
+        if record.get("excluded"):
+            lines.append(f"Excluded: yes, kept {', '.join(record['kept'])}")  # type: ignore[arg-type]
+    lines.append(
+        f"Lines:    {lines_range[0]}-{lines_range[1]} of .spaex/constitution.md"
+    )
+    if record.get("modality"):
+        lines.append(f"Modality: {record['modality']}")
+    lines.append(f"Atom:     {source.get('atom_source') or '(unavailable)'}")
+    if source.get("project_local"):
+        lines.append(
+            "Molecule: (project-local fragment; declared in "
+            f"{_manifest_display_path(repo_root)}'s constitution.local_fragments)"
+        )
+    elif "molecule_source" in source:
+        lines.append(
+            f"Molecule: {source['molecule_source']}@"
+            f"{source['molecule_revision']} (pinned in {source['pinned_in']})"
+        )
+    else:
+        lines.append(
+            "Molecule: (unknown; not found in "
+            f"{_manifest_display_path(repo_root)})"
+        )
+    exclusions = record["exclusions"]
+    assert isinstance(exclusions, list)
+    for exclusion in exclusions:
+        lines.append(
+            f"Excluded passage: lines {exclusion['lines'][0]}-{exclusion['lines'][1]}, "
+            f"kept {', '.join(exclusion['kept'])}"
+        )
     return "\n".join(lines)
 
 
@@ -461,8 +540,7 @@ def _lookup_atom_source(
 ) -> str | None:
     """Read `atom_source` from the materialized fragment file.
 
-    Not available from `.spaex/constitution.md` itself (only the composed clause text
-    and scoped provenance ids are), so this reads
+    Not carried by `.spaex/constitution.md` itself, so this reads
     `.spaex/constitution.d/<molecule-id>/<fragment-id>.md` back, per
     fragment-format.md's header schema. Returns `None` when the fragment
     file is missing or unparseable (e.g. a stale composed Constitution after the

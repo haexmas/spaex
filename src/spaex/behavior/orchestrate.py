@@ -1,89 +1,70 @@
-"""Behavior-harness transaction (Spec 023 T029).
+"""Behavior-harness transaction (Spec 023 T029, reworked by Spec 030).
 
 Runs the whole per-project behavior pipeline inside a single transaction:
 
 1. Build MoleculeInputs from resolved molecules (Spec 016 resolver output).
-2. Materialize fragments to a staging tree under `.spaex/.constitution.d.staging/`.
-3. Run mechanical pre-check (raises exit 20 / 22 on collision).
-4. Compute canonical `source_hash` + `build_input_hash` outside the LLM.
-5. Load persisted clarifications; drop invalidated entries.
-6. Reproducibility skip (FR-009): if the on-disk composed Constitution header already
-   carries matching hashes, do not invoke the Composer.
-7. Invoke the Composer; parse Shape A or Shape B. Shape B triggers one
-   bounded operator clarification round-trip (Phase 6 T042): each question
-   is answered once, persisted, and the Composer is re-invoked with the
-   staged answers. A non-interactive caller or a declined answer surfaces
-   as `behavior-clarification-required` (exit 21); a second Shape B
-   response in the same build is an `invalid-output` failure (exit 32).
-8. Verify hashes on the Composer output.
-9. COMMIT: publish `.spaex/constitution.d/`, `.spaex/constitution.md`, and
-   `.spaex/clarifications.json` in a rollback-safe sequence. Any failure
-   leaves tracked files byte-unchanged (FR-006).
+2. Materialize fragments to a staging tree under `.spaex/.constitution.d.staging/`
+   and run the mechanical pre-check (exit 20 / 22 on collision).
+3. Load the persisted decisions (`.spaex/decisions.json`) and relate them to the
+   fragments (`state.assess`).
+4. Run the check (the only model call) when no completed check covers exactly
+   these fragments and the effective check prompt, or when forced. Ask the
+   operator about every finding that has no valid decision; a refusal or a
+   non-interactive terminal aborts with exit 21 before anything is written.
+5. Render the constitution with spaex's own code, verify it against the
+   fragments, and COMMIT `.spaex/constitution.d/`, `.spaex/constitution.md` and
+   `.spaex/decisions.json` in a rollback-safe sequence. Any failure leaves
+   tracked files byte-unchanged (FR-019).
 
-The empty fragment set path (FR-017d) removes the composed Constitution and clears the
-staging tree without invoking the Composer.
+The empty fragment set path (FR-017d) removes the composed constitution and the
+decisions and clears the staging tree without invoking the model.
 """
 
 from __future__ import annotations
 
 import os
 import shutil
-import sys
 import tempfile
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Sequence
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from spaex.behavior.composer import batching, clarify
-from spaex.behavior.composer import reduce as composer_reduce
-from spaex.behavior.composer.clarifications import (
-    CLARIFICATIONS_FILENAME,
-    ClarificationsStore,
-    invalidate,
-    load,
-    save,
-    utc_timestamp,
-)
-from spaex.behavior.composer.completeness import verify_completeness as _verify_completeness
+from spaex.behavior.ask import OperatorDecision, default_operator_decision
+from spaex.behavior.composer.check import check_fragments
+from spaex.behavior.composer.failure import ComposerFailureCategory, raise_for
 from spaex.behavior.composer.invoke import (
-    ClarificationQuestion,
-    ComposedShape,
-    ComposerInput,
     InvokeOptions,
-    InvokeOutcome,
-    QuestionsShape,
-    invoke_composer,
     resolve_composer_log_path,
     truncate_composer_log,
 )
-from spaex.behavior.composer.prompt import (
-    COMPOSER_PROMPT_VERSION,
-    effective_prompt_sha256,
-    load_effective_prompt,
+from spaex.behavior.decisions import (
+    DECISIONS_FILENAME,
+    Checked,
+    Decision,
+    DecisionStore,
+    PassageRef,
+    save,
+    utc_timestamp,
+    valid_decisions,
 )
-from spaex.behavior.emit import (
-    EmitOutcome,
-    compute_build_input_hash,
-    compute_source_hash,
-    emit_composed,
-    read_header_hashes,
-    remove_if_exists,
-)
+from spaex.behavior.emit import emit_rendered, remove_if_exists
 from spaex.behavior.fragment import BehaviorFragment
 from spaex.behavior.materialize import MoleculeInput, materialize
 from spaex.behavior.precheck import PrecheckOutcome
-from spaex.behavior.stale import STALE_FILENAME, clear_stale, write_stale
+from spaex.behavior.render import RenderError, verify
+from spaex.behavior.state import Assessment, assess, expected_text
 from spaex.constitution.resolve import ResolvedMolecule
 from spaex.git import molecule_store
 from spaex.io.transaction import CONSTITUTION_NAME
 from spaex.model.molecule_manifest import MoleculeManifest
-from spaex.util import exit_codes
-from spaex.util.errors import HaexError
 
 SPAEX_DIR = ".spaex"
 CONSTITUTION_D_DIRNAME = "constitution.d"
 STAGING_DIRNAME = ".constitution.d.staging"
 PREV_DIRNAME = ".constitution.d.prev"
+
+#: Files of format version 1 that a version 2 install removes (research R10).
+LEGACY_FILENAMES = ("clarifications.json", ".stale")
 
 
 @dataclass(frozen=True)
@@ -92,11 +73,10 @@ class BehaviorOutcome:
 
     fragment_count: int
     published: bool = False
-    skipped_composer: bool = False
+    skipped_check: bool = False
     removed_constitution: bool = False
-    stale: bool = False
-    source_hash: str | None = None
-    build_input_hash: str | None = None
+    decision_count: int = 0
+    excluded_count: int = 0
     dedup_provenance: dict[str, tuple[BehaviorFragment, ...]] = field(
         default_factory=dict
     )
@@ -109,9 +89,8 @@ def run(
     resolved: Sequence[ResolvedMolecule],
     project_local: Sequence[BehaviorFragment] = (),
     invoke_options: InvokeOptions | None = None,
-    operator_answer: Callable[[ClarificationQuestion], str] | None = None,
-    abort_on_contradiction: bool = True,
-    force_composer: bool = False,
+    operator_decision: OperatorDecision | None = None,
+    force_check: bool = False,
     spaex_dir: Path | None = None,
     preamble: str = "",
 ) -> BehaviorOutcome:
@@ -128,35 +107,9 @@ def run(
     keeping the behavior pass invisible to consumers whose molecules
     ship no behavior fragments (FR-017d).
 
-    `operator_answer`, when given, answers each Shape-B clarification
-    question in place of prompting stdin (test seam mirroring
-    `InvokeOptions.stub_caller`, kept orchestrate-level because the
-    round-trip loop lives here, not in the composer subprocess wrapper).
-    Defaults to a real stdin prompt that refuses on a non-interactive
-    terminal (Phase 6, T042).
-
-    `abort_on_contradiction` (default `True`, `spaex install`'s behavior):
-    a Composer Shape B response is resolved via the interactive
-    clarification round, aborting with exit 21 on a declined answer
-    (FR-005a, FR-010a). Passing `False` (the add-time plausibility check,
-    FR-024a) only changes handling of a detected cross-molecule
-    *contradiction*: instead of aborting, it prints a WARN with
-    provenance, writes `.spaex/.stale` summarizing the finding, and
-    returns without committing the composed Constitution or `.spaex/constitution.d/` —
-    the operation completes without aborting and reconciliation is
-    deferred to the next `spaex install`. Every other outcome (no
-    contradiction, empty fragment set, reproducibility skip) publishes
-    normally regardless of `abort_on_contradiction`, exactly as a plain
-    `spaex install` would (contracts/cli-surface.md §add/remove: "On no
-    contradiction, the composed Constitution regenerates cleanly").
-
-    `force_composer` (default `False`): when `True`, the reproducibility
-    skip (FR-009) is bypassed even when the on-disk Constitution header
-    already matches the freshly computed fingerprints, forcing a real
-    Composer invocation. Used by `spaex constitution build --force`
-    (contracts/cli-surface.md §"spaex constitution build"); every other
-    caller (`spaex install`, the internal install `spaex add`/`spaex
-    remove` trigger) leaves this at its default and is unaffected.
+    `operator_decision` answers each finding in place of prompting stdin (test
+    seam). `force_check` reruns the check even when a completed one covers the
+    current fragments (`spaex constitution build --force`).
     """
     spaex_dir = spaex_dir if spaex_dir is not None else repo_root / SPAEX_DIR
     if not project_local and not _any_declares_behavior(resolved):
@@ -192,331 +145,122 @@ def run(
         )
         return BehaviorOutcome(fragment_count=0, removed_constitution=removed)
 
-    canonical_fragments = fragments
     dedup_provenance = {
         m.fragment.scoped_id: m.dedup_provenance
         for m in materialized
         if m.dedup_provenance
     }
 
-    source_hash = compute_source_hash(canonical_fragments)
-    prompt_text = load_effective_prompt(repo_root)
-    prompt_hash = effective_prompt_sha256(prompt_text)
-
-    clarifications_path = spaex_dir / CLARIFICATIONS_FILENAME
-    store = load(clarifications_path)
-    current_hashes = {f.scoped_id: f.body_hash for f in canonical_fragments}
-    store, removed_keys = invalidate(store, current_hashes)
-
-    build_input_hash = compute_build_input_hash(
-        effective_prompt_sha256=prompt_hash,
-        composer_prompt_version=COMPOSER_PROMPT_VERSION,
-        valid_clarifications=store.entries.values(),
-    )
-
-    existing = read_header_hashes(repo_root, spaex_dir / CONSTITUTION_NAME)
-    if (
-        existing is not None
-        and existing == (source_hash, build_input_hash)
-        and not removed_keys
-        and not force_composer
-    ):
-        _commit_behavior_artifacts(
-            repo_root=repo_root,
-            spaex_dir=spaex_dir,
-            staging=staging,
-            target=target,
-            prev=prev,
-        )
-        return BehaviorOutcome(
-            fragment_count=len(canonical_fragments),
-            published=True,
-            skipped_composer=True,
-            source_hash=source_hash,
-            build_input_hash=build_input_hash,
-            dedup_provenance=dedup_provenance,
-        )
-
-    truncate_composer_log(
-        resolve_composer_log_path(invoke_options or InvokeOptions(), repo_root)
-    )
-    partition_result = batching.partition(
-        canonical_fragments, tuple(store.entries.values())
-    )
-    if len(partition_result.batches) <= 1:
-        # Single-batch build: the existing, unmodified one-call path
-        # (contracts/batch-merge-composer-interface.md), preserved
-        # byte-for-byte for the common case (SC-004).
-        composer_input = ComposerInput(
-            fragments=canonical_fragments,
-            clarifications=tuple(store.entries.values()),
-            expected_source_hash=source_hash,
-            expected_build_input_hash=build_input_hash,
-        )
-        invoke_result = invoke_composer(
-            composer_input,
-            repo_root=repo_root,
-            options=invoke_options,
-        )
-    else:
-        # Map-reduce composition (Spec 026): batch calls plus a bounded
-        # merge already resolve any Shape B internally when
-        # abort_on_contradiction is True, so invoke_result.result is
-        # always ComposedShape below in that case; when False (the
-        # `spaex add` plausibility pre-check), a QuestionsShape may come
-        # back and falls through to the same handling a single-call Shape
-        # B would hit.
-        store, build_input_hash, invoke_result = composer_reduce.compose(
-            partition_result=partition_result,
-            source_hash=source_hash,
-            build_input_hash=build_input_hash,
+    assessment = assess(fragments, repo_root=repo_root, spaex_dir=spaex_dir)
+    store = assessment.store
+    checked_now = assessment.check_needed or force_check
+    if checked_now:
+        store = _check_and_decide(
+            assessment,
             repo_root=repo_root,
             invoke_options=invoke_options,
-            store=store,
-            prompt_hash=prompt_hash,
-            operator_answer=operator_answer or _default_operator_answer,
-            abort_on_contradiction=abort_on_contradiction,
+            operator_decision=operator_decision or default_operator_decision,
         )
+    valid = valid_decisions(store, fragments)
+    # Decisions about passages that no longer exist are dropped, not kept around.
+    store = replace(store, decisions={d.key: d for d in valid})
 
-    if isinstance(invoke_result.result, QuestionsShape):
-        if not abort_on_contradiction:
-            contradictions = tuple(
-                question
-                for question in invoke_result.result.questions
-                if question.kind == "contradiction"
-            )
-            if contradictions:
-                _warn_stale_contradiction(contradictions)
-                write_stale(
-                    spaex_dir / STALE_FILENAME,
-                    contradictions,
-                    detected_at=utc_timestamp(),
-                )
-                _reset_scratch(staging)
-                return BehaviorOutcome(
-                    fragment_count=len(canonical_fragments),
-                    stale=True,
-                    source_hash=source_hash,
-                    build_input_hash=build_input_hash,
-                    dedup_provenance=dedup_provenance,
-                )
-            _reset_scratch(staging)
-            clear_stale(spaex_dir / STALE_FILENAME)
-            return BehaviorOutcome(
-                fragment_count=len(canonical_fragments),
-                source_hash=source_hash,
-                build_input_hash=build_input_hash,
-                dedup_provenance=dedup_provenance,
-            )
-        store, build_input_hash, invoke_result = _resolve_clarifications(
-            questions=invoke_result.result.questions,
-            canonical_fragments=canonical_fragments,
-            store=store,
-            source_hash=source_hash,
-            prompt_hash=prompt_hash,
-            repo_root=repo_root,
-            invoke_options=invoke_options,
-            operator_answer=operator_answer or _default_operator_answer,
+    text = expected_text(fragments, valid, preamble=preamble)
+    try:
+        verify(fragments, valid, text)
+    except RenderError as exc:
+        raise_for(
+            ComposerFailureCategory.INVALID_OUTPUT,
+            f"the rendered constitution does not carry every fragment verbatim: {exc}",
         )
+        raise AssertionError("unreachable") from exc
 
-    assert isinstance(invoke_result.result, ComposedShape)
-
-    _verify_completeness(
-        canonical_fragments=canonical_fragments,
-        composed_body=invoke_result.result.body,
-        clarifications=store,
-        repo_root=repo_root,
-        invoke_options=invoke_options,
-    )
-
-    emit_outcome = _commit_behavior_artifacts(
+    _commit_behavior_artifacts(
         repo_root=repo_root,
         spaex_dir=spaex_dir,
-        preamble=preamble,
         staging=staging,
         target=target,
         prev=prev,
-        composed=invoke_result.result,
-        expected_source_hash=source_hash,
-        expected_build_input_hash=build_input_hash,
-        clarifications_path=clarifications_path,
-        clarifications=store,
-        save_clarifications=bool(
-            removed_keys or _is_clarifications_content_changed(clarifications_path, store)
-        ),
+        rendered=text,
+        decisions_store=store,
     )
-    assert emit_outcome is not None
-
     return BehaviorOutcome(
-        fragment_count=len(canonical_fragments),
+        fragment_count=len(fragments),
         published=True,
-        source_hash=emit_outcome.source_hash,
-        build_input_hash=emit_outcome.build_input_hash,
+        skipped_check=not checked_now,
+        decision_count=len(valid),
+        excluded_count=text.count("<!-- spaex-excluded "),
         dedup_provenance=dedup_provenance,
     )
 
 
-@dataclass(frozen=True)
-class ComputedFingerprints:
-    """Current `source_hash`/`build_input_hash` for a resolved fragment set,
-    computed without invoking the Composer.
-
-    Both hashes are `None` for the empty-fragment-set case (FR-017d): no
-    resolved molecule declares behavior fragments and no project-local
-    fragment is configured, matching the state in which the composed Constitution should
-    not exist.
-    """
-
-    source_hash: str | None
-    build_input_hash: str | None
-    fragment_count: int
-
-
-def compute_fingerprints(
+def current_assessment(
     *,
     repo_root: Path,
     state_root: Path,
     resolved: Sequence[ResolvedMolecule],
     project_local: Sequence[BehaviorFragment] = (),
-) -> ComputedFingerprints:
-    """Compute the current fingerprints without invoking the Composer.
+    spaex_dir: Path | None = None,
+) -> Assessment | None:
+    """Relate the current fragments to the persisted decisions without writing anything.
 
-    Reuses the exact materialization and hashing steps `run()` performs
-    before its reproducibility-skip check (module docstring steps 1-5:
-    materialize, compute `source_hash`, load the effective prompt, load and
-    invalidate clarifications, compute `build_input_hash`). Used by `spaex
-    constitution build --check` to compare against the published
-    composed Constitution header (via `read_header_hashes`) without ever shelling out
-    to an LLM (contracts/cli-surface.md: "--check ... MUST NOT invoke the
-    Composer").
+    Used by `spaex constitution build --check`. Returns `None` when no
+    fragment is active (the composed constitution should not exist then).
     """
-    spaex_dir = repo_root / SPAEX_DIR
+    spaex_dir = spaex_dir if spaex_dir is not None else repo_root / SPAEX_DIR
     if not project_local and not _any_declares_behavior(resolved):
-        return ComputedFingerprints(None, None, 0)
-
+        return None
     with tempfile.TemporaryDirectory(prefix=".spaex-check-", dir=repo_root) as temp_dir:
-        staging = Path(temp_dir)
-        molecule_inputs = _build_molecule_inputs(resolved, state_root=state_root)
         materialized = materialize(
-            molecule_inputs,
-            staging_root=staging,
+            _build_molecule_inputs(resolved, state_root=state_root),
+            staging_root=Path(temp_dir),
             project_local=tuple(project_local),
         )
     fragments = tuple(m.fragment for m in materialized)
     if not fragments:
-        return ComputedFingerprints(None, None, 0)
-
-    source_hash = compute_source_hash(fragments)
-    prompt_text = load_effective_prompt(repo_root)
-    prompt_hash = effective_prompt_sha256(prompt_text)
-
-    clarifications_path = spaex_dir / CLARIFICATIONS_FILENAME
-    store = load(clarifications_path)
-    current_hashes = {f.scoped_id: f.body_hash for f in fragments}
-    store, _removed_keys = invalidate(store, current_hashes)
-
-    build_input_hash = compute_build_input_hash(
-        effective_prompt_sha256=prompt_hash,
-        composer_prompt_version=COMPOSER_PROMPT_VERSION,
-        valid_clarifications=store.entries.values(),
-    )
-    return ComputedFingerprints(source_hash, build_input_hash, len(fragments))
+        return None
+    return assess(fragments, repo_root=repo_root, spaex_dir=spaex_dir)
 
 
-def _resolve_clarifications(
+def _check_and_decide(
+    assessment: Assessment,
     *,
-    questions: Sequence[ClarificationQuestion],
-    canonical_fragments: Sequence[BehaviorFragment],
-    store: ClarificationsStore,
-    source_hash: str,
-    prompt_hash: str,
     repo_root: Path,
     invoke_options: InvokeOptions | None,
-    operator_answer: Callable[[ClarificationQuestion], str],
-) -> tuple[ClarificationsStore, str, InvokeOutcome]:
-    """Answer each Shape-B question once, persist it, and re-invoke the
-    Composer exactly once with the staged clarifications
-    (contracts/composer-interface.md §Shape B, FR-010, FR-010a, FR-011).
-
-    Delegates to `composer.clarify.resolve_step_clarifications` (Spec 026
-    T003), which generalizes this same round trip so a batch call or merge
-    node (`composer.reduce`) can use it too; this function supplies the
-    legacy whole-build retry (a full-set `ComposerInput`, `step="single"`),
-    unchanged from before that generalization.
-    """
-
-    def retry(new_store: ClarificationsStore, new_build_input_hash: str) -> InvokeOutcome:
-        """Retry the legacy whole-fragment call with updated clarifications."""
-        composer_input = ComposerInput(
-            fragments=tuple(canonical_fragments),
-            clarifications=tuple(new_store.entries.values()),
-            expected_source_hash=source_hash,
-            expected_build_input_hash=new_build_input_hash,
-        )
-        return invoke_composer(
-            composer_input,
-            repo_root=repo_root,
-            options=invoke_options,
-            step="single",
-            invocation=2,
-            phase="clarification-resolved",
-        )
-
-    return clarify.resolve_step_clarifications(
-        questions=questions,
-        fragments_in_scope=canonical_fragments,
-        store=store,
-        prompt_hash=prompt_hash,
-        operator_answer=operator_answer,
-        retry=retry,
+    operator_decision: OperatorDecision,
+) -> DecisionStore:
+    """Run the check, ask about every undecided finding, return the updated store."""
+    truncate_composer_log(
+        resolve_composer_log_path(invoke_options or InvokeOptions(), repo_root)
     )
-
-
-def _default_operator_answer(question: ClarificationQuestion) -> str:
-    """Prompt stdin for one Shape-B answer; refuse on a non-interactive TTY.
-
-    Mirrors `spaex.cli.add._prompt_interactive`'s isatty guard so pytest and
-    CI (never a real TTY) fail fast instead of hanging on stdin.
-    """
-    if not sys.stdin.isatty():
-        raise HaexError(
-            message=(
-                "Composer requested clarification but stdin is not a TTY; "
-                "cannot prompt the operator interactively"
-            ),
-            diagnostic_key="behavior-clarification-required",
-            exit_code=exit_codes.BEHAVIOR_SEMANTIC_REFUSE,
-            hint=(
-                "Rerun `spaex install` from an interactive terminal to answer "
-                "the Composer's clarification question, or drop the molecule "
-                "whose fragments trigger the overlap/contradiction."
-            ),
-        )
-    sys.stdout.write(f"\nComposer clarification needed ({question.kind}):\n")
-    sys.stdout.write(f"  {question.question}\n")
-    for cited in question.cited_fragments:
-        sys.stdout.write(
-            f"    - {cited.get('molecule_id')}/{cited.get('fragment_id')}\n"
-        )
-    sys.stdout.write("Answer (blank to decline and abort install): ")
-    sys.stdout.flush()
-    return sys.stdin.readline().strip()
-
-
-def _warn_stale_contradiction(questions: Sequence[ClarificationQuestion]) -> None:
-    """Print the FR-024a WARN naming each contradiction's fragments/molecules."""
-    sys.stderr.write(
-        "WARN: Composer plausibility check found a cross-molecule semantic "
-        "contradiction; the composed Constitution is left unchanged and marked stale until "
-        "reconciled by the next `spaex install` (see `.spaex/.stale`):\n"
+    findings = check_fragments(
+        assessment.fragments, repo_root=repo_root, options=invoke_options
     )
-    for question in questions:
-        provenance = ", ".join(
-            f"{cited.get('molecule_id')}/{cited.get('fragment_id')}"
-            for cited in question.cited_fragments
+    decided = {decision.key for decision in assessment.valid}
+    store = assessment.store
+    for finding in sorted(
+        findings,
+        key=lambda f: (f.passages[0].scoped_id, f.passages[0].start, f.key),
+    ):
+        if finding.key in decided:
+            continue
+        asked_at = utc_timestamp()
+        choice = operator_decision(finding)
+        store = store.with_decision(
+            Decision(
+                key=finding.key,
+                kind=finding.kind,
+                summary=finding.summary,
+                passages=tuple(
+                    PassageRef(p.scoped_id, p.text_hash, p.text) for p in finding.passages
+                ),
+                choice=choice,
+                asked_at=asked_at,
+                answered_at=utc_timestamp(),
+            )
         )
-        sys.stderr.write(f"WARN:   [{question.kind}] {question.question} ({provenance})\n")
-    sys.stderr.flush()
+        decided.add(finding.key)
+    return store.with_checked(Checked(assessment.fingerprint, assessment.prompt_hash))
 
 
 def _publish_empty_artifacts(
@@ -539,27 +283,22 @@ def _commit_behavior_artifacts(
     *,
     repo_root: Path,
     spaex_dir: Path | None = None,
-    preamble: str = "",
     staging: Path,
     target: Path,
     prev: Path,
-    composed: ComposedShape | None = None,
-    expected_source_hash: str | None = None,
-    expected_build_input_hash: str | None = None,
-    clarifications_path: Path | None = None,
-    clarifications: ClarificationsStore | None = None,
-    save_clarifications: bool = False,
+    rendered: str | None = None,
+    decisions_store: DecisionStore | None = None,
     remove_spaex_md: bool = False,
-) -> EmitOutcome | None:
+) -> None:
     """Publish behavior outputs as one rollback boundary."""
     spaex_dir = spaex_dir if spaex_dir is not None else repo_root / SPAEX_DIR
     spaex_dir.mkdir(parents=True, exist_ok=True)
     spaex_md = spaex_dir / CONSTITUTION_NAME
+    decisions_path = spaex_dir / DECISIONS_FILENAME
+    legacy_paths = [spaex_dir / name for name in LEGACY_FILENAMES]
     backup_dir = Path(tempfile.mkdtemp(prefix=".behavior-backup-", dir=spaex_dir))
     backups: dict[Path, Path | None] = {}
-    for path in (spaex_md, clarifications_path):
-        if path is None or path in backups:
-            continue
+    for path in (spaex_md, decisions_path, *legacy_paths):
         backup_path = backup_dir / path.name
         if path.exists():
             shutil.copy2(path, backup_path)
@@ -568,30 +307,19 @@ def _commit_behavior_artifacts(
             backups[path] = None
 
     constitution_published = False
-    emit_outcome: EmitOutcome | None = None
     try:
         _publish_constitution_d(staging=staging, target=target, prev=prev)
         constitution_published = True
         if remove_spaex_md:
             remove_if_exists(repo_root, spaex_md)
+            remove_if_exists(repo_root, decisions_path)
             _clear_target(target)
-        elif composed is not None:
-            if expected_source_hash is None or expected_build_input_hash is None:
-                raise ValueError("composed publication requires expected hashes")
-            emit_outcome = emit_composed(
-                composed,
-                repo_root=repo_root,
-                expected_source_hash=expected_source_hash,
-                expected_build_input_hash=expected_build_input_hash,
-                target=spaex_md,
-                preamble=preamble,
-            )
-            assert emit_outcome is not None
-
-        if save_clarifications:
-            if clarifications_path is None or clarifications is None:
-                raise ValueError("clarifications publication requires a store")
-            save(clarifications_path, clarifications)
+        elif rendered is not None:
+            emit_rendered(rendered, target=spaex_md)
+            if decisions_store is not None:
+                save(decisions_path, decisions_store)
+        for legacy in legacy_paths:
+            remove_if_exists(repo_root, legacy)
     except BaseException:
         if constitution_published:
             _rollback_constitution_d(target=target, prev=prev)
@@ -600,12 +328,6 @@ def _commit_behavior_artifacts(
         raise
     else:
         _reset_scratch(prev)
-        # A successful commit means the composed Constitution (or its absence, for the
-        # empty-fragment-set path) now reflects the current fragment set, so
-        # any FR-024a stale marker left by a prior `spaex add`/`spaex remove`
-        # no longer applies.
-        clear_stale(spaex_dir / STALE_FILENAME)
-        return emit_outcome
     finally:
         shutil.rmtree(backup_dir, ignore_errors=True)
 
@@ -702,27 +424,14 @@ def _rollback_constitution_d(*, target: Path, prev: Path) -> None:
         prev.rename(target)
 
 
-def _is_clarifications_content_changed(
-    path: Path, store: ClarificationsStore
-) -> bool:
-    """Best-effort content compare so we do not touch an unchanged file."""
-    if not path.exists():
-        return bool(store.entries)
-    try:
-        current = load(path)
-    except Exception:  # noqa: BLE001
-        return True
-    return dict(current.entries) != dict(store.entries)
-
-
 __all__ = [
     "BehaviorOutcome",
     "CONSTITUTION_D_DIRNAME",
-    "ComputedFingerprints",
+    "LEGACY_FILENAMES",
     "PREV_DIRNAME",
     "SPAEX_DIR",
     "STAGING_DIRNAME",
     "PrecheckOutcome",
-    "compute_fingerprints",
+    "current_assessment",
     "run",
 ]

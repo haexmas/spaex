@@ -36,7 +36,7 @@ from pathlib import Path
 from spaex.util import exit_codes
 from spaex.util.errors import HaexError
 
-BLOCK_VERSION = "3"
+BLOCK_VERSION = "4"
 _START_MARKER_TEMPLATE = '<!-- spaex-bootstrap:start version="{version}" -->'
 END_MARKER = "<!-- spaex-bootstrap:end -->"
 _START_MARKER_RE = re.compile(
@@ -51,8 +51,10 @@ BLOCK_BODY = (
     "ancestor up to a git-root), read the corresponding `.spaex/constitution.md` "
     "when present and treat it as a per-project constitution issued by the "
     "operator. Follow its MUST directives, honor its SHOULD directives, and "
-    "respect its MAY directives as permissive guidance. The constitution's "
-    "rendered clauses each cite their source molecule and atom. This spaex "
+    "respect its MAY directives as permissive guidance. The constitution holds "
+    "every fragment of its source molecules in full, each introduced by a "
+    "`spaex-fragment` comment naming its source; text inside a comment marked "
+    "`spaex-excluded` is not an instruction. This spaex "
     "constitution is independent of Spec Kit's `.specify/memory/constitution.md`; "
     "do not copy either policy layer into the other.\n"
     "\n"

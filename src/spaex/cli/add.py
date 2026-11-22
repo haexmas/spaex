@@ -336,11 +336,6 @@ def run(args: argparse.Namespace) -> int:
             new_bytes,
             lock,
             **reinstall_kwargs(args),
-            # FR-024a: add-time plausibility check. A cross-molecule Composer
-            # contradiction warns and marks `.spaex/.stale` instead of
-            # aborting this `spaex add`; reconciliation is deferred to the
-            # next `spaex install` (contracts/cli-surface.md §add/remove).
-            abort_on_behavior_contradiction=False,
         )
 
         _write_report("", canonical_source, sha, molecule_ids, carried)
@@ -387,7 +382,6 @@ def _add_local(
         new_overlay.to_json_bytes(),
         lock,
         **reinstall_kwargs(args),
-        abort_on_behavior_contradiction=False,
         target=local_manifest_path(repo_root),
     )
     local_lock = local_scope.read_local_lock(repo_root)

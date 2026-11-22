@@ -13,6 +13,7 @@ import json
 import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -245,6 +246,11 @@ def valid_decisions(
     return tuple(valid)
 
 
+def utc_timestamp() -> str:
+    """Current UTC time in the `YYYY-MM-DDTHH:MM:SSZ` form the file uses."""
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def build_input_hash(decisions: Sequence[Decision]) -> str:
     """Header fingerprint of the valid decisions (contracts/spaex-md-format-v2.md).
 
@@ -275,5 +281,6 @@ __all__ = [
     "build_input_hash",
     "load",
     "save",
+    "utc_timestamp",
     "valid_decisions",
 ]

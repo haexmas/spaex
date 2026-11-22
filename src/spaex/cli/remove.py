@@ -190,7 +190,6 @@ def _remove_local(
         _apply_removal(overlay, remove_ids).to_json_bytes(),
         lock,
         **reinstall_kwargs(args),
-        abort_on_behavior_contradiction=False,
         target=local_manifest_path(repo_root),
     )
     sys.stdout.write(f"retracted {len(remove_ids)} local molecule(s):\n")
@@ -254,9 +253,6 @@ def run(args: argparse.Namespace) -> int:
             new_bytes,
             lock,
             **reinstall_kwargs(args),
-            # FR-024a: add-time plausibility check, identical treatment to
-            # `spaex add` (contracts/cli-surface.md §add/remove).
-            abort_on_behavior_contradiction=False,
         )
 
         sys.stdout.write(f"retracted {len(remove_ids)} molecule(s):\n")

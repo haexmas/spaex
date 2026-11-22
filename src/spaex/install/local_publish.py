@@ -161,7 +161,6 @@ def compose_local_behavior(
     repo_root: Path,
     state_root: Path,
     local_plan: LocalPlan,
-    abort_on_contradiction: bool,
 ) -> None:
     """Spec 029: compose local behavior fragments into `.spaex/local/constitution.md`.
 
@@ -172,21 +171,18 @@ def compose_local_behavior(
         repo_root=repo_root,
         state_root=state_root,
         resolved=list(local_plan.resolution.resolved),
-        abort_on_contradiction=abort_on_contradiction,
         spaex_dir=local_dir(repo_root),
         preamble=LOCAL_PREAMBLE,
     )
     path = LOCAL_CONSTITUTION_RELATIVE_PATH
-    if outcome.published and not outcome.skipped_composer:
-        sys.stdout.write(f"composed {path} ({outcome.fragment_count} fragment(s))\n")
-    elif outcome.skipped_composer:
-        sys.stdout.write(f"reused {path} ({outcome.fragment_count} fragment(s))\n")
-    elif outcome.stale:
+    if outcome.published and not outcome.skipped_check:
         sys.stdout.write(
-            f"local fragments contradict each other; {path} left unchanged, "
-            "marked stale (see .spaex/local/.stale)\n"
+            f"composed {path} ({outcome.fragment_count} fragment(s), "
+            f"{outcome.decision_count} decision(s))\n"
         )
-    if outcome.published or outcome.skipped_composer:
+    elif outcome.skipped_check:
+        sys.stdout.write(f"reused {path} ({outcome.fragment_count} fragment(s))\n")
+    if outcome.published:
         from spaex.cli import behavior_commands  # local import to avoid cycles
 
         behavior_commands.maybe_emit_local_bootstrap_hint()

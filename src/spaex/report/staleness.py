@@ -4,27 +4,23 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from spaex.behavior.composer.clarifications import CLARIFICATIONS_FILENAME, invalidate, load
-from spaex.behavior.composer.prompt import (
-    COMPOSER_PROMPT_VERSION,
-    effective_prompt_sha256,
-    load_effective_prompt,
-)
-from spaex.behavior.emit import compute_build_input_hash, compute_source_hash, read_header_hashes
 from spaex.behavior.fragment import BehaviorFragment, FragmentValidationError
 from spaex.behavior.orchestrate import CONSTITUTION_D_DIRNAME
+from spaex.behavior.state import assess, diagnose
 from spaex.paths import SPAEX_DIRNAME, composed_constitution_path
 
 
 def check_constitution_staleness(repo_root: Path) -> bool:
     """Whether `.spaex/constitution.md` is stale against its own fragments.
 
-    Recomputes `source_hash`/`build_input_hash` purely from already-
-    materialized, git-tracked local files (research.md R4) — the same
-    values `spaex constitution build --check` would compute, but without
-    its resolve/materialize step, so this never touches the network or the
-    local molecule cache. Returns `False` when there are no fragments and
-    no composed constitution (nothing to be stale).
+    Spec 030: renders the expected text purely from the already-materialized,
+    git-tracked fragments and decisions (research R4, R12) - the same
+    comparison `spaex constitution build --check` makes, without its
+    resolve/materialize step, so this never touches the network or the local
+    molecule cache. Stale means: the file is missing, is format version 1,
+    differs from a fresh render, or no completed contradiction check covers
+    these fragments. Returns `False` when there are no fragments and no
+    composed constitution (nothing to be stale).
     """
     constitution_d = repo_root / SPAEX_DIRNAME / CONSTITUTION_D_DIRNAME
     fragments: list[BehaviorFragment] = []
@@ -42,22 +38,12 @@ def check_constitution_staleness(repo_root: Path) -> bool:
     if invalid_fragment:
         return True
 
+    path = composed_constitution_path(repo_root)
     if not fragments:
-        return composed_constitution_path(repo_root).exists()
+        return path.exists()
 
-    source_hash = compute_source_hash(fragments)
-    prompt_hash = effective_prompt_sha256(load_effective_prompt(repo_root))
-
-    clarifications_path = repo_root / SPAEX_DIRNAME / CLARIFICATIONS_FILENAME
-    store = load(clarifications_path)
-    current_hashes = {f.scoped_id: f.body_hash for f in fragments}
-    store, _removed_keys = invalidate(store, current_hashes)
-
-    build_input_hash = compute_build_input_hash(
-        effective_prompt_sha256=prompt_hash,
-        composer_prompt_version=COMPOSER_PROMPT_VERSION,
-        valid_clarifications=store.entries.values(),
+    assessment = assess(
+        fragments, repo_root=repo_root, spaex_dir=repo_root / SPAEX_DIRNAME
     )
-
-    existing = read_header_hashes(repo_root)
-    return existing != (source_hash, build_input_hash)
+    existing = path.read_text(encoding="utf-8") if path.exists() else None
+    return diagnose(assessment, existing) != "current"

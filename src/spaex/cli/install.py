@@ -23,7 +23,6 @@ from spaex.behavior import orchestrate as behavior_orchestrate
 from spaex.behavior.composer.invoke import COMPOSER_LOG_ENV, DEFAULT_COMPOSER_LOG
 from spaex.behavior.fragment import BehaviorFragment
 from spaex.behavior.materialize import project_local_from_config
-from spaex.behavior.stale import STALE_FILENAME, StaleMarker, read_stale
 from spaex.constitution.publish import (
     CONSTITUTION_PATH,
     publish_constitution,
@@ -223,18 +222,6 @@ def run(
     repo_root = Path(args.repo_root).resolve()
     state_root = default_state_root()
     skip_hooks = bool(getattr(args, "skip_hooks", False))
-    abort_on_contradiction = bool(
-        getattr(args, "abort_on_behavior_contradiction", True)
-    )
-    # T054/FR-010a: a real `spaex install` invocation (never an internal
-    # add/remove-triggered one, which runs with abort_on_contradiction=False)
-    # announces a pending FR-024a stale marker before the behavior pipeline
-    # re-invokes the Composer and routes it through the reconciliation
-    # prompt.
-    if abort_on_contradiction:
-        stale_marker = read_stale(repo_root / ".spaex" / STALE_FILENAME)
-        if stale_marker is not None:
-            _announce_stale_contradiction(stale_marker)
     timeout_seconds = getattr(args, "lock_timeout", DEFAULT_LOCK_TIMEOUT_SECONDS)
     if timeout_seconds is None:
         timeout_seconds = DEFAULT_LOCK_TIMEOUT_SECONDS
@@ -354,7 +341,6 @@ def run(
                         state_root=state_root,
                         resolved=resolved,
                         project_local=project_local,
-                        abort_on_contradiction=abort_on_contradiction,
                         local_plan=local_plan,
                     )
                     local_scope.reconcile_exclusions(repo_root)
@@ -362,7 +348,6 @@ def run(
                 generation_context = _preserve_generation_for_behavior(
                     repo_root, resolved, project_local, local_active=local_plan.active
                 )
-                stale_bytes_to_restore: bytes | None = None
                 with generation_context:
                     if project_no_op:
                         pass
@@ -399,25 +384,12 @@ def run(
                             f"installed empty generation {new_generation_id}\n"
                         )
                     _publish_local_scope(repo_root, local_plan, state_root=state_root)
-                    outcome = _run_behavior_pipeline(
+                    _run_behavior_pipeline(
                         repo_root=repo_root,
                         state_root=state_root,
                         resolved=resolved,
                         project_local=project_local,
-                        abort_on_contradiction=abort_on_contradiction,
                         local_plan=local_plan,
-                    )
-                    if (
-                        not abort_on_contradiction
-                        and _behavior_publication_deferred(outcome, resolved, project_local)
-                    ):
-                        stale_bytes_to_restore = _read_stale_bytes(repo_root)
-                        rollback = getattr(generation_context, "rollback", None)
-                        if rollback is not None:
-                            rollback()
-                if stale_bytes_to_restore is not None:
-                    (repo_root / ".spaex" / STALE_FILENAME).write_bytes(
-                        stale_bytes_to_restore
                     )
                 local_scope.reconcile_exclusions(repo_root)
                 return exit_codes.SUCCESS
@@ -548,7 +520,6 @@ def run(
                     state_root=state_root,
                     resolved=resolved,
                     project_local=project_local,
-                    abort_on_contradiction=abort_on_contradiction,
                     local_plan=local_plan,
                 )
                 local_scope.reconcile_exclusions(repo_root)
@@ -557,7 +528,6 @@ def run(
             generation_context = _preserve_generation_for_behavior(
                 repo_root, resolved, project_local, local_active=local_plan.active
             )
-            stale_bytes_to_restore = None
             with generation_context:
                 if project_no_op:
                     pass
@@ -590,25 +560,12 @@ def run(
                     new_generation_id = _live_generation_id(repo_root)
                     sys.stdout.write(f"installed generation {new_generation_id}\n")
                 _publish_local_scope(repo_root, local_plan, state_root=state_root)
-                outcome = _run_behavior_pipeline(
+                _run_behavior_pipeline(
                     repo_root=repo_root,
                     state_root=state_root,
                     resolved=resolved,
                     project_local=project_local,
-                    abort_on_contradiction=abort_on_contradiction,
                     local_plan=local_plan,
-                )
-                if (
-                    not abort_on_contradiction
-                    and _behavior_publication_deferred(outcome, resolved, project_local)
-                ):
-                    stale_bytes_to_restore = _read_stale_bytes(repo_root)
-                    rollback = getattr(generation_context, "rollback", None)
-                    if rollback is not None:
-                        rollback()
-            if stale_bytes_to_restore is not None:
-                (repo_root / ".spaex" / STALE_FILENAME).write_bytes(
-                    stale_bytes_to_restore
                 )
             local_scope.reconcile_exclusions(repo_root)
             return exit_codes.SUCCESS
@@ -811,7 +768,7 @@ def _preserved_behavior_files(repo_root: Path) -> tuple[transaction.StagedFile, 
     The behavior pipeline owns these files, but the install transaction also
     swaps the complete ``.spaex/`` directory while updating ``install.lock``.
     Preserve the current behavior tree so a lock-only update cannot erase the
-    composed artifact, prompt override, clarifications, or stale marker before
+    composed artifact, prompt overrides, or decisions before
     orchestration gets a chance to reconcile them.
     """
     live_root = repo_root / transaction.SPAEX_DIR
@@ -820,9 +777,9 @@ def _preserved_behavior_files(repo_root: Path) -> tuple[transaction.StagedFile, 
 
     preserved_names = {
         transaction.CONSTITUTION_NAME,
-        "clarifications.json",
+        "decisions.json",
         "composer-prompt.md",
-        ".stale",
+        "check-prompt.md",
     }
     preserved: list[transaction.StagedFile] = []
     for path in live_root.rglob("*"):
@@ -919,79 +876,42 @@ def _run_hooks(
     return statuses
 
 
-def _announce_stale_contradiction(marker: StaleMarker) -> None:
-    """T054/FR-010a: surface a pending FR-024a stale marker at install start.
-
-    The behavior pipeline below always re-invokes the Composer in this case
-    (the fragment set changed since the marker was written, so the
-    reproducibility fast-path in `orchestrate.run` cannot match), routing the
-    same contradiction through the interactive reconciliation prompt (or an
-    immediate refusal on a non-interactive terminal) before the composed
-    Constitution is
-    rewritten.
-    """
-    sys.stdout.write(
-        "NOTE: a previous `spaex add`/`spaex remove` left the composed "
-        f"constitution stale, unresolved (recorded {marker.detected_at}); "
-        "re-running the Composer now to reconcile it:\n"
-    )
-    for question in marker.questions:
-        provenance = ", ".join(
-            f"{cited.get('molecule_id')}/{cited.get('fragment_id')}"
-            for cited in question.cited_fragments
-        )
-        sys.stdout.write(f"  [{question.kind}] {question.question} ({provenance})\n")
-    sys.stdout.flush()
-
-
 def _run_behavior_pipeline(
     *,
     repo_root: Path,
     state_root: Path,
     resolved: list[ResolvedMolecule],
     project_local: Sequence[BehaviorFragment] = (),
-    abort_on_contradiction: bool = True,
     local_plan: local_scope.LocalPlan | None = None,
 ) -> behavior_orchestrate.BehaviorOutcome:
-    """Spec 023 behavior-harness pass.
+    """Behavior-harness pass (Spec 023, reworked by Spec 030).
 
     Runs after the Spec 008 `.spaex/` rename-swap so behavior-authored
-    files (`.spaex/constitution.d/`, `.spaex/constitution.md`, `.spaex/clarifications.json`)
-    survive the swap. Fast-path exits when no molecule declares behavior
-    fragments and no project-local fragment is configured (plan.md
-    behavior-harness contract). Composer + emit failures surface as typed
-    HaexError with exit codes 20-22 / 30-34.
-
-    `abort_on_contradiction=False` (set only by the internal install that
-    `spaex add`/`spaex remove` trigger via `write_and_reinstall`) requests
-    the FR-024a add-time plausibility check: a Composer Shape B response
-    prints a WARN and writes `.spaex/.stale` instead of aborting.
+    files (`.spaex/constitution.d/`, `.spaex/constitution.md`,
+    `.spaex/decisions.json`) survive the swap. Fast-path exits when no
+    molecule declares behavior fragments and no project-local fragment is
+    configured. Check and render failures surface as typed HaexError with
+    exit codes 20-22 / 30-34; a finding nobody can answer is exit 21.
     """
     outcome = behavior_orchestrate.run(
         repo_root=repo_root,
         state_root=state_root,
         resolved=resolved,
         project_local=project_local,
-        abort_on_contradiction=abort_on_contradiction,
     )
-    if outcome.published and not outcome.skipped_composer:
+    if outcome.published and not outcome.skipped_check:
         sys.stdout.write(
-            f"composed .spaex/constitution.md ({outcome.fragment_count} fragment(s))\n"
+            f"composed .spaex/constitution.md ({outcome.fragment_count} fragment(s), "
+            f"{outcome.decision_count} decision(s))\n"
         )
-    elif outcome.skipped_composer:
+    elif outcome.skipped_check:
         sys.stdout.write(
             f"reused .spaex/constitution.md ({outcome.fragment_count} fragment(s), "
-            "source_hash/build_input_hash unchanged)\n"
+            "fragments and decisions unchanged, no check needed)\n"
         )
     elif outcome.removed_constitution:
         sys.stdout.write("removed .spaex/constitution.md (no active fragments)\n")
-    elif outcome.stale:
-        sys.stdout.write(
-            f"add-time plausibility check found a cross-molecule "
-            f"contradiction ({outcome.fragment_count} fragment(s)); "
-            ".spaex/constitution.md left unchanged, marked stale (see .spaex/.stale)\n"
-        )
-    if outcome.published or outcome.skipped_composer:
+    if outcome.published:
         # T036: nudge the operator to run `spaex install --global` when no
         # runtime has the bootstrap block yet, so `.spaex/constitution.md` gets picked up.
         from spaex.cli import behavior_commands  # local import to avoid cycles
@@ -1002,31 +922,8 @@ def _run_behavior_pipeline(
             repo_root=repo_root,
             state_root=state_root,
             local_plan=local_plan,
-            abort_on_contradiction=abort_on_contradiction,
         )
     return outcome
-
-
-def _behavior_publication_deferred(
-    outcome: behavior_orchestrate.BehaviorOutcome,
-    resolved: Sequence[ResolvedMolecule],
-    project_local: Sequence[BehaviorFragment],
-) -> bool:
-    """Return whether an internal add/remove must retain the old generation."""
-    if not project_local and not _has_behavior_fragments(resolved):
-        return False
-    return not (
-        outcome.published or outcome.skipped_composer or outcome.removed_constitution
-    )
-
-
-def _read_stale_bytes(repo_root: Path) -> bytes | None:
-    """Snapshot the add-time stale marker before rolling back the generation."""
-    path = repo_root / transaction.SPAEX_DIR / STALE_FILENAME
-    try:
-        return path.read_bytes() if path.exists() else None
-    except OSError:
-        return None
 
 
 def _hook_only_records(

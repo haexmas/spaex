@@ -10,8 +10,10 @@ Interface: contracts/check-interface.md.
 from __future__ import annotations
 
 import json
+from collections import defaultdict
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +25,7 @@ from spaex.behavior.composer.invoke import (
     invoke_raw,
     parse_envelope,
     resolve_composer_log_path,
+    resolve_runtime_name,
 )
 from spaex.behavior.composer.prompt import CHECK_PROMPT_VERSION, load_effective_check_prompt
 from spaex.behavior.fragment import BehaviorFragment
@@ -37,6 +40,11 @@ from spaex.behavior.passages import (
 from spaex.util.errors import HaexError
 
 SPAEX_VERSION = "5"
+
+#: Serialized-size ceiling of one check call. The old composer needed ~20KB
+#: calls because it had to write the whole document back; the check answers
+#: with a few findings, so its input can be far larger (spec 030, research R6).
+DEFAULT_MAX_BYTES = 150_000
 KINDS = ("contradiction", "duplicate")
 
 
@@ -67,15 +75,15 @@ class CheckInput:
                 {
                     "id": fragment.scoped_id,
                     "modality": fragment.modality.value if fragment.modality else None,
-                    "lines": [
-                        {"n": number, "text": text}
+                    "body": "\n".join(
+                        f"{number}: {text}"
                         for number, text in enumerate(canonical_lines(fragment.body), start=1)
-                    ],
+                    ),
                 }
                 for fragment in sorted(self.fragments, key=lambda f: f.scoped_id)
             ],
         }
-        return json.dumps(payload, sort_keys=True, ensure_ascii=False, indent=2)
+        return json.dumps(payload, sort_keys=True, ensure_ascii=False)
 
 
 def _invalid(message: str) -> HaexError:
@@ -201,9 +209,88 @@ def run_check(
     return findings
 
 
+def check_fragments(
+    fragments: Sequence[BehaviorFragment],
+    *,
+    repo_root: Path,
+    options: InvokeOptions | None = None,
+    max_bytes: int = DEFAULT_MAX_BYTES,
+    max_workers: int = 4,
+) -> tuple[Finding, ...]:
+    """Check all fragments: one call, or every group and every pair of groups.
+
+    A set that fits `max_bytes` is one call. A larger set is split by molecule
+    into groups of at most half the ceiling; every group and every pair of
+    groups is checked, so a conflict between any two molecules is seen by some
+    call. One runtime is chosen once and used for every call (spec 026 FR-011).
+    Findings are merged by key and sorted by first passage.
+    """
+    options = options or InvokeOptions()
+    ordered = tuple(sorted(fragments, key=lambda f: f.scoped_id))
+    if len(CheckInput(fragments=ordered).to_json().encode("utf-8")) <= max_bytes:
+        return run_check(CheckInput(fragments=ordered), repo_root=repo_root, options=options)
+
+    groups = _group_by_molecule(ordered, max_bytes // 2)
+    runtime = resolve_runtime_name(options)
+    pinned = replace(options, resolved_runtime_name=runtime)
+    jobs: list[tuple[str, tuple[BehaviorFragment, ...]]] = [
+        (f"check-g{i + 1}", group) for i, group in enumerate(groups)
+    ]
+    jobs += [
+        (f"check-g{i + 1}-g{j + 1}", groups[i] + groups[j])
+        for i in range(len(groups))
+        for j in range(i + 1, len(groups))
+    ]
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [
+            executor.submit(
+                run_check,
+                CheckInput(fragments=group),
+                repo_root=repo_root,
+                options=pinned,
+                step=step,
+            )
+            for step, group in jobs
+        ]
+        results = [future.result() for future in futures]
+    merged: dict[str, Finding] = {}
+    for found in results:
+        for finding in found:
+            merged.setdefault(finding.key, finding)
+    return tuple(
+        sorted(
+            merged.values(),
+            key=lambda f: (f.passages[0].scoped_id, f.passages[0].start, f.key),
+        )
+    )
+
+
+def _group_by_molecule(
+    fragments: Sequence[BehaviorFragment], budget: int
+) -> list[tuple[BehaviorFragment, ...]]:
+    by_molecule: dict[str, list[BehaviorFragment]] = defaultdict(list)
+    for fragment in fragments:
+        by_molecule[fragment.molecule_id].append(fragment)
+    groups: list[tuple[BehaviorFragment, ...]] = []
+    current: list[BehaviorFragment] = []
+    for molecule_id in sorted(by_molecule):
+        candidate = current + by_molecule[molecule_id]
+        size = len(CheckInput(fragments=tuple(candidate)).to_json().encode("utf-8"))
+        if current and size > budget:
+            groups.append(tuple(current))
+            current = list(by_molecule[molecule_id])
+        else:
+            current = candidate
+    if current:
+        groups.append(tuple(current))
+    return groups
+
+
 __all__ = [
+    "DEFAULT_MAX_BYTES",
     "CheckInput",
     "Finding",
+    "check_fragments",
     "parse_check_result",
     "run_check",
 ]
