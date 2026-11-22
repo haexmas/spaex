@@ -252,6 +252,55 @@ def resolve_runtime_name(options: InvokeOptions | None = None) -> str:
     raise AssertionError("raise_for did not raise")  # unreachable; makes mypy happy
 
 
+def invoke_raw(
+    *,
+    prompt_text: str,
+    payload_json: str,
+    repo_root: Path,
+    options: InvokeOptions | None = None,
+    step: str = "single",
+    invocation: int = 1,
+    phase: str = "initial",
+) -> tuple[str, RuntimeDescriptor]:
+    """Runtime resolution and one call, without parsing the answer.
+
+    Shared by `invoke_step` (compose and merge prompts) and the check of
+    Spec 030, which parses its own envelope. Raises the category-specific
+    `HaexError` for runtime failures, with the failing `step` in its context.
+
+    Runtime selection (`resolve_runtime_name`, research.md §2, 4.2.0
+    CLI-only variant): `options.stub_caller` when set, otherwise the first
+    of `_CLI_RUNTIMES`/`options.forced_cli_runtimes` found on PATH; a
+    `no-runtime` failure (exit 34) when none is.
+    """
+    options = options or InvokeOptions()
+    try:
+        timeout = _resolve_timeout(options)
+        log_path = resolve_composer_log_path(options, repo_root)
+        name = resolve_runtime_name(options)
+
+        if options.stub_caller is not None:
+            raw = _call_stub(options.stub_caller, name, prompt_text, payload_json, timeout)
+            return raw, RuntimeDescriptor(kind="stub", identifier=name)
+
+        raw = _call_cli(
+            name,
+            prompt_text,
+            payload_json,
+            timeout,
+            log_path=log_path,
+            step=step,
+            invocation=invocation,
+            phase=phase,
+        )
+        return raw, RuntimeDescriptor(kind="cli", identifier=name)
+    except HaexError as exc:
+        # Multi-step failures must identify the invocation that failed. Keep
+        # the category-specific diagnostic and add only non-sensitive context.
+        exc.context.setdefault("step", step)
+        raise
+
+
 def invoke_step(
     *,
     prompt_text: str,
@@ -270,53 +319,29 @@ def invoke_step(
     shape (`MergeNodeInput`, not `ComposerInput`) but the exact same runtime
     resolution, stub-caller test seam, and log lifecycle (Spec 026
     research.md §1, §5).
-
-    Runtime selection (`resolve_runtime_name`, research.md §2, 4.2.0
-    CLI-only variant): `options.stub_caller` when set, otherwise the first
-    of `_CLI_RUNTIMES`/`options.forced_cli_runtimes` found on PATH; a
-    `no-runtime` failure (exit 34) when none is.
     """
     options = options or InvokeOptions()
-
     try:
-        timeout = _resolve_timeout(options)
-        log_path = resolve_composer_log_path(options, repo_root)
-        name = resolve_runtime_name(options)
-
-        if options.stub_caller is not None:
-            raw = _call_stub(options.stub_caller, name, prompt_text, payload_json, timeout)
-            result = _parse_and_log(
-                raw, log_path=log_path, step=step, invocation=invocation, phase=phase
-            )
-            return InvokeOutcome(
-                result=result,
-                runtime=RuntimeDescriptor(kind="stub", identifier=name),
-                raw_output=raw,
-            )
-
-        raw = _call_cli(
-            name,
-            prompt_text,
-            payload_json,
-            timeout,
-            log_path=log_path,
+        raw, runtime = invoke_raw(
+            prompt_text=prompt_text,
+            payload_json=payload_json,
+            repo_root=repo_root,
+            options=options,
             step=step,
             invocation=invocation,
             phase=phase,
         )
         result = _parse_and_log(
-            raw, log_path=log_path, step=step, invocation=invocation, phase=phase
-        )
-        return InvokeOutcome(
-            result=result,
-            runtime=RuntimeDescriptor(kind="cli", identifier=name),
-            raw_output=raw,
+            raw,
+            log_path=resolve_composer_log_path(options, repo_root),
+            step=step,
+            invocation=invocation,
+            phase=phase,
         )
     except HaexError as exc:
-        # Multi-step failures must identify the invocation that failed. Keep
-        # the category-specific diagnostic and add only non-sensitive context.
         exc.context.setdefault("step", step)
         raise
+    return InvokeOutcome(result=result, runtime=runtime, raw_output=raw)
 
 
 def _resolve_timeout(options: InvokeOptions) -> float:
@@ -537,8 +562,12 @@ def _parse_and_log(
     return result
 
 
-def _parse(raw: str) -> ComposerResult:
-    """Parse a Composer response into Shape A or Shape B."""
+def parse_envelope(raw: str) -> tuple[dict[str, Any], str]:
+    """Split a runtime answer into its sentinel JSON object and what follows it.
+
+    Raises `invalid-output` when the sentinel block is missing or is not a JSON
+    object. Used by the compose parser and by the check of Spec 030.
+    """
     match = _SENTINEL_RE.search(raw)
     if match is None:
         raise_for(
@@ -560,10 +589,16 @@ def _parse(raw: str) -> ComposerResult:
             f"Composer sentinel JSON must be an object; got {type(envelope).__name__}",
         )
         raise AssertionError("unreachable")
+    return envelope, raw[match.end():]
+
+
+def _parse(raw: str) -> ComposerResult:
+    """Parse a Composer response into Shape A or Shape B."""
+    envelope, rest = parse_envelope(raw)
 
     shape_kind = envelope.get("type")
     if shape_kind == "composed":
-        body = raw[match.end():].lstrip("\n\r ")
+        body = rest.lstrip("\n\r ")
         if not body:
             raise_for(
                 ComposerFailureCategory.INVALID_OUTPUT,
@@ -756,7 +791,9 @@ __all__ = [
     "RuntimeDescriptor",
     "append_composer_log_entry",
     "invoke_composer",
+    "invoke_raw",
     "invoke_step",
+    "parse_envelope",
     "resolve_composer_log_path",
     "resolve_runtime_name",
     "truncate_composer_log",

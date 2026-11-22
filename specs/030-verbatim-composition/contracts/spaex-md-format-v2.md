@@ -41,7 +41,7 @@ A passage the operator did not keep stays at its place, replaced by one comment:
 ```
 
 - `kept` names the passage that was kept (several, comma-separated, if more than two passages were involved and one was kept).
-- The comment ends at the first line that is exactly `-->`. A `-->` that occurs inside the excluded text is written as `--&gt;`; this is the only change to text, and only inside an exclusion.
+- The comment ends at the first line that is exactly `-->`. A line of the excluded text that is exactly `-->` is written as `--&gt;`; this is the only change to text, and only inside an exclusion.
 - Overlapping exclusions are merged into one comment.
 
 ## Empty set
