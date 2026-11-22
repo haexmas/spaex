@@ -177,7 +177,10 @@ def run(
                     message=f"saved operator decisions conflict: {exc}",
                     diagnostic_key="behavior-clarification-required",
                     exit_code=exit_codes.BEHAVIOR_SEMANTIC_REFUSE,
-                    hint="Edit `.spaex/decisions.json` to resolve the conflict, then rerun `spaex install`.",
+                    hint=(
+                        "Edit `.spaex/decisions.json` to resolve the conflict, "
+                        "then rerun `spaex install`."
+                    ),
                 ) from exc
             raise_for(
                 ComposerFailureCategory.INVALID_OUTPUT,
