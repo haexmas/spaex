@@ -1,6 +1,6 @@
 # ADR 0025: Merge ceiling as a sanity backstop, not a reliability tuning value
 
-**Status**: Accepted
+**Status**: Superseded by ADR 0028
 **Date**: 2026-09-17
 **Related**: ADR 0022 (map-reduce Composer composition); ADR 0024 (independent
 merge ceiling, corrected by this ADR); Spec 026

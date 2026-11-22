@@ -1,6 +1,6 @@
 # ADR 0024: Independent merge ceiling for map-reduce composition
 
-**Status**: Accepted
+**Status**: Superseded by ADR 0028
 **Date**: 2026-09-17
 **Related**: ADR 0022 (map-reduce Composer composition); Spec 026
 
