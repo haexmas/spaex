@@ -8,7 +8,7 @@ Each entry gives the decision, why, and what was rejected. Numbers are reference
 
 ```text
 <!-- spaex-fragment id="<molecule>/<fragment>" modality="MUST" -->   (modality only if declared)
-<body, byte for byte>
+<body: CRLF and CR to LF, nothing else changed>
 <!-- /spaex-fragment -->
 ```
 
@@ -20,7 +20,7 @@ One blank line separates blocks. No modality sections.
 
 ## R2 — Verification by parsing back
 
-**Decision**: `render.verify(fragments, decisions, text)` parses the document, removes the exclusion comments' wrapping, and compares each reconstructed body with the fragment body byte for byte. It also checks that every exclusion corresponds to a decision and that no other text differs.
+**Decision**: `render.verify(fragments, decisions, text)` parses the document, removes the exclusion comments' wrapping, and compares each reconstructed body with the fragment body after CRLF and CR have been canonicalized to LF (nothing else: trailing whitespace and trailing newlines are compared as they are). It also checks that every exclusion corresponds to a decision and that no other text differs.
 
 **Why**: FR-014 asks for a check that cannot be satisfied by a citation-like note. Verifying against the source, not against the renderer's own output, catches a renderer bug.
 
@@ -44,7 +44,7 @@ One blank line separates blocks. No modality sections.
 
 ## R5 — When the model runs
 
-**Decision**: `decisions.json` records `checked: {source_hash, prompt_hash}` after a completed check. Install calls the model only when the current fragments' `source_hash` or the check prompt hash differs from `checked`. A finding is skipped when a valid decision exists for the same set of passage texts.
+**Decision**: `decisions.json` records `checked: {source_hash, prompt_hash}` after a completed check. The header of the composed file carries no prompt or check data (FR-003). Install calls the model only when the current fragments' `source_hash` or the check prompt hash differs from `checked`. A finding is skipped when a valid decision exists for the same set of passage texts.
 
 **Why**: SC-002 and SC-006: a deleted composed file regenerates without a model call because the checked state lives in `decisions.json`, not in the composed file's header.
 

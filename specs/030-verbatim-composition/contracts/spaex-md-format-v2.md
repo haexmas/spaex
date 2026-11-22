@@ -13,7 +13,7 @@ _Change fragments in `.spaex/constitution.d/` and re-run install. Text inside a 
 ```
 
 - `source_hash`: unchanged from spec 023 (canonical records of all fragments).
-- `build_input_hash`: sha256 of the check prompt version, the effective check prompt hash and the valid decisions (key and choice, sorted by key).
+- `build_input_hash`: sha256 of the format version and the valid decisions (key and choice, sorted by key). It contains no prompt or check data; the check state lives only in `decisions.json`.
 - Spec 029 preamble, when present, follows the notices as today.
 
 ## Fragment blocks
@@ -27,7 +27,7 @@ Blocks follow in the order of their scoped id (the order `composer/invoke.py` al
 ```
 
 - `modality` appears only when the fragment declares one.
-- The body is the fragment body after the normalization spec 023 applies for hashing (line endings LF, no trailing blank lines). Nothing else is changed.
+- The body is the fragment body with CRLF and CR canonicalized to LF. Trailing whitespace and the number of trailing newlines are preserved; the whitespace normalization spec 023 applies for hashing is **not** used. Separators are added outside the body.
 - The `<!-- spaex-` prefix cannot occur inside a body (spec 023 rejects it), so block boundaries are unambiguous.
 
 ## Excluded passages
