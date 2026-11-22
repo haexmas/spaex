@@ -12,7 +12,7 @@
 
 ### Session 2026-11-22
 
-- Q: How are contradictions and duplicates handled when the text may not be rewritten and the sources cannot be changed for each consumer? → A: Both are reported to the operator, who always decides. The passage that is not kept is commented out in the composed constitution (its text stays inside the comment, unchanged). Nothing is resolved automatically and nothing is only warned about; a constitution with open findings is not written.
+- Q: How are contradictions and duplicates handled when the text may not be rewritten and the sources cannot be changed for each consumer? → A: Both are reported to the operator, who always decides. The passage that is not kept is commented out in the composed constitution; its text stays unchanged except that a `-->` line is escaped as `--&gt;` so it cannot terminate the comment. Nothing is resolved automatically and nothing is only warned about; a constitution with open findings is not written.
 - Q: Are duplicates only a warning? → A: No. Duplicates are findings like contradictions, with the same question and the same way to apply the decision, because the composed constitution must be free of both.
 - Q: Must the operator's decision be reproducible? → A: Yes. Decisions are persisted, are tied to the exact text of the passages, and make the composed constitution a pure function of fragments and decisions.
 
@@ -74,7 +74,7 @@ Sources come from different authors. Two fragments contradict each other, or say
 
 1. **Given** two contradictory passages and no decision, **When** install runs interactively, **Then** the operator is shown both passages with their fragment and lines and chooses: keep the first, keep the second, or keep both.
 2. **Given** two duplicate passages, **When** install runs, **Then** the same question is asked and answered in the same way.
-3. **Given** the operator keeps one passage, **When** the constitution is written, **Then** the other passage is commented out, its text unchanged inside the comment, marked as excluded and naming the passage that was kept; all other text is unchanged.
+3. **Given** the operator keeps one passage, **When** the constitution is written, **Then** the other passage is commented out, its text unchanged inside the comment except that any `-->` line is escaped as `--&gt;`, marked as excluded and naming the passage that was kept; all other text is unchanged.
 4. **Given** the operator keeps both, **When** the constitution is written, **Then** nothing is commented out and the decision is recorded so the finding is not asked again.
 5. **Given** a finding and no operator available (not interactive), **When** install runs, **Then** it stops with the documented non-zero exit, names the finding, and changes no tracked file.
 6. **Given** a persisted decision and unchanged passages, **When** install runs, **Then** the finding is not asked again and the output is byte-identical.
@@ -139,12 +139,12 @@ An operator with a repo composed under the old format runs `spaex install` with 
 - **FR-006**: The check MUST be the only use of a language model in composition. Its result MUST be a list of findings, each naming at least two passages of different fragments, or nothing; it MUST NOT be able to change, add or remove constitution text.
 - **FR-007**: spaex MUST verify every passage a finding names (fragment exists, line range lies inside the body) and MUST reject a finding that names an unverifiable passage.
 - **FR-008**: Every finding, contradiction or duplicate, MUST be put to the operator; spaex MUST NOT resolve a finding on its own, and MUST NOT write a composed constitution while a finding has no decision. When no operator can answer, install MUST stop with a documented non-zero exit naming the finding.
-- **FR-009**: For each finding the operator MUST be able to choose which passage to keep (the others are excluded) or to keep all. An excluded passage MUST stay in the composed constitution as a comment that contains its text unchanged, states that it is excluded and names the kept passage.
+- **FR-009**: For each finding the operator MUST be able to choose which passage to keep (the others are excluded) or to keep all. An excluded passage MUST stay in the composed constitution as a comment that contains its text unchanged, states that it is excluded and names the kept passage. To keep the comment well-formed, a line exactly equal to `-->` MUST be represented as `--&gt;`; this is the only permitted text change inside an exclusion.
 - **FR-010**: Decisions MUST be persisted, MUST be tied to the exact text of the passages they concern, and MUST be asked again only when a concerned passage changed or no longer exists.
 - **FR-011**: A decision to keep all MUST be recorded and respected like any other, so the same finding is not asked again.
 - **FR-012**: When the check cannot run or its output stays unusable, `spaex install` MUST fail without changing any tracked file (spec 023 FR-006); it MUST NOT write a constitution that was not checked.
 - **FR-013**: The composed constitution MUST carry format version 2 in its header; a file with another version MUST be treated as out of date and rewritten by `spaex install`. Answers persisted by version 1 MUST NOT be reused as decisions.
-- **FR-014**: A mechanical completeness check MUST confirm after composing that every passage that is not excluded is present verbatim, and every excluded passage is present verbatim inside its exclusion comment; `spaex install` MUST fail without writing any tracked file if not (replaces the citation-based check).
+- **FR-014**: A mechanical completeness check MUST confirm after composing that every passage that is not excluded is present verbatim, and every excluded passage is present inside its exclusion comment with only the `-->` to `--&gt;` escaping permitted by FR-009; `spaex install` MUST fail without writing any tracked file if not (replaces the citation-based check).
 - **FR-015**: `spaex constitution trace` MUST resolve a fragment id, a molecule id or a phrase from a fragment to the scoped ids and the line range in the composed file, and MUST mark excluded passages.
 - **FR-016**: `spaex status` MUST report the constitution summary per fragment and molecule, with the number of decisions and excluded passages, and MUST NOT report modality counts derived from clauses.
 - **FR-017**: The local constitution document of spec 029 MUST be composed by the same rules and MUST NOT change the project document.
@@ -167,7 +167,7 @@ An operator with a repo composed under the old format runs `spaex install` with 
 - **SC-001**: For the haex-vault fragment set (13 fragments, about 930 lines), 100% of the lines of every fragment appear in the composed constitution, in the open or inside an exclusion comment; today's compositions keep 10 to 12 of the 32 rules of the largest fragment.
 - **SC-002**: Three consecutive installs on unchanged fragments and decisions produce byte-identical composed files, and runs after the first make 0 language-model calls.
 - **SC-003**: After changing one fragment, the diff of the composed constitution is limited to that fragment's block, derived fingerprint metadata in the header, and the exclusion comments of decisions that concern it.
-- **SC-004**: A seeded contradictory pair and a seeded duplicate pair are reported as questions in 100% of 5 independent, uncached checks, each shows both passages, and in 100% of cases the passage not kept is commented out with its text unchanged.
+- **SC-004**: A seeded contradictory pair and a seeded duplicate pair are reported as questions in 100% of 5 independent, uncached checks, each shows both passages, and in 100% of cases the passage not kept is commented out with its text unchanged except for the `-->` escaping required to keep the comment well-formed.
 - **SC-005**: With the check made unavailable, install fails in under 60 seconds with a message naming the cause and changes 0 tracked files.
 - **SC-006**: Deleting the composed constitution and running install reproduces it byte-identical without a language-model call.
 - **SC-007**: A repo with a version 1 file reaches version 2 with one `spaex install` (plus the questions of its findings), and a second install changes nothing.

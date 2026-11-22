@@ -16,7 +16,7 @@ Spec 026 made the call reliable at scale (batches, merge, ceilings) but kept the
 
 ## Decision
 
-spaex writes the text. `.spaex/constitution.md` (format version 2) holds every fragment body byte for byte in scoped-id order. The model runs one check that returns findings (contradictions or duplicates, as fragment and line range) or nothing, and can never change text. spaex verifies the named passages and asks the operator about every finding. The answer is a persisted decision, bound to the exact passage text, and is applied by commenting out the passage that is not kept; the commented text stays unchanged. The output is a pure function of fragments and decisions.
+spaex writes the text. `.spaex/constitution.md` (format version 2) holds every fragment body byte for byte in scoped-id order. The model runs one check that returns findings (contradictions or duplicates, as fragment and line range) or nothing, and can never change text. spaex verifies the named passages and asks the operator about every finding. The answer is a persisted decision, bound to the exact passage text, and is applied by commenting out the passage that is not kept; the commented text stays unchanged except that a line exactly equal to `-->` is escaped as `--&gt;` so it cannot terminate the comment. The output is a pure function of fragments and decisions.
 
 ## Consequences
 
