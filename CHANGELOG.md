@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.4.7](https://github.com/haexmas/spaex/compare/v5.4.6...v5.4.7) (2026-11-22)
+
+
+### Documentation
+
+* **spec-030:** ADR 0028 and supersede the composer ADRs ([f518af1](https://github.com/haexmas/spaex/commit/f518af173d9be883caebc5ecf57c1a4f70c14f1d))
+* **spec-030:** clarify escaped exclusions ([4fa097a](https://github.com/haexmas/spaex/commit/4fa097acd54c096951220f0fb0fbdc29398c9069))
+* **spec-030:** findings are always put to the operator and applied by commenting out ([75b8ccb](https://github.com/haexmas/spaex/commit/75b8ccb94a5a627178ae20428cc38b7970572eec))
+* **spec-030:** keep the review wording on line endings and header metadata ([61fa929](https://github.com/haexmas/spaex/commit/61fa929f64456bef9435a27c3d2c8ad7c34ed1ae))
+* **spec-030:** mark the superseded contracts ([154d902](https://github.com/haexmas/spaex/commit/154d902bf1ea92d9909547f658f4c71aeae7436b))
+* **spec-030:** plan, research, data model, contracts and tasks ([df38f9b](https://github.com/haexmas/spaex/commit/df38f9b19ed939cba2a77ccf83bb504a2401f434))
+
 ## [5.4.6](https://github.com/haexmas/spaex/compare/v5.4.5...v5.4.6) (2026-11-22)
 
 
