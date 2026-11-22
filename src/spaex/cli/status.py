@@ -7,7 +7,6 @@ import json
 import sys
 from pathlib import Path
 
-from spaex.behavior.clauses import MODALITY_ORDER
 from spaex.report.compose import (
     CompositionReport,
     ConstitutionSummary,
@@ -75,7 +74,10 @@ def _render_constitution_summary(
         return None
     return {
         "exists": summary.exists,
-        "clause_counts": dict(summary.clause_counts),
+        "fragment_count": summary.fragment_count,
+        "fragments_by_molecule": dict(summary.fragments_by_molecule),
+        "decision_count": summary.decision_count,
+        "excluded_passage_count": summary.excluded_passage_count,
         "contributing_molecules": list(summary.contributing_molecules),
         "project_local_fragment_ids": list(summary.project_local_fragment_ids),
         "stale": summary.stale,
@@ -153,18 +155,17 @@ def _render_constitution_text(summary: object) -> list[str]:
     if summary is None:
         return ["Constitution: none"]
     assert isinstance(summary, dict)
-    clause_counts = summary["clause_counts"]
-    total = sum(clause_counts.values())
     breakdown = ", ".join(
-        f"{modality}: {clause_counts[modality]}"
-        for modality in MODALITY_ORDER
-        if modality in clause_counts
+        f"{molecule}: {count}"
+        for molecule, count in sorted(summary["fragments_by_molecule"].items())
     )
     contributing = ", ".join(summary["contributing_molecules"]) or "none"
     project_local = ", ".join(summary["project_local_fragment_ids"]) or "none"
     status = "stale" if summary["stale"] else "current"
     return [
-        f"Constitution: {total} clauses ({breakdown})",
+        f"Constitution: {summary['fragment_count']} fragments ({breakdown})",
+        f"  decisions: {summary['decision_count']}, "
+        f"excluded passages: {summary['excluded_passage_count']}",
         f"  contributing molecules: {contributing}",
         f"  project-local fragments: {project_local}",
         f"  status: {status}",

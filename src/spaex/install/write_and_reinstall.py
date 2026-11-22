@@ -45,7 +45,6 @@ def write_and_reinstall(
     skip_hooks: bool = False,
     speckit_agents: str | None = None,
     no_speckit_integrations: bool = False,
-    abort_on_behavior_contradiction: bool = True,
     target: Path | None = None,
 ) -> int:
     """Publish the mutated manifest and delegate to ``haex install`` in-process.
@@ -53,11 +52,6 @@ def write_and_reinstall(
     ``target`` defaults to `.spaex/manifest.json`; Spec 029 passes the local
     overlay `.spaex/local/manifest.json` instead, whose directory is created
     on demand and removed again on rollback when this call created it.
-
-    ``abort_on_behavior_contradiction=False`` (passed by `spaex add`/`spaex
-    remove`, Spec 023 FR-024a) requests the add-time plausibility check: a
-    Composer cross-molecule semantic contradiction warns and marks
-    `.spaex/.stale` instead of aborting the install this call triggers.
     """
     from spaex.cli import install as install_cli
 
@@ -76,7 +70,6 @@ def write_and_reinstall(
                 skip_hooks=skip_hooks,
                 speckit_agents=speckit_agents,
                 no_speckit_integrations=no_speckit_integrations,
-                abort_on_behavior_contradiction=abort_on_behavior_contradiction,
             ),
             held_manifest_lock=held_manifest_lock,
         )

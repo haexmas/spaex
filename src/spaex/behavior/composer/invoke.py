@@ -27,22 +27,16 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from spaex.behavior.composer.clarifications import Clarification
 from spaex.behavior.composer.failure import (
     QUOTA_FAILURE_SIGNALS,
     ComposerFailureCategory,
     raise_for,
 )
-from spaex.behavior.composer.prompt import (
-    COMPOSER_PROMPT_VERSION,
-    load_effective_prompt,
-)
-from spaex.behavior.fragment import BehaviorFragment
 from spaex.util.errors import HaexError
 
 COMPOSER_LOG_ENV = "SPAEX_COMPOSER_LOG"
@@ -68,73 +62,11 @@ _COMPOSER_LOG_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
-class ComposerInput:
-    """Structured input to the Composer.
-
-    `expected_source_hash` and `expected_build_input_hash` are computed by
-    spaex outside the LLM (research.md §5). The prompt tells the LLM to echo
-    them verbatim in the `.spaex/constitution.md` header; spaex verifies the echo before
-    accepting Shape A.
-    """
-
-    fragments: tuple[BehaviorFragment, ...]
-    clarifications: tuple[Clarification, ...] = ()
-    expected_source_hash: str = ""
-    expected_build_input_hash: str = ""
-    spaex_version: str = "4.2.0"
-
-    def to_json(self) -> str:
-        """Serialize per contracts/composer-interface.md §Composer input."""
-        payload: dict[str, Any] = {
-            "spaex_version": self.spaex_version,
-            "composer_prompt_version": COMPOSER_PROMPT_VERSION,
-            "expected_source_hash": self.expected_source_hash,
-            "expected_build_input_hash": self.expected_build_input_hash,
-            "fragments": [_fragment_to_dict(f) for f in _sort_fragments(self.fragments)],
-            "clarifications": [_clarification_to_dict(c) for c in self.clarifications],
-        }
-        return json.dumps(payload, sort_keys=True, ensure_ascii=False, indent=2)
-
-
-@dataclass(frozen=True)
-class ComposedShape:
-    """Shape A parse result: composed constitution ready for emit.py."""
-
-    body: str
-
-
-@dataclass(frozen=True)
-class QuestionsShape:
-    """Shape B parse result: clarification questions to present to operator."""
-
-    questions: tuple[ClarificationQuestion, ...]
-
-
-@dataclass(frozen=True)
-class ClarificationQuestion:
-    kind: str
-    cited_fragments: tuple[dict[str, str], ...]
-    question: str
-
-
-ComposerResult = ComposedShape | QuestionsShape
-
-
-@dataclass(frozen=True)
 class RuntimeDescriptor:
-    """Which runtime was actually used to produce a ComposerResult."""
+    """Which runtime was actually used to produce an answer."""
 
     kind: str
     identifier: str
-
-
-@dataclass(frozen=True)
-class InvokeOutcome:
-    """Return type of `invoke_composer`: parsed result + runtime + raw text."""
-
-    result: ComposerResult
-    runtime: RuntimeDescriptor
-    raw_output: str
 
 
 @dataclass(frozen=True)
@@ -187,36 +119,6 @@ class InvokeOptions:
     # Internal hand-off used by the multi-batch reducer after the one PATH
     # lookup at the start of a composition attempt.
     resolved_runtime_name: str | None = None
-
-
-def invoke_composer(
-    composer_input: ComposerInput,
-    *,
-    repo_root: Path,
-    options: InvokeOptions | None = None,
-    step: str = "single",
-    invocation: int = 1,
-    phase: str = "initial",
-) -> InvokeOutcome:
-    """Run the Composer and return its parsed output.
-
-    Thin wrapper over `invoke_step` for the canonical/project-override
-    compose prompt and a `ComposerInput` payload — the legacy single-call
-    shape, and the shape a map-reduce batch call also uses (Spec 026
-    research.md §1: batch calls reuse this unchanged machinery). `step`,
-    `invocation`, and `phase` label the JSON-lines log entry (data-model.md
-    `ComposerLogEntry`); callers outside a multi-step build never need to
-    pass them.
-    """
-    return invoke_step(
-        prompt_text=load_effective_prompt(repo_root),
-        payload_json=composer_input.to_json(),
-        repo_root=repo_root,
-        options=options,
-        step=step,
-        invocation=invocation,
-        phase=phase,
-    )
 
 
 def resolve_runtime_name(options: InvokeOptions | None = None) -> str:
@@ -299,49 +201,6 @@ def invoke_raw(
         # the category-specific diagnostic and add only non-sensitive context.
         exc.context.setdefault("step", step)
         raise
-
-
-def invoke_step(
-    *,
-    prompt_text: str,
-    payload_json: str,
-    repo_root: Path,
-    options: InvokeOptions | None = None,
-    step: str = "single",
-    invocation: int = 1,
-    phase: str = "initial",
-) -> InvokeOutcome:
-    """Generic runtime-resolution + call + parse + per-invocation log primitive.
-
-    `invoke_composer` is a thin wrapper around this for the canonical compose
-    prompt. `spaex.behavior.composer.reduce` calls this directly for a merge
-    step, which needs a different prompt (`prompt.MERGE_PROMPT`) and payload
-    shape (`MergeNodeInput`, not `ComposerInput`) but the exact same runtime
-    resolution, stub-caller test seam, and log lifecycle (Spec 026
-    research.md §1, §5).
-    """
-    options = options or InvokeOptions()
-    try:
-        raw, runtime = invoke_raw(
-            prompt_text=prompt_text,
-            payload_json=payload_json,
-            repo_root=repo_root,
-            options=options,
-            step=step,
-            invocation=invocation,
-            phase=phase,
-        )
-        result = _parse_and_log(
-            raw,
-            log_path=resolve_composer_log_path(options, repo_root),
-            step=step,
-            invocation=invocation,
-            phase=phase,
-        )
-    except HaexError as exc:
-        exc.context.setdefault("step", step)
-        raise
-    return InvokeOutcome(result=result, runtime=runtime, raw_output=raw)
 
 
 def _resolve_timeout(options: InvokeOptions) -> float:
@@ -524,44 +383,6 @@ def _cli_stdin(system_prompt: str, payload: str) -> str:
     return f"{system_prompt}\n---\nCOMPOSER INPUT\n---\n{payload}\n"
 
 
-def _parse_and_log(
-    raw: str, *, log_path: Path, step: str, invocation: int, phase: str
-) -> ComposerResult:
-    """Parse a Composer response, then append exactly one log entry for it.
-
-    Every completed invocation (successful or not) gets one JSON-lines
-    record, appended immediately and flushed (research.md §5) — this
-    replaces `_parse`'s old behavior of overwriting the whole log file only
-    on a parse failure.
-    """
-    try:
-        result = _parse(raw)
-    except HaexError:
-        append_composer_log_entry(
-            log_path,
-            ComposerLogEntry(
-                step=step,
-                invocation=invocation,
-                phase=phase,
-                raw_output=raw,
-                outcome=ComposerFailureCategory.INVALID_OUTPUT.value,
-            ),
-        )
-        raise
-    outcome = "composed" if isinstance(result, ComposedShape) else "questions"
-    append_composer_log_entry(
-        log_path,
-        ComposerLogEntry(
-            step=step,
-            invocation=invocation,
-            phase=phase,
-            raw_output=raw,
-            outcome=outcome,
-        ),
-    )
-    return result
-
-
 def parse_envelope(raw: str) -> tuple[dict[str, Any], str]:
     """Split a runtime answer into its sentinel JSON object and what follows it.
 
@@ -590,84 +411,6 @@ def parse_envelope(raw: str) -> tuple[dict[str, Any], str]:
         )
         raise AssertionError("unreachable")
     return envelope, raw[match.end():]
-
-
-def _parse(raw: str) -> ComposerResult:
-    """Parse a Composer response into Shape A or Shape B."""
-    envelope, rest = parse_envelope(raw)
-
-    shape_kind = envelope.get("type")
-    if shape_kind == "composed":
-        body = rest.lstrip("\n\r ")
-        if not body:
-            raise_for(
-                ComposerFailureCategory.INVALID_OUTPUT,
-                "Shape A response missing composed constitution body",
-            )
-            raise AssertionError("unreachable")
-        return ComposedShape(body=body)
-    if shape_kind == "questions":
-        questions_raw = envelope.get("questions") or ()
-        if not isinstance(questions_raw, list) or not questions_raw:
-            raise_for(
-                ComposerFailureCategory.INVALID_OUTPUT,
-                "Shape B response has no questions",
-            )
-            raise AssertionError("unreachable")
-        parsed = tuple(_parse_question(q) for q in questions_raw)
-        return QuestionsShape(questions=parsed)
-
-    raise_for(
-        ComposerFailureCategory.INVALID_OUTPUT,
-        f"Composer sentinel type {shape_kind!r} is not 'composed' or 'questions'",
-    )
-    raise AssertionError("unreachable")
-
-
-def _parse_question(raw: Any) -> ClarificationQuestion:
-    """Validate and convert one raw Shape-B clarification question."""
-    if not isinstance(raw, dict):
-        raise_for(
-            ComposerFailureCategory.INVALID_OUTPUT,
-            f"Shape B question must be an object; got {type(raw).__name__}",
-        )
-        raise AssertionError("unreachable")
-    kind = raw.get("kind")
-    if kind not in ("overlap", "contradiction"):
-        raise_for(
-            ComposerFailureCategory.INVALID_OUTPUT,
-            f"Shape B question kind {kind!r} not in overlap|contradiction",
-        )
-        raise AssertionError("unreachable")
-    question = raw.get("question")
-    if not isinstance(question, str) or not question.strip():
-        raise_for(
-            ComposerFailureCategory.INVALID_OUTPUT,
-            "Shape B question text must be a non-empty string",
-        )
-        raise AssertionError("unreachable")
-    cited_raw = raw.get("cited_fragments") or ()
-    cited: list[dict[str, str]] = []
-    if not isinstance(cited_raw, list):
-        raise_for(
-            ComposerFailureCategory.INVALID_OUTPUT,
-            "Shape B cited_fragments must be a list",
-        )
-        raise AssertionError("unreachable")
-    for entry in cited_raw:
-        if not isinstance(entry, dict):
-            continue
-        molecule_id = entry.get("molecule_id")
-        fragment_id = entry.get("fragment_id")
-        if isinstance(molecule_id, str) and isinstance(fragment_id, str):
-            cited.append(
-                {"molecule_id": molecule_id, "fragment_id": fragment_id}
-            )
-    return ClarificationQuestion(
-        kind=kind,
-        cited_fragments=tuple(cited),
-        question=question,
-    )
 
 
 def truncate_composer_log(path: Path) -> None:
@@ -701,29 +444,6 @@ def append_composer_log_entry(path: Path, entry: ComposerLogEntry) -> None:
         pass
 
 
-def write_composer_log(
-    path: Path,
-    raw: str,
-    *,
-    step: str = "final",
-    invocation: int = 1,
-    phase: str = "initial",
-    outcome: str = ComposerFailureCategory.INVALID_OUTPUT.value,
-) -> None:
-    """Append one log entry for a single raw blob outside the normal
-    invoke/parse dispatch loop (e.g. `orchestrate._verify_completeness`
-    logging a composed body that parsed fine but silently dropped a
-    fragment). `step` defaults to `"final"`: the fully-composed document,
-    whether produced by the legacy single call or the map-reduce root merge.
-    """
-    append_composer_log_entry(
-        path,
-        ComposerLogEntry(
-            step=step, invocation=invocation, phase=phase, raw_output=raw, outcome=outcome
-        ),
-    )
-
-
 def _classify_stub_exception(exc: Exception) -> ComposerFailureCategory:
     """Map a stubbed exception class name into a Composer failure category.
 
@@ -745,33 +465,6 @@ def _is_quota_failure(stderr: str) -> bool:
     return any(signal in normalized for signal in QUOTA_FAILURE_SIGNALS)
 
 
-def _sort_fragments(
-    fragments: Sequence[BehaviorFragment],
-) -> tuple[BehaviorFragment, ...]:
-    return tuple(sorted(fragments, key=lambda f: f.scoped_id))
-
-
-def _fragment_to_dict(fragment: BehaviorFragment) -> dict[str, Any]:
-    return {
-        "molecule_id": fragment.molecule_id,
-        "fragment_id": fragment.id,
-        "atom_source": fragment.atom_source,
-        "modality": fragment.modality.value if fragment.modality else None,
-        "tags": list(fragment.tags),
-        "body": fragment.body,
-        "body_sha256": fragment.body_hash,
-    }
-
-
-def _clarification_to_dict(c: Clarification) -> dict[str, Any]:
-    return {
-        "key": c.key,
-        "question": c.question,
-        "cited_fragments": [entry.as_json() for entry in c.cited_fragments],
-        "answer": c.answer,
-    }
-
-
 __all__ = [
     "COMPOSER_LOG_ENV",
     "DEFAULT_COMPOSER_LOG",
@@ -780,22 +473,13 @@ __all__ = [
     "SENTINEL_BEGIN",
     "SENTINEL_END",
     "TIMEOUT_ENV",
-    "ClarificationQuestion",
-    "ComposedShape",
-    "ComposerInput",
     "ComposerLogEntry",
-    "ComposerResult",
     "InvokeOptions",
-    "InvokeOutcome",
-    "QuestionsShape",
     "RuntimeDescriptor",
     "append_composer_log_entry",
-    "invoke_composer",
     "invoke_raw",
-    "invoke_step",
     "parse_envelope",
     "resolve_composer_log_path",
     "resolve_runtime_name",
     "truncate_composer_log",
-    "write_composer_log",
 ]

@@ -6,9 +6,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from spaex.behavior.clauses import parse_clauses
+from spaex.behavior.decisions import DECISIONS_FILENAME, DecisionsStoreError
+from spaex.behavior.decisions import load as load_decisions
 from spaex.behavior.fragment import PROJECT_SCOPE
 from spaex.behavior.orchestrate import CONSTITUTION_D_DIRNAME
+from spaex.behavior.render import RenderError, parse
 from spaex.cli.install import _load_consumer_manifest
 from spaex.install import local_scope
 from spaex.model.consumer_manifest import flatten_compound_pins
@@ -74,7 +76,10 @@ class ConstitutionSummary:
     """Summary of the composed `.spaex/constitution.md` (data-model.md)."""
 
     exists: bool
-    clause_counts: dict[str, int]
+    fragment_count: int
+    fragments_by_molecule: dict[str, int]
+    decision_count: int
+    excluded_passage_count: int
     contributing_molecules: tuple[str, ...]
     project_local_fragment_ids: tuple[str, ...]
     stale: bool
@@ -161,15 +166,28 @@ def build_constitution_summary(
     if not contributing_molecules and not project_local_ids and not constitution_exists:
         return None
 
-    clause_counts: dict[str, int] = {}
+    fragments_by_molecule: dict[str, int] = {}
+    excluded_passage_count = 0
     if constitution_exists:
-        clauses = parse_clauses(constitution_path.read_text(encoding="utf-8"))
-        for clause in clauses:
-            clause_counts[clause.modality] = clause_counts.get(clause.modality, 0) + 1
+        try:
+            document = parse(constitution_path.read_text(encoding="utf-8"))
+        except RenderError:
+            document = None
+        for block in document.blocks if document is not None else ():
+            molecule_id = block.scoped_id.split("/", 1)[0]
+            fragments_by_molecule[molecule_id] = fragments_by_molecule.get(molecule_id, 0) + 1
+            excluded_passage_count += len(block.exclusions)
+    try:
+        decision_count = len(load_decisions(repo_root / ".spaex" / DECISIONS_FILENAME).decisions)
+    except DecisionsStoreError:
+        decision_count = 0
 
     return ConstitutionSummary(
         exists=constitution_exists,
-        clause_counts=clause_counts,
+        fragment_count=sum(fragments_by_molecule.values()),
+        fragments_by_molecule=fragments_by_molecule,
+        decision_count=decision_count,
+        excluded_passage_count=excluded_passage_count,
         contributing_molecules=tuple(contributing_molecules),
         project_local_fragment_ids=tuple(project_local_ids),
         stale=check_constitution_staleness(repo_root),
