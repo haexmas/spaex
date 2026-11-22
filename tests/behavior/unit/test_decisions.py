@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -62,6 +63,35 @@ def test_load_absent_is_empty_and_broken_is_an_error(tmp_path: Path) -> None:
         load(tmp_path / "old.json")
 
 
+@pytest.mark.parametrize(
+    ("passages", "choice"),
+    [(None, {"kind": "keep_all"}), ([None], {"kind": "keep_all"}), ([], [])],
+)
+def test_load_rejects_malformed_nested_json_containers(
+    tmp_path: Path, passages: object, choice: object
+) -> None:
+    path = tmp_path / "malformed.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "decisions": {
+                    "key": {
+                        "kind": "duplicate",
+                        "summary": "s",
+                        "passages": passages,
+                        "choice": choice,
+                        "asked_at": "t",
+                        "answered_at": "t",
+                    }
+                },
+            }
+        )
+    )
+    with pytest.raises(DecisionsStoreError):
+        load(path)
+
+
 def test_unrelated_edit_keeps_a_decision_but_a_changed_passage_drops_it() -> None:
     decision = _decision("rule one", "rule two")
     store = DecisionStore(decisions={decision.key: decision})
@@ -81,6 +111,11 @@ def test_unrelated_edit_keeps_a_decision_but_a_changed_passage_drops_it() -> Non
     )
     assert valid_decisions(store, edited) == ()
     assert valid_decisions(store, base[:1]) == ()
+    fenced = (
+        base[0],
+        make_fragment("m", "b", "```\nrule two\n```\n"),
+    )
+    assert valid_decisions(store, fenced) == ()
 
 
 def test_build_input_hash_depends_on_decisions_only() -> None:

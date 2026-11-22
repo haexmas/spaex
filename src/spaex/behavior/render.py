@@ -122,9 +122,9 @@ def render(
         f'<!-- spaex-composed:source_hash="{source_hash}" '
         f'build_input_hash="{build_input_hash}" version="{FORMAT_VERSION}" -->'
     ]
-    if preamble:
-        out.append(preamble.removesuffix("\n"))
     out.extend([TITLE, "", *NOTICES])
+    if preamble:
+        out.extend(["", preamble.removesuffix("\n")])
     for fragment in sorted(fragments, key=lambda f: f.scoped_id):
         out.append("")
         marker = f'<!-- spaex-fragment id="{fragment.scoped_id}"'
@@ -147,7 +147,7 @@ def _body_lines(fragment: BehaviorFragment, ranges: list[ExcludedRange]) -> list
             f'decision="{",".join(excluded.decisions)}"'
         )
         result.extend(
-            _ESCAPED_END if line == _END_EXCLUSION else line
+            line.replace("&", "&amp;").replace(_END_EXCLUSION, _ESCAPED_END)
             for line in lines[excluded.start - 1 : excluded.end]
         )
         result.append(_END_EXCLUSION)
@@ -226,7 +226,10 @@ def parse(text: str) -> ParsedDocument:
                 raise RenderError(
                     f"fragment {start_match['id']}: exclusion comment is not closed"
                 )
-            unescaped = [_END_EXCLUSION if row == _ESCAPED_END else row for row in inner]
+            unescaped = [
+                row.replace(_ESCAPED_END, _END_EXCLUSION).replace("&amp;", "&")
+                for row in inner
+            ]
             body_lines.extend(unescaped)
             exclusions.append(
                 ParsedExclusion(

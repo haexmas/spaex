@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 from spaex.behavior.fragment import BehaviorFragment
 
-_FENCE_RE = re.compile(r"^\s*(```|~~~)")
+_FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 
 
 class PassageError(ValueError):
@@ -76,16 +76,34 @@ def validate_range(fragment: BehaviorFragment, start: int, end: int) -> Passage:
     chosen = lines[start - 1 : end]
     if all(not line.strip() for line in chosen):
         raise PassageError(f"{fragment.scoped_id}: lines {start}-{end} are blank")
-    inside = False
+    fence: tuple[str, int] | None = None
     for line in lines[: start - 1]:
-        if _FENCE_RE.match(line):
-            inside = not inside
-    if inside:
+        match = _FENCE_RE.match(line)
+        if match is None:
+            continue
+        marker, suffix = match.groups()
+        if fence is None:
+            if marker[0] == "`" and "`" in suffix:
+                continue
+            fence = (marker[0], len(marker))
+        elif marker[0] == fence[0] and len(marker) >= fence[1] and not suffix.strip():
+            fence = None
+    if fence is not None:
         raise PassageError(
             f"{fragment.scoped_id}: lines {start}-{end} start inside a fenced code block"
         )
-    fence_lines = sum(1 for line in chosen if _FENCE_RE.match(line))
-    if fence_lines % 2:
+    for line in chosen:
+        match = _FENCE_RE.match(line)
+        if match is None:
+            continue
+        marker, suffix = match.groups()
+        if fence is None:
+            if marker[0] == "`" and "`" in suffix:
+                continue
+            fence = (marker[0], len(marker))
+        elif marker[0] == fence[0] and len(marker) >= fence[1] and not suffix.strip():
+            fence = None
+    if fence is not None:
         raise PassageError(
             f"{fragment.scoped_id}: lines {start}-{end} cut a fenced code block"
         )
