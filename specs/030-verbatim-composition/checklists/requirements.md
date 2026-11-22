@@ -32,4 +32,4 @@
 ## Notes
 
 - spaex is itself a developer tool, so its own command names (`spaex install`, `trace`, `status`) and file paths appear as the user-facing surface, not as implementation detail.
-- Three decisions were made by default and are listed in Assumptions for `/speckit-clarify`: unchecked state is a warning (FR-009), overlap is no longer a question (FR-010), no modality sections.
+- Operator clarifications of 2026-11-22 are recorded in the spec: contradictions and duplicates are both findings, the operator always decides, the passage not kept is commented out, and decisions are persisted so the output stays reproducible.
