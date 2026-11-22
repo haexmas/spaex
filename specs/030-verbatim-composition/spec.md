@@ -24,7 +24,7 @@ An operator adopts molecules whose fragments carry long rule sets. After `spaex 
 
 **Why this priority**: This is the defect. Today the model writing the constitution condenses large fragments and silently drops rules, and nothing detects it, because the completeness check accepts a fragment that is cited once. A constitution that loses rules gives false assurance.
 
-**Independent Test**: Install a fragment set that contains one fragment of at least 30 rules. Compare each fragment body with the matching part of the composed constitution: all bodies are present byte for byte.
+**Independent Test**: Install a fragment set that contains one fragment of at least 30 rules. Normalize CRLF and CR to LF in each expected fragment body, then compare it byte for byte with the matching part of the composed constitution, preserving all other whitespace.
 
 **Acceptance Scenarios**:
 
@@ -40,12 +40,12 @@ An operator runs `spaex install` again, on the same day or after a version bump 
 
 **Why this priority**: Today every composition differs in wording, so every install produces a noisy diff and operators learn to ignore diffs of the constitution, or to revert them by hand. A reviewable constitution diff must mean that rules changed.
 
-**Independent Test**: Run `spaex install` three times against the same fragments, including once after deleting the composed file. All outputs are byte-identical, and the second and later runs do not call any language model.
+**Independent Test**: Complete a contradiction check for the current fragments and clarifications, then run `spaex install` three times against those unchanged inputs, including once after deleting the composed file. All outputs are byte-identical, and the second and later runs do not call any language model. If the check could not complete, a later run retries it as required by FR-009.
 
 **Acceptance Scenarios**:
 
-1. **Given** an unchanged fragment set and clarifications, **When** the operator runs install again, **Then** the composed constitution is byte-identical and no language model is invoked.
-2. **Given** one fragment changed in one molecule, **When** install runs, **Then** the only differences in the composed constitution are inside or around that fragment.
+1. **Given** an unchanged fragment set and clarifications whose contradiction check has completed, **When** the operator runs install again, **Then** the composed constitution is byte-identical and no language model is invoked.
+2. **Given** one fragment changed in one molecule, **When** install runs, **Then** differences in the composed constitution are limited to that fragment's block and surrounding composition, derived header metadata, and any affected resolutions.
 3. **Given** the composed file was deleted, **When** install runs, **Then** it is recreated byte-identical to before, without a language model call if the fragments were already checked for contradictions.
 4. **Given** a fragment set where the contradiction check reports nothing, **When** install runs on two different days or machines, **Then** the composed constitution is identical.
 
@@ -146,7 +146,7 @@ An operator with a repo composed under the old format runs `spaex install` with 
 ### Measurable Outcomes
 
 - **SC-001**: For the haex-vault fragment set (13 fragments from the coding, devshell and spaex molecules, about 930 lines), 100% of fragment lines appear in the composed constitution unchanged; today's compositions keep 10 to 12 of the 32 rules of the largest fragment.
-- **SC-002**: Three consecutive installs on an unchanged fragment set produce byte-identical composed files, and runs after the first make 0 language-model calls.
+- **SC-002**: After the contradiction check completes for the current fragment set and clarifications, three consecutive installs on those unchanged inputs produce byte-identical composed files, and runs after the first make 0 language-model calls. If the check could not complete, a later install retries it.
 - **SC-003**: After changing one fragment, the diff of the composed constitution is limited to that fragment's block, derived fingerprint metadata in the header, and any affected resolutions.
 - **SC-004**: A deliberately contradictory pair of fragments is reported as a question in 100% of 5 independent, uncached contradiction checks, and the answer given appears verbatim in the composed constitution.
 - **SC-005**: With the contradiction check made unavailable, install still finishes and writes a complete composed constitution in under 10 seconds for the haex-vault set, and reports the unchecked state.
