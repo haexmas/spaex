@@ -38,7 +38,7 @@ def write_fragment_file(repo: Path, item: BehaviorFragment) -> None:
         + (f"modality: {item.modality.value}\n" if item.modality else "")
         + "---\n"
     )
-    (target / f"{item.id}.md").write_text(header + item.body, encoding="utf-8")
+    (target / f"{item.id}.md").write_bytes((header + item.body).encode("utf-8"))
 
 
 def write_composed(
@@ -51,7 +51,7 @@ def write_composed(
         write_fragment_file(repo, item)
     text = expected_text(fragments, decisions)
     (repo / ".spaex").mkdir(parents=True, exist_ok=True)
-    (repo / ".spaex" / "constitution.md").write_text(text, encoding="utf-8")
+    (repo / ".spaex" / "constitution.md").write_bytes(text.encode("utf-8"))
     return text
 
 
