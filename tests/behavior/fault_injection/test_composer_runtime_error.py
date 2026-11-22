@@ -1,4 +1,4 @@
-"""Composer runtime-error fault-injection (Spec 023 T024, SC-011, exit 31)."""
+"""Check runtime-error fault-injection (Spec 023 T024, SC-011, exit 31)."""
 
 from __future__ import annotations
 

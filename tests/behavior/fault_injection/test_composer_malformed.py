@@ -1,4 +1,4 @@
-"""Composer invalid-output fault-injection (Spec 023 T023, SC-011, exit 32)."""
+"""Check invalid-output fault-injection (Spec 023 T023, SC-011, exit 32)."""
 
 from __future__ import annotations
 
@@ -35,15 +35,15 @@ def test_invalid_output_writes_raw_response_to_log(
     assert "this is not a sentinel-wrapped response" in log.read_text(encoding="utf-8")
 
 
-def test_shape_a_without_body_is_invalid_output(
+def test_findings_response_without_findings_is_invalid_output(
     mock_composer, repo_root: Path
 ) -> None:
-    empty_shape_a = (
+    empty = (
         "<<<SPAEX-COMPOSER-BEGIN>>>\n"
-        '{"type": "composed", "questions": []}\n'
+        '{"type": "findings", "findings": []}\n'
         "<<<SPAEX-COMPOSER-END>>>\n"
     )
-    composer = mock_composer("shape-a", shape_a_body=empty_shape_a)
+    composer = mock_composer("no_findings", answer=empty)
     with pytest.raises(ComposerInvalidOutputError):
         composer.invoke(repo_root)
 
@@ -53,10 +53,33 @@ def test_unknown_sentinel_type_is_invalid_output(
 ) -> None:
     weird = (
         "<<<SPAEX-COMPOSER-BEGIN>>>\n"
-        '{"type": "verified", "questions": []}\n'
+        '{"type": "composed", "questions": []}\n'
         "<<<SPAEX-COMPOSER-END>>>\n"
         "extra body\n"
     )
-    composer = mock_composer("shape-a", shape_a_body=weird)
+    composer = mock_composer("no_findings", answer=weird)
     with pytest.raises(ComposerInvalidOutputError):
         composer.invoke(repo_root)
+
+
+def test_finding_naming_a_missing_passage_is_invalid_output(
+    mock_composer, repo_root: Path
+) -> None:
+    unverifiable = (
+        "<<<SPAEX-COMPOSER-BEGIN>>>\n"
+        '{"type": "findings", "findings": [{"kind": "duplicate", "summary": "same", '
+        '"passages": [{"fragment": "m/a", "start": 1, "end": 1}, '
+        '{"fragment": "m/b", "start": 1, "end": 1}]}]}\n'
+        "<<<SPAEX-COMPOSER-END>>>\n"
+    )
+    composer = mock_composer("no_findings", answer=unverifiable)
+    with pytest.raises(ComposerInvalidOutputError):
+        composer.invoke(repo_root)
+
+
+def test_valid_answer_without_findings_parses_cleanly(
+    mock_composer, repo_root: Path
+) -> None:
+    composer = mock_composer("no_findings")
+    assert composer.invoke(repo_root) == ()
+    assert len(composer.calls) == 1

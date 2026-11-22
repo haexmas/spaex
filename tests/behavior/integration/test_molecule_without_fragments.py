@@ -8,10 +8,11 @@ Fixture: one publisher ships two molecules --
   `constitution_fragments` block.
 
 Two consumers pin the same molecule set except one also adds `no-fragment`.
-Both run `spaex install` against the same Composer stub. Verifies:
+Both run `spaex install` against the same check stub. Verifies:
 
 - Both consumers produce byte-identical `.spaex/constitution.md` (the fragment-less
-  molecule's presence changes nothing about the composed output).
+  molecule's presence changes nothing about the composed output), and the check sees
+  only the one fragment.
 """
 
 from __future__ import annotations
@@ -24,16 +25,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from spaex.behavior import orchestrate as behavior_orchestrate
-from spaex.behavior.composer.invoke import (
-    ComposedShape,
-    ComposerInput,
-    InvokeOptions,
-    InvokeOutcome,
-    RuntimeDescriptor,
-)
+from spaex.behavior.render import parse
 from spaex.cli import add as add_cli
 from spaex.git.cache import clone_dir
+
+from ..conftest import StubCheck
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None, reason="git binary required"
@@ -166,60 +162,10 @@ def _run_add(
     return add_cli.run(ns)
 
 
-def _shape_a_from_payload(payload: str) -> str:
-    data = json.loads(payload)
-    src = data["expected_source_hash"]
-    bih = data["expected_build_input_hash"]
-    header = (
-        f'<!-- spaex-composed:source_hash="{src}" '
-        f'build_input_hash="{bih}" version="1" -->\n'
-        "# spaex Behavior Harness\n\n"
-    )
-    modality_sections: dict[str, list[str]] = {"MUST": [], "SHOULD": [], "MAY": []}
-    for fragment in data["fragments"]:
-        scoped = f"{fragment['molecule_id']}/{fragment['fragment_id']}"
-        text = fragment["body"].strip().replace("**", "").rstrip(".")
-        modality = fragment["modality"] or "MUST"
-        bucket = modality if modality in modality_sections else "MUST"
-        modality_sections[bucket].append(f"- {text}. _[from `{scoped}`]_")
-    body_parts = [header]
-    for modality in ("MUST", "SHOULD", "MAY"):
-        bullets = modality_sections[modality]
-        if not bullets:
-            continue
-        body_parts.append(f"## {modality}\n\n")
-        body_parts.append("\n".join(bullets) + "\n\n")
-    body = "".join(body_parts).rstrip() + "\n"
-    return (
-        "<<<SPAEX-COMPOSER-BEGIN>>>\n"
-        '{"type": "composed", "questions": []}\n'
-        "<<<SPAEX-COMPOSER-END>>>\n\n" + body
-    )
-
-
-def _stub_invoke_composer(
-    composer_input: ComposerInput,
-    *,
-    repo_root: Path,
-    options: InvokeOptions | None = None,
-) -> InvokeOutcome:
-    payload = composer_input.to_json()
-    raw = _shape_a_from_payload(payload)
-    body = raw.split("<<<SPAEX-COMPOSER-END>>>", 1)[1].lstrip("\n\r ")
-    return InvokeOutcome(
-        result=ComposedShape(body=body),
-        runtime=RuntimeDescriptor(kind="stub", identifier="test"),
-        raw_output=raw,
-    )
-
-
 def test_fragment_less_molecule_does_not_alter_composed_constitution(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
 ) -> None:
     canonical, head, state_root = _publish_molecules(tmp_path)
-    monkeypatch.setattr(
-        behavior_orchestrate, "invoke_composer", _stub_invoke_composer
-    )
 
     baseline = _make_consumer(tmp_path, "baseline")
     assert (
@@ -250,6 +196,10 @@ def test_fragment_less_molecule_does_not_alter_composed_constitution(
     baseline_md = (baseline / ".spaex/constitution.md").read_text(encoding="utf-8")
     with_extra_md = (with_extra / ".spaex/constitution.md").read_text(encoding="utf-8")
     assert baseline_md == with_extra_md
+    assert [block.scoped_id for block in parse(with_extra_md).blocks] == [
+        f"{_MOL_WITH_FRAGMENT}/no-secrets"
+    ]
+    assert set(stub_check.seen) == {(f"{_MOL_WITH_FRAGMENT}/no-secrets",)}
 
     assert (
         with_extra / ".spaex" / "constitution.d" / _MOL_WITH_FRAGMENT / "no-secrets.md"

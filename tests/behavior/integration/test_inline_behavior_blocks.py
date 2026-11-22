@@ -17,8 +17,9 @@ identical. Verifies:
   `.spaex/constitution.d/<molecule-id>/<fragment-id>.md`.
 - The two materialized files are byte-identical (the only difference
   between the two molecules is *how* the fragment was authored).
-- `spaex install` composes both into `.spaex/constitution.md` under the same provenance
-  scheme as any other fragment (SC-001-style directive + provenance check).
+- `spaex install` renders both into `.spaex/constitution.md` as verbatim fragment
+  blocks, exactly as any other fragment (SC-001-style body + scoped-id check), and the
+  check receives both with identical id, atom source, modality, tags and body.
 """
 
 from __future__ import annotations
@@ -26,21 +27,19 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from spaex.behavior import orchestrate as behavior_orchestrate
-from spaex.behavior.composer.invoke import (
-    ComposedShape,
-    ComposerInput,
-    InvokeOptions,
-    InvokeOutcome,
-    RuntimeDescriptor,
-)
+from spaex.behavior.composer.check import Finding
+from spaex.behavior.fragment import BehaviorFragment
+from spaex.behavior.render import parse
 from spaex.cli import add as add_cli
 from spaex.git.cache import clone_dir
+
+from ..conftest import StubCheck
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None, reason="git binary required"
@@ -191,75 +190,19 @@ def _run_add(
     return add_cli.run(ns)
 
 
-def _shape_a_from_payload(payload: str) -> str:
-    data = json.loads(payload)
-    src = data["expected_source_hash"]
-    bih = data["expected_build_input_hash"]
-    header = (
-        f'<!-- spaex-composed:source_hash="{src}" '
-        f'build_input_hash="{bih}" version="1" -->\n'
-        "# spaex Behavior Harness\n\n"
-    )
-    modality_sections: dict[str, list[str]] = {"MUST": [], "SHOULD": [], "MAY": []}
-    for fragment in data["fragments"]:
-        scoped = f"{fragment['molecule_id']}/{fragment['fragment_id']}"
-        text = fragment["body"].strip().replace("**", "").rstrip(".")
-        modality = fragment["modality"] or "MUST"
-        bucket = modality if modality in modality_sections else "MUST"
-        modality_sections[bucket].append(f"- {text}. _[from `{scoped}`]_")
-    body_parts = [header]
-    for modality in ("MUST", "SHOULD", "MAY"):
-        bullets = modality_sections[modality]
-        if not bullets:
-            continue
-        body_parts.append(f"## {modality}\n\n")
-        body_parts.append("\n".join(bullets) + "\n\n")
-    body = "".join(body_parts).rstrip() + "\n"
-    return (
-        "<<<SPAEX-COMPOSER-BEGIN>>>\n"
-        '{"type": "composed", "questions": []}\n'
-        "<<<SPAEX-COMPOSER-END>>>\n\n" + body
-    )
-
-
-def _stub_invoke_composer(
-    composer_input: ComposerInput,
-    *,
-    repo_root: Path,
-    options: InvokeOptions | None = None,
-) -> InvokeOutcome:
-    payload = composer_input.to_json()
-    raw = _shape_a_from_payload(payload)
-    body = raw.split("<<<SPAEX-COMPOSER-END>>>", 1)[1].lstrip("\n\r ")
-    return InvokeOutcome(
-        result=ComposedShape(body=body),
-        runtime=RuntimeDescriptor(kind="stub", identifier="test"),
-        raw_output=raw,
-    )
-
-
 def test_inline_block_materializes_identically_to_standalone_atom(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
 ) -> None:
     canonical, head, state_root = _publish_standalone_and_inline_molecules(tmp_path)
     consumer = _make_consumer(tmp_path)
 
-    composer_payloads: list[dict] = []
+    received: list[list[BehaviorFragment]] = []
 
-    def capture_composer_input(
-        composer_input: ComposerInput,
-        *,
-        repo_root: Path,
-        options: InvokeOptions | None = None,
-    ) -> InvokeOutcome:
-        composer_payloads.append(json.loads(composer_input.to_json()))
-        return _stub_invoke_composer(
-            composer_input, repo_root=repo_root, options=options
-        )
+    def capture(fragments: Sequence[BehaviorFragment]) -> list[Finding]:
+        received.append(list(fragments))
+        return []
 
-    monkeypatch.setattr(
-        behavior_orchestrate, "invoke_composer", capture_composer_input
-    )
+    stub_check.factory = capture
 
     assert (
         _run_add(
@@ -286,21 +229,22 @@ def test_inline_block_materializes_identically_to_standalone_atom(
     # the rendered fragment files must be byte-identical (FR-003).
     assert standalone_path.read_bytes() == inline_path.read_bytes()
 
-    assert len(composer_payloads) == 1
-    records = {
-        fragment["molecule_id"]: fragment
-        for fragment in composer_payloads[0]["fragments"]
-    }
-    for field in (
-        "fragment_id",
-        "atom_source",
-        "modality",
-        "tags",
-        "body",
-        "body_sha256",
-    ):
-        assert records[_MOL_STANDALONE][field] == records[_MOL_INLINE][field]
+    assert len(received) == 1
+    records = {fragment.molecule_id: fragment for fragment in received[0]}
+    assert set(records) == {_MOL_STANDALONE, _MOL_INLINE}
+    for field in ("id", "atom_source", "modality", "tags", "body", "body_hash"):
+        assert getattr(records[_MOL_STANDALONE], field) == getattr(
+            records[_MOL_INLINE], field
+        )
 
     content = (consumer / ".spaex/constitution.md").read_text(encoding="utf-8")
-    assert f"{_MOL_STANDALONE}/spec-first" in content
-    assert f"{_MOL_INLINE}/spec-first" in content
+    blocks = {block.scoped_id: block for block in parse(content).blocks}
+    assert set(blocks) == {
+        f"{_MOL_STANDALONE}/spec-first",
+        f"{_MOL_INLINE}/spec-first",
+    }
+    assert (
+        blocks[f"{_MOL_STANDALONE}/spec-first"].body
+        == blocks[f"{_MOL_INLINE}/spec-first"].body
+        == _FRAGMENT_BODY + "\n"
+    )

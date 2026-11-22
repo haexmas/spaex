@@ -32,14 +32,15 @@ Diagnosis = Literal["current", "missing", "version", "out-of-date", "unchecked"]
 
 
 def fragments_fingerprint(fragments: Sequence[BehaviorFragment]) -> str:
-    """Hash of the exact text of every fragment, whitespace included.
+    """Hash of the exact text and declared modality of every fragment.
 
     The check state records this, not the whitespace-normalized `source_hash`,
     so an edit that only changes whitespace inside a passage still triggers a
     new check and cannot silently void a decision.
     """
     lines = [
-        f"{fragment.scoped_id}|{hashlib.sha256(canonical_body(fragment.body).encode()).hexdigest()}"
+        f"{fragment.scoped_id}|{fragment.modality.value if fragment.modality else ''}|"
+        f"{hashlib.sha256(canonical_body(fragment.body).encode()).hexdigest()}"
         for fragment in sorted(fragments, key=lambda f: f.scoped_id)
     ]
     return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()

@@ -23,7 +23,7 @@ Committed, next to `.spaex/constitution.md`; the local overlay uses `.spaex/loca
 ```
 
 - `choice` is `{"kind":"keep","kept":<index into passages>}` or `{"kind":"keep_all"}`.
-- `checked` is written only after a completed check; it is absent for a repo that never ran one.
+- `checked` is written only after a completed check; it is absent for a repo that never ran one. `checked.source_hash` is a hash over the exact text of every fragment (LF-canonicalized, whitespace kept; `state.fragments_fingerprint`), not the whitespace-normalized `source_hash` of the composed header, so an edit that only changes whitespace inside a passage runs the check again and cannot void a decision unnoticed. `prompt_hash` is the hash of the effective check prompt.
 - Keys of `decisions` are sorted; the file is written atomically with the composed constitution (one transaction, `_commit_behavior_artifacts`).
 - Load errors (not JSON, unknown `schema_version`) fail the install with a hint to restore from git, as `clarifications.json` does today.
 - Validity and invalidation: data-model.md, "Decision".

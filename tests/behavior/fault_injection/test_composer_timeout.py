@@ -1,4 +1,4 @@
-"""Composer timeout fault-injection (Spec 023 T022, SC-011, exit 30)."""
+"""Check timeout fault-injection (Spec 023 T022, SC-011, exit 30)."""
 
 from __future__ import annotations
 

@@ -15,16 +15,11 @@ import socket
 from dataclasses import replace
 from pathlib import Path, PureWindowsPath
 
-from spaex.behavior.composer.clarifications import ClarificationsStore
-from spaex.behavior.composer.prompt import (
-    COMPOSER_PROMPT_VERSION,
-    effective_prompt_sha256,
-    load_effective_prompt,
-)
-from spaex.behavior.emit import compute_build_input_hash, compute_source_hash
 from spaex.behavior.fragment import BehaviorFragment
 from spaex.cli.main import main
 from spaex.model.install_lock import InstallLock, MoleculeEntry
+
+from ._composed import write_current
 
 _MOL_BEHAVIOR = "com.example.behavior-only"
 _MOL_ARTIFACT_A = "com.example.composed-artifact-a"
@@ -74,21 +69,8 @@ def _write_fragment(repo: Path, *, molecule_id: str, fragment_id: str) -> Behavi
 
 
 def _write_matching_constitution(repo: Path, fragment: BehaviorFragment) -> None:
-    source_hash = compute_source_hash([fragment])
-    prompt_hash = effective_prompt_sha256(load_effective_prompt(repo))
-    build_input_hash = compute_build_input_hash(
-        effective_prompt_sha256=prompt_hash,
-        composer_prompt_version=COMPOSER_PROMPT_VERSION,
-        valid_clarifications=ClarificationsStore().entries.values(),
-    )
-    (repo / ".spaex/constitution.md").write_text(
-        f'<!-- spaex-composed:source_hash="{source_hash}" '
-        f'build_input_hash="{build_input_hash}" version="1" -->\n'
-        "# spaex Behavior Harness\n\n"
-        "## MUST\n"
-        f"- Do the thing. _[from `{fragment.scoped_id}`]_\n",
-        encoding="utf-8",
-    )
+    """Rewrite the composed file and `decisions.json` the way a finished install leaves them."""
+    write_current(repo, [fragment])
 
 
 def _snapshot(repo: Path) -> dict[str, bytes]:
@@ -164,7 +146,8 @@ def test_status_text_format(tmp_path: Path, capsys) -> None:
     assert "behavior fragments: cmd" in out
     assert f"composed artifacts: {_SHARED_ARTIFACT_PATH}" in out
     assert "files: flake.nix" in out
-    assert "Constitution: 1 clauses (MUST: 1)" in out
+    assert f"Constitution: 1 fragments ({_MOL_BEHAVIOR}: 1)" in out
+    assert "decisions: 0, excluded passages: 0" in out
     assert f"contributing molecules: {_MOL_BEHAVIOR}" in out
     assert "status: current" in out
     assert _snapshot(repo) == before
@@ -225,7 +208,11 @@ def test_status_json_format(tmp_path: Path, capsys) -> None:
 
     constitution = payload["constitution"]
     assert constitution["exists"] is True
-    assert constitution["clause_counts"] == {"MUST": 1}
+    assert constitution["fragment_count"] == 1
+    assert constitution["fragments_by_molecule"] == {_MOL_BEHAVIOR: 1}
+    assert constitution["decision_count"] == 0
+    assert constitution["excluded_passage_count"] == 0
+    assert "clause_counts" not in constitution
     assert constitution["contributing_molecules"] == [_MOL_BEHAVIOR]
     assert constitution["project_local_fragment_ids"] == []
     assert constitution["stale"] is False

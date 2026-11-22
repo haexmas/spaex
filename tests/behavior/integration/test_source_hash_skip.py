@@ -1,21 +1,21 @@
-"""Reproducibility skip mechanism: source/build-input fingerprint comparison
-(T049, User Story 6 acceptance scenario 1).
+"""Check skip mechanism: no model call while fragments and check prompt are unchanged
+(T049, User Story 6 acceptance scenario 1, spec 030 research R5).
 
-`orchestrate.run` computes `source_hash` (per-fragment identity, metadata,
-and body) and `build_input_hash` (effective prompt, prompt version, valid
-clarifications) outside the LLM and compares them against the committed
-`.spaex/constitution.md` header before deciding whether to invoke the Composer at all
-(FR-009, contracts/composer-interface.md Build fingerprints; the skip
-decision itself lives in `orchestrate.run`, wired in Phase 3 T029/T031).
+`orchestrate.run` records in `.spaex/decisions.json` which fragments (exact text)
+and which effective check prompt the last completed check covered. The check, the
+one remaining model call, runs only when that state differs from the current one
+(FR-005). The composed constitution itself never depends on the check prompt
+(FR-003), so its header fingerprint is the only thing a metadata change touches.
 
 This file verifies:
 
-1. Two installs against identical committed state must not re-invoke the
-   Composer on the second run.
-2. Changing a fragment's metadata (modality, with the body left byte-
-   identical) still changes `source_hash` and forces a re-invocation.
-3. Changing the effective Composer prompt (`.spaex/composer-prompt.md`)
-   changes `build_input_hash` and forces a re-invocation.
+1. Two installs against identical state must not call the check on the second run.
+2. Changing a fragment's modality (body byte-identical) changes the header
+   `source_hash` and the block's modality, keeps `build_input_hash`, and re-runs the
+   check (the modality is part of what the check reads).
+3. Changing the effective check prompt (`.spaex/check-prompt.md`) re-runs the check
+   and changes neither the text nor either header hash.
+4. Editing a fragment body re-runs the check exactly once.
 """
 
 from __future__ import annotations
@@ -28,18 +28,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from spaex.behavior import orchestrate as behavior_orchestrate
-from spaex.behavior.composer.invoke import (
-    ComposedShape,
-    ComposerInput,
-    InvokeOptions,
-    InvokeOutcome,
-    RuntimeDescriptor,
-)
-from spaex.behavior.emit import read_header_hashes
+from spaex.behavior.emit import compute_source_hash
+from spaex.behavior.fragment import BehaviorFragment
+from spaex.behavior.render import parse
 from spaex.cli import add as add_cli
 from spaex.cli import install as install_cli
 from spaex.git.cache import clone_dir
+
+from ..conftest import StubCheck
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None, reason="git binary required"
@@ -198,99 +194,54 @@ def _run_install(
     return install_cli.run(ns)
 
 
-class _CountingStub:
-    """Counts every Composer invocation; echoes the expected header hashes
-    back verbatim (contracts §Shape A) so `emit_composed`'s hash
-    verification passes."""
-
-    def __init__(self) -> None:
-        self.calls: int = 0
-
-    def __call__(
-        self,
-        composer_input: ComposerInput,
-        *,
-        repo_root: Path,
-        options: InvokeOptions | None = None,
-    ) -> InvokeOutcome:
-        self.calls += 1
-        data = json.loads(composer_input.to_json())
-        header = (
-            f'<!-- spaex-composed:source_hash="{data["expected_source_hash"]}" '
-            f'build_input_hash="{data["expected_build_input_hash"]}" version="1" -->\n'
-            "# spaex Behavior Harness\n\n"
-        )
-        sections: dict[str, list[str]] = {}
-        for fragment in data["fragments"]:
-            scoped = f"{fragment['molecule_id']}/{fragment['fragment_id']}"
-            text = fragment["body"].strip().replace("**", "").rstrip(".")
-            bullet = f"- {text}. _[from `{scoped}`]_"
-            sections.setdefault(fragment["modality"] or "MUST", []).append(bullet)
-        parts = [header]
-        for modality in ("MUST", "MUST_NOT", "SHOULD", "SHOULD_NOT", "MAY", "MAY_NOT"):
-            bullets = sections.get(modality)
-            if not bullets:
-                continue
-            parts.append(f"## {modality}\n\n" + "\n".join(bullets) + "\n\n")
-        body = "".join(parts).rstrip() + "\n"
-        return InvokeOutcome(
-            result=ComposedShape(body=body),
-            runtime=RuntimeDescriptor(kind="stub", identifier="test"),
-            raw_output=body,
-        )
+def _headers(consumer: Path) -> tuple[str, str]:
+    document = parse((consumer / ".spaex/constitution.md").read_text(encoding="utf-8"))
+    return document.source_hash, document.build_input_hash
 
 
-def test_second_install_skips_composer_when_state_unchanged(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_second_install_skips_the_check_when_state_unchanged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
 ) -> None:
     _, canonical, head, state_root = _publish_molecule(tmp_path)
     consumer = _make_consumer(tmp_path)
-    stub = _CountingStub()
-    monkeypatch.setattr(behavior_orchestrate, "invoke_composer", stub)
 
     assert (
         _run_add(consumer, state_root, monkeypatch, source_url=canonical, revision=head)
         == 0
     )
-    assert stub.calls == 1
+    assert stub_check.calls == 1
     first = (consumer / ".spaex/constitution.md").read_bytes()
 
     assert _run_install(consumer, state_root, monkeypatch) == 0
-    assert stub.calls == 1, (
-        "unchanged fragment set + prompt must skip the Composer entirely (FR-009)"
+    assert stub_check.calls == 1, (
+        "unchanged fragments and check prompt must skip the check entirely (FR-005)"
     )
     assert (consumer / ".spaex/constitution.md").read_bytes() == first
 
 
-def test_fragment_metadata_change_invalidates_skip(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_fragment_metadata_change_changes_source_hash_and_modality(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
 ) -> None:
-    """Modality-only edit (body byte-identical) must still bust `source_hash`."""
+    """Modality-only edit (body byte-identical) must still bust the header `source_hash`."""
     working, canonical, head, state_root = _publish_molecule(tmp_path, modality="MUST")
     consumer = _make_consumer(tmp_path)
-    stub = _CountingStub()
-    monkeypatch.setattr(behavior_orchestrate, "invoke_composer", stub)
 
     assert (
         _run_add(consumer, state_root, monkeypatch, source_url=canonical, revision=head)
         == 0
     )
-    assert stub.calls == 1
     first = (consumer / ".spaex/constitution.md").read_bytes()
-    first_hashes = read_header_hashes(consumer)
-    assert first_hashes is not None
-    assert b"## MUST" in first
+    first_hashes = _headers(consumer)
+    assert b'modality="MUST"' in first
+    assert stub_check.calls == 1
 
     new_head = _commit_modality_change(working, state_root, new_modality="SHOULD")
     _bump_consumer_revision(consumer, new_head)
 
     assert _run_install(consumer, state_root, monkeypatch) == 0
-    assert stub.calls == 2, (
-        "a metadata-only fragment change must invalidate the fingerprint skip"
-    )
+    assert stub_check.calls == 2, "a modality change must re-run the check"
     second = (consumer / ".spaex/constitution.md").read_bytes()
-    second_hashes = read_header_hashes(consumer)
-    assert second_hashes is not None
+    second_hashes = _headers(consumer)
     assert second_hashes[0] != first_hashes[0], (
         "a metadata-only fragment change must change source_hash"
     )
@@ -298,41 +249,85 @@ def test_fragment_metadata_change_invalidates_skip(
         "a metadata-only fragment change must preserve build_input_hash"
     )
     assert second != first
-    assert b"## SHOULD" in second
+    assert b'modality="SHOULD"' in second
+    assert b'modality="MUST"' not in second
+    block = parse(second.decode()).blocks[0]
+    assert block.body == _BODY
 
 
-def test_effective_prompt_change_invalidates_skip(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_check_prompt_change_reruns_the_check_but_not_the_text(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
 ) -> None:
     _, canonical, head, state_root = _publish_molecule(tmp_path)
     consumer = _make_consumer(tmp_path)
-    stub = _CountingStub()
-    monkeypatch.setattr(behavior_orchestrate, "invoke_composer", stub)
 
     assert (
         _run_add(consumer, state_root, monkeypatch, source_url=canonical, revision=head)
         == 0
     )
-    assert stub.calls == 1
+    assert stub_check.calls == 1
     first = (consumer / ".spaex/constitution.md").read_bytes()
-    first_hashes = read_header_hashes(consumer)
-    assert first_hashes is not None
+    first_hashes = _headers(consumer)
 
-    (consumer / ".spaex" / "composer-prompt.md").write_text(
-        "custom project composer prompt override\n", encoding="utf-8"
+    (consumer / ".spaex" / "check-prompt.md").write_text(
+        "custom project check prompt override\n", encoding="utf-8"
     )
 
     assert _run_install(consumer, state_root, monkeypatch) == 0
-    assert stub.calls == 2, (
-        "an effective-prompt change must invalidate build_input_hash"
+    assert stub_check.calls == 2, "an effective check prompt change must re-run the check"
+    assert (consumer / ".spaex/constitution.md").read_bytes() == first, (
+        "the check prompt must not influence the composed text (FR-003)"
     )
-    second = (consumer / ".spaex/constitution.md").read_bytes()
-    second_hashes = read_header_hashes(consumer)
-    assert second_hashes is not None
-    assert second_hashes[0] == first_hashes[0], (
-        "a prompt-only change must preserve source_hash"
+    assert _headers(consumer) == first_hashes
+
+    # And the new check state is recorded, so the next install skips again.
+    assert _run_install(consumer, state_root, monkeypatch) == 0
+    assert stub_check.calls == 2
+
+
+def test_body_change_reruns_the_check_exactly_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
+) -> None:
+    working, canonical, head, state_root = _publish_molecule(tmp_path)
+    consumer = _make_consumer(tmp_path)
+
+    assert (
+        _run_add(consumer, state_root, monkeypatch, source_url=canonical, revision=head)
+        == 0
     )
-    assert second_hashes[1] != first_hashes[1], (
-        "a prompt-only change must change build_input_hash"
+    assert stub_check.calls == 1
+
+    new_body = _BODY + "**MUST** also record every ledger call.\n"
+    (working / "hash-skip" / "fragments" / "ledger-routing.md").write_text(
+        _fragment_text(modality="MUST").replace(_BODY, new_body)
     )
-    assert second != first
+    _git(working, "add", ".")
+    _git(working, "commit", "-q", "-m", "hash-skip fixture v2: body")
+    new_head = _git(working, "rev-parse", "HEAD")
+    _git(clone_dir(state_root, _CANONICAL), "fetch", "-q", str(working), "+main:main")
+    _bump_consumer_revision(consumer, new_head)
+
+    assert _run_install(consumer, state_root, monkeypatch) == 0
+    assert stub_check.calls == 2
+    block = parse((consumer / ".spaex/constitution.md").read_text(encoding="utf-8")).blocks[0]
+    assert block.body == new_body
+
+    assert _run_install(consumer, state_root, monkeypatch) == 0
+    assert stub_check.calls == 2
+
+
+def test_header_source_hash_is_the_fragment_fingerprint(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
+) -> None:
+    """The header `source_hash` is computed by spaex from the materialized fragments."""
+    _, canonical, head, state_root = _publish_molecule(tmp_path)
+    consumer = _make_consumer(tmp_path)
+    assert (
+        _run_add(consumer, state_root, monkeypatch, source_url=canonical, revision=head)
+        == 0
+    )
+    fragment = BehaviorFragment.from_file(
+        consumer / ".spaex" / "constitution.d" / _MOL / "ledger-routing.md",
+        molecule_id=_MOL,
+    )
+    assert _headers(consumer)[0] == compute_source_hash([fragment])

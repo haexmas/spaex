@@ -6,11 +6,11 @@ drive `.spaex/manifest.json`'s `constitution.local_fragments[]` end-to-end throu
 `spaex install`:
 
 - A project with zero pinned molecules and one inline local fragment gets
-  a `.spaex/constitution.md` carrying the `_project/<id>` directive (SC-005).
+  a `.spaex/constitution.md` carrying a `_project/<id>` fragment block (SC-005).
 - A project with zero pinned molecules and one file-reference local
   fragment materializes identically (FR-018's second storage option).
 - A project-local fragment whose bare id matches an atom-provided fragment
-  aborts install with exit 22 before the Composer runs (SC-010).
+  aborts install with exit 22 before the check runs (SC-010).
 """
 
 from __future__ import annotations
@@ -23,18 +23,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from spaex.behavior import orchestrate as behavior_orchestrate
-from spaex.behavior.composer.invoke import (
-    ComposedShape,
-    ComposerInput,
-    InvokeOptions,
-    InvokeOutcome,
-    RuntimeDescriptor,
-)
+from spaex.behavior.render import parse
 from spaex.cli import install as install_cli
 from spaex.git.cache import clone_dir
 from spaex.util import exit_codes
 from spaex.util.errors import HaexError
+
+from ..conftest import StubCheck
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None, reason="git binary required"
@@ -49,54 +44,6 @@ def _git(cwd: Path, *args: str) -> str:
         ["git", "-C", str(cwd), *args], capture_output=True, text=True, check=True
     )
     return proc.stdout.strip()
-
-
-def _shape_a_from_payload(payload: str) -> str:
-    """Build a canned Shape A response that echoes every fragment as a bullet."""
-    data = json.loads(payload)
-    src = data["expected_source_hash"]
-    bih = data["expected_build_input_hash"]
-    header = (
-        f'<!-- spaex-composed:source_hash="{src}" '
-        f'build_input_hash="{bih}" version="1" -->\n'
-        "# spaex Behavior Harness\n\n"
-    )
-    modality_sections: dict[str, list[str]] = {"MUST": [], "SHOULD": [], "MAY": []}
-    for fragment in data["fragments"]:
-        scoped = f"{fragment['molecule_id']}/{fragment['fragment_id']}"
-        text = fragment["body"].strip().replace("**", "").rstrip(".")
-        modality = fragment["modality"] or "MUST"
-        bucket = modality if modality in modality_sections else "MUST"
-        modality_sections[bucket].append(f"- {text}. _[from `{scoped}`]_")
-    body_parts = [header]
-    for modality in ("MUST", "SHOULD", "MAY"):
-        bullets = modality_sections[modality]
-        if not bullets:
-            continue
-        body_parts.append(f"## {modality}\n\n")
-        body_parts.append("\n".join(bullets) + "\n\n")
-    body = "".join(body_parts).rstrip() + "\n"
-    return (
-        "<<<SPAEX-COMPOSER-BEGIN>>>\n"
-        '{"type": "composed", "questions": []}\n'
-        "<<<SPAEX-COMPOSER-END>>>\n\n" + body
-    )
-
-
-def _stub_invoke_composer(
-    composer_input: ComposerInput,
-    *,
-    repo_root: Path,
-    options: InvokeOptions | None = None,
-) -> InvokeOutcome:
-    payload = composer_input.to_json()
-    raw = _shape_a_from_payload(payload)
-    body = raw.split("<<<SPAEX-COMPOSER-END>>>", 1)[1].lstrip("\n\r ")
-    return InvokeOutcome(
-        result=ComposedShape(body=body),
-        runtime=RuntimeDescriptor(kind="stub", identifier="test"),
-        raw_output=raw,
-    )
 
 
 def _make_consumer(tmp_path: Path, *, local_fragments: list[dict]) -> Path:
@@ -125,7 +72,7 @@ def _run_install(
 
 
 def test_inline_local_only_fragment_appears_with_project_source(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
 ) -> None:
     consumer = _make_consumer(
         tmp_path,
@@ -138,23 +85,23 @@ def test_inline_local_only_fragment_appears_with_project_source(
         ],
     )
     state_root = tmp_path / "state"
-    monkeypatch.setattr(
-        behavior_orchestrate, "invoke_composer", _stub_invoke_composer
-    )
 
     assert _run_install(consumer, state_root, monkeypatch) == 0
 
     spaex_md = consumer / ".spaex/constitution.md"
     assert spaex_md.exists()
     content = spaex_md.read_text(encoding="utf-8")
-    assert "_project/shared-client" in content
+    (block,) = parse(content).blocks
+    assert block.scoped_id == "_project/shared-client"
+    assert block.modality == "MUST"
+    assert block.body == "**MUST** route HTTP through the shared client.\n"
 
     frag = consumer / ".spaex" / "constitution.d" / "_project" / "shared-client.md"
     assert frag.exists()
 
 
 def test_file_reference_local_fragment_materializes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
 ) -> None:
     consumer = tmp_path / "consumer"
     consumer.mkdir()
@@ -185,14 +132,14 @@ def test_file_reference_local_fragment_materializes(
         )
     )
     state_root = tmp_path / "state"
-    monkeypatch.setattr(
-        behavior_orchestrate, "invoke_composer", _stub_invoke_composer
-    )
 
     assert _run_install(consumer, state_root, monkeypatch) == 0
 
     content = (consumer / ".spaex/constitution.md").read_text(encoding="utf-8")
-    assert "_project/no-secrets" in content
+    (block,) = parse(content).blocks
+    assert block.scoped_id == "_project/no-secrets"
+    assert block.modality == "MUST_NOT"
+    assert block.body == "**MUST NOT** commit secrets to git.\n"
 
     frag = consumer / ".spaex" / "constitution.d" / "_project" / "no-secrets.md"
     assert frag.exists()
@@ -263,7 +210,7 @@ def _publish_shared_id_molecule(tmp_path: Path) -> tuple[str, str, Path]:
 
 
 def test_project_local_override_aborts_with_exit_22(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
 ) -> None:
     canonical, head, state_root = _publish_shared_id_molecule(tmp_path)
     consumer = tmp_path / "consumer"
@@ -290,24 +237,14 @@ def test_project_local_override_aborts_with_exit_22(
         )
     )
 
-    composer_calls: list[int] = []
-
-    def sentinel_composer(*args, **kwargs):
-        composer_calls.append(1)
-        raise AssertionError(
-            "Composer must not be invoked when the additive-only pre-check "
-            "rejects a project-local override (FR-020)"
-        )
-
-    monkeypatch.setattr(
-        behavior_orchestrate, "invoke_composer", sentinel_composer
-    )
-
     with pytest.raises(HaexError) as excinfo:
         _run_install(consumer, state_root, monkeypatch)
 
     err = excinfo.value
     assert err.exit_code == exit_codes.BEHAVIOR_PROJECT_LOCAL_REFUSE == 22
     assert "shared-client" in str(err)
-    assert composer_calls == []
+    assert stub_check.calls == 0, (
+        "the check must not run when the additive-only pre-check rejects a "
+        "project-local override (FR-020)"
+    )
     assert not (consumer / ".spaex/constitution.md").exists()

@@ -1,4 +1,4 @@
-"""Composer quota fault-injection (Spec 023 T025, SC-011, exit 33)."""
+"""Check quota fault-injection (Spec 023 T025, SC-011, exit 33)."""
 
 from __future__ import annotations
 
@@ -8,8 +8,9 @@ from types import SimpleNamespace
 import pytest
 
 from spaex.behavior.composer import invoke as invoke_module
+from spaex.behavior.composer.check import CheckInput, run_check
 from spaex.behavior.composer.failure import ComposerQuotaError, ComposerRuntimeError
-from spaex.behavior.composer.invoke import ComposerInput, InvokeOptions
+from spaex.behavior.composer.invoke import InvokeOptions
 from spaex.util import exit_codes
 
 
@@ -49,8 +50,8 @@ def test_cli_quota_signal_raises_quota_error(
     )
 
     with pytest.raises(ComposerQuotaError):
-        invoke_module.invoke_composer(
-            ComposerInput(fragments=()),
+        run_check(
+            CheckInput(fragments=()),
             repo_root=repo_root,
             options=InvokeOptions(forced_cli_runtimes=("claude",)),
         )
@@ -69,8 +70,8 @@ def test_cli_non_quota_failure_remains_runtime_error(
     )
 
     with pytest.raises(ComposerRuntimeError):
-        invoke_module.invoke_composer(
-            ComposerInput(fragments=()),
+        run_check(
+            CheckInput(fragments=()),
             repo_root=repo_root,
             options=InvokeOptions(forced_cli_runtimes=("claude",)),
         )

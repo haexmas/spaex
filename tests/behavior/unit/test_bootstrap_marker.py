@@ -41,7 +41,7 @@ def test_install_creates_missing_claude_target(tmp_path: Path) -> None:
     target = home / ".claude" / "CLAUDE.md"
     assert target.exists()
     text = target.read_text(encoding="utf-8")
-    assert '<!-- spaex-bootstrap:start version="3" -->' in text
+    assert '<!-- spaex-bootstrap:start version="4" -->' in text
     assert bootstrap.END_MARKER in text
     assert "## spaex per-project constitution" in text
 
@@ -55,7 +55,7 @@ def test_install_appends_when_target_has_content_but_no_markers(tmp_path: Path) 
     assert [o.action for o in outcomes] == ["appended"]
     text = target.read_text(encoding="utf-8")
     assert text.startswith("existing operator content\n")
-    assert '<!-- spaex-bootstrap:start version="3" -->' in text
+    assert '<!-- spaex-bootstrap:start version="4" -->' in text
 
 
 def test_install_preserves_symlink_and_mode(tmp_path: Path) -> None:
@@ -127,7 +127,7 @@ def test_install_upgrades_older_version_and_preserves_surrounding_content(
     assert [o.action for o in outcomes] == ["upgraded"]
     text = target.read_text(encoding="utf-8")
     assert text.startswith("preamble\n")
-    assert '<!-- spaex-bootstrap:start version="3" -->' in text
+    assert '<!-- spaex-bootstrap:start version="4" -->' in text
     assert "old body" not in text
     assert text.endswith("trailing operator notes\n")
 
@@ -301,6 +301,35 @@ def test_install_upgrades_a_version_2_block_to_mention_the_local_document(
 
     assert [o.action for o in outcomes] == ["upgraded"]
     text = target.read_text(encoding="utf-8")
-    assert '<!-- spaex-bootstrap:start version="3" -->' in text
+    assert '<!-- spaex-bootstrap:start version="4" -->' in text
     assert ".spaex/local/constitution.md" in text
     assert "the project constitution prevails" in text
+
+
+def test_install_upgrades_a_version_3_block_to_describe_fragments_and_exclusions(
+    tmp_path: Path,
+) -> None:
+    """Spec 030: v4 tells agents the constitution holds whole fragments and that
+    text inside a `spaex-excluded` comment is not an instruction."""
+    home = _fake_home(tmp_path)
+    target = home / ".claude" / "CLAUDE.md"
+    target.parent.mkdir(parents=True)
+    target.write_text(
+        "before\n"
+        '<!-- spaex-bootstrap:start version="3" -->\n\nclauses body\n\n'
+        "<!-- spaex-bootstrap:end -->\nafter\n",
+        encoding="utf-8",
+    )
+    assert bootstrap.BLOCK_VERSION == "4"
+    assert not bootstrap.check([bootstrap.Runtime.CLAUDE], home=home, env={})
+
+    outcomes = bootstrap.install([bootstrap.Runtime.CLAUDE], home=home, env={})
+
+    assert [o.action for o in outcomes] == ["upgraded"]
+    text = target.read_text(encoding="utf-8")
+    assert text.startswith("before\n") and text.endswith("after\n")
+    assert 'version="3"' not in text and "clauses body" not in text
+    assert "`spaex-fragment`" in text
+    assert "`spaex-excluded` is not an instruction" in text
+    assert "rendered clauses" not in text
+    assert bootstrap.check([bootstrap.Runtime.CLAUDE], home=home, env={})

@@ -17,11 +17,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from spaex.behavior import orchestrate as behavior_orchestrate
 from spaex.cli import install as install_cli
 from spaex.git.cache import clone_dir
 from spaex.util import exit_codes
 from spaex.util.errors import HaexError
+
+from ..conftest import StubCheck
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None, reason="git binary required"
@@ -149,24 +150,11 @@ def _run_install(
     return install_cli.run(ns)
 
 
-def test_case_a_aborts_with_exit_20_before_composer_runs(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_case_a_aborts_with_exit_20_before_the_check_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
 ) -> None:
     canonical, head, state_root = _publish_case_a_molecule(tmp_path)
     consumer = _make_consumer_pinning(tmp_path, source_url=canonical, revision=head)
-
-    composer_calls: list[int] = []
-
-    def sentinel_composer(*args, **kwargs):
-        composer_calls.append(1)
-        raise AssertionError(
-            "Composer must not be invoked when the mechanical pre-check "
-            "rejects the pin set (FR-005)"
-        )
-
-    monkeypatch.setattr(
-        behavior_orchestrate, "invoke_composer", sentinel_composer
-    )
 
     with pytest.raises(HaexError) as excinfo:
         _run_install(consumer, state_root, monkeypatch)
@@ -179,5 +167,7 @@ def test_case_a_aborts_with_exit_20_before_composer_runs(
     assert "MUST" in message
     assert "SHOULD" in message
 
-    assert composer_calls == []
+    assert stub_check.calls == 0, (
+        "the check must not run when the mechanical pre-check rejects the pin set (FR-005)"
+    )
     assert not (consumer / ".spaex/constitution.md").exists()

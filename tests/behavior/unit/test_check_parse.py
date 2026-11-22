@@ -42,10 +42,8 @@ def test_payload_numbers_the_lines_and_sorts_fragments() -> None:
     payload = json.loads(CheckInput(fragments=tuple(reversed(FRAGMENTS))).to_json())
     assert payload["check_prompt_version"] == CHECK_PROMPT_VERSION
     assert [f["id"] for f in payload["fragments"]] == ["m/a", "m/b", "n/c"]
-    assert payload["fragments"][1]["lines"] == [
-        {"n": 1, "text": "never use tabs"},
-        {"n": 2, "text": "other"},
-    ]
+    assert payload["fragments"][1]["body"] == "1: never use tabs\n2: other"
+    assert all("lines" not in fragment for fragment in payload["fragments"])
 
 
 def test_no_findings() -> None:

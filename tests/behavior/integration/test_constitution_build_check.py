@@ -1,26 +1,21 @@
-"""`spaex constitution build` / `--force` / `--check` (T058, SC-003).
+"""`spaex constitution build` / `--force` / `--check` (T058, SC-003; reworked by Spec 030).
 
-Verifies contracts/cli-surface.md §"spaex constitution build"'s exit-code
-and Composer-invocation contract:
+- Plain `constitution build` renders the file and runs the check only when no
+  completed check covers the current fragments (state in `decisions.json`).
+- `--force` reruns the check even when the state matches.
+- `--check` (without `--force`) NEVER calls the model: it compares the file
+  with a fresh render and the check state, exiting 0 when current and
+  non-zero (naming the reason) otherwise.
+- `--force --check` performs a fresh check and render and reports by exit code
+  whether they match what is committed; it never persists anything.
 
-- Plain `constitution build` reuses `orchestrate.run()`'s reproducibility
-  skip: no Composer call when fingerprints already match, a genuine
-  invocation when they don't.
-- `--force` reruns the Composer even when fingerprints match.
-- `--check` (without `--force`) NEVER invokes the Composer, exiting 0 when
-  current and non-zero when stale.
-- `--force --check` performs an explicit fresh Composer comparison: it does
-  invoke the Composer, and reports via exit code whether the freshly
-  composed output matches what was already committed (SC-003
-  reproducibility verification).
-
-Fixture setup mirrors test_source_hash_skip.py: a bare-git publisher
-repo with one molecule/one fragment, adopted by a consumer via `spaex add`
-with a counting Composer stub.
+Fixture setup: a bare-git publisher repo with one molecule and two fragments,
+adopted by a consumer via `spaex add`, with the check stubbed (`stub_check`).
 """
 
 from __future__ import annotations
 
+import io
 import json
 import shutil
 import subprocess
@@ -29,25 +24,19 @@ from types import SimpleNamespace
 
 import pytest
 
-from spaex.behavior import orchestrate as behavior_orchestrate
-from spaex.behavior.composer.invoke import (
-    ComposedShape,
-    ComposerInput,
-    InvokeOptions,
-    InvokeOutcome,
-    RuntimeDescriptor,
-)
+from spaex.behavior.decisions import Choice
 from spaex.cli import add as add_cli
 from spaex.cli.main import main
 from spaex.git.cache import clone_dir
 
-pytestmark = pytest.mark.skipif(
-    shutil.which("git") is None, reason="git binary required"
-)
+from ..conftest import Operator, StubCheck, make_finding
+
+pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git binary required")
 
 _MOL = "com.example.publisher.build-check"
 _CANONICAL = "https://example.invalid/example/publisher-build-check"
 _BODY = "**MUST** always route billing calls through the ledger service.\n"
+_AUDIT_BODY = "**SHOULD** never route billing calls around the ledger service.\n"
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -61,6 +50,13 @@ def _fragment_text(*, modality: str = "MUST") -> str:
     return (
         "---\nid: ledger-routing\nkind: constitution_fragment\n"
         f"atom_source: pkg.ledger\nmodality: {modality}\n---\n{_BODY}"
+    )
+
+
+def _audit_text() -> str:
+    return (
+        "---\nid: ledger-audit\nkind: constitution_fragment\n"
+        f"atom_source: pkg.audit\nmodality: SHOULD\n---\n{_AUDIT_BODY}"
     )
 
 
@@ -93,13 +89,14 @@ def _publish_molecule(tmp_path: Path) -> tuple[Path, str, str, Path]:
                 "id": _MOL,
                 "version": "1.0.0",
                 "priority": 20,
-                "atoms": {"behavior": ["fragments/ledger-routing.md"]},
+                "atoms": {"behavior": ["fragments/ledger-routing.md", "fragments/ledger-audit.md"]},
             },
             indent=2,
         )
     )
     (mol_dir / "fragments").mkdir()
     (mol_dir / "fragments" / "ledger-routing.md").write_text(_fragment_text())
+    (mol_dir / "fragments" / "ledger-audit.md").write_text(_audit_text())
 
     _git(working, "add", ".")
     _git(working, "commit", "-q", "-m", "build-check fixture v1")
@@ -108,23 +105,26 @@ def _publish_molecule(tmp_path: Path) -> tuple[Path, str, str, Path]:
     state_root = tmp_path / "state"
     target = clone_dir(state_root, _CANONICAL)
     target.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        ["git", "clone", "--bare", "-q", str(working), str(target)], check=True
-    )
+    subprocess.run(["git", "clone", "--bare", "-q", str(working), str(target)], check=True)
     return working, _CANONICAL, head, state_root
 
 
-def _commit_modality_change(
-    working: Path, state_root: Path, *, new_modality: str
+def _commit_fragment_change(
+    working: Path,
+    state_root: Path,
+    *,
+    modality: str = "MUST",
+    body: str = _BODY,
+    atom_source: str = "pkg.ledger",
 ) -> str:
-    """Body-unchanged, metadata-only edit so `source_hash` changes without
-    a full re-clone (bare-repo pack files are read-only on some
-    platforms; refetch instead, matching test_source_hash_skip.py)."""
+    """Edit the first fragment and refetch (bare-repo pack files are read-only on
+    some platforms; refetch instead of re-cloning)."""
     (working / "build-check" / "fragments" / "ledger-routing.md").write_text(
-        _fragment_text(modality=new_modality)
+        "---\nid: ledger-routing\nkind: constitution_fragment\n"
+        f"atom_source: {atom_source}\nmodality: {modality}\n---\n{body}"
     )
     _git(working, "add", ".")
-    _git(working, "commit", "-q", "-m", f"build-check fixture v2: {new_modality}")
+    _git(working, "commit", "-q", "-m", f"build-check fixture v2: {modality}")
     head = _git(working, "rev-parse", "HEAD")
 
     target = clone_dir(state_root, _CANONICAL)
@@ -182,6 +182,7 @@ def _snapshot_check_artifacts(consumer: Path) -> dict[str, object]:
     roots = (
         ".spaex/constitution.md",
         ".spaex/constitution.d",
+        ".spaex/decisions.json",
         ".spaex/clarifications.json",
         ".spaex/.stale",
         ".spaex/.constitution.d.staging",
@@ -234,220 +235,242 @@ def _run_constitution_build(
     return main(["--repo-root", str(consumer), "constitution", "build", *args])
 
 
-class _CountingStub:
-    """Counts every Composer invocation; echoes the expected header hashes
-    back verbatim (contracts §Shape A) so `emit_composed`'s hash
-    verification passes. An optional `variant` seam lets a test simulate a
-    non-reproducible rebuild (different bullet phrasing) while still
-    satisfying the hash contract, which only depends on fragment identity
-    and metadata, never the Composer's exact prose."""
+def _install(consumer, state_root, monkeypatch, canonical, head) -> None:
+    assert _run_add(consumer, state_root, monkeypatch, source_url=canonical, revision=head) == 0
 
-    def __init__(self, *, variant: str = "") -> None:
-        self.calls: int = 0
-        self._variant = variant
 
-    def __call__(
-        self,
-        composer_input: ComposerInput,
-        *,
-        repo_root: Path,
-        options: InvokeOptions | None = None,
-    ) -> InvokeOutcome:
-        self.calls += 1
-        data = json.loads(composer_input.to_json())
-        header = (
-            f'<!-- spaex-composed:source_hash="{data["expected_source_hash"]}" '
-            f'build_input_hash="{data["expected_build_input_hash"]}" version="1" -->\n'
-            "# spaex Behavior Harness\n\n"
+def _contradiction(stub: StubCheck) -> None:
+    """Make the stubbed check report the two ledger fragments as contradicting."""
+    stub.factory = lambda fragments: [
+        make_finding(
+            fragments,
+            "contradiction",
+            (f"{_MOL}/ledger-routing", 1, 1),
+            (f"{_MOL}/ledger-audit", 1, 1),
         )
-        sections: dict[str, list[str]] = {}
-        for fragment in data["fragments"]:
-            scoped = f"{fragment['molecule_id']}/{fragment['fragment_id']}"
-            text = fragment["body"].strip().replace("**", "").rstrip(".")
-            suffix = f" ({self._variant})" if self._variant and self.calls > 1 else ""
-            bullet = f"- {text}{suffix}. _[from `{scoped}`]_"
-            sections.setdefault(fragment["modality"] or "MUST", []).append(bullet)
-        parts = [header]
-        for modality in ("MUST", "MUST_NOT", "SHOULD", "SHOULD_NOT", "MAY", "MAY_NOT"):
-            bullets = sections.get(modality)
-            if not bullets:
-                continue
-            parts.append(f"## {modality}\n\n" + "\n".join(bullets) + "\n\n")
-        body = "".join(parts).rstrip() + "\n"
-        return InvokeOutcome(
-            result=ComposedShape(body=body),
-            runtime=RuntimeDescriptor(kind="stub", identifier="test"),
-            raw_output=body,
-        )
+    ]
 
 
-def test_check_reports_current_and_never_invokes_composer(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_check_reports_current_and_never_calls_the_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck, capsys
 ) -> None:
     _, canonical, head, state_root = _publish_molecule(tmp_path)
     consumer = _make_consumer(tmp_path)
-    stub = _CountingStub()
-    monkeypatch.setattr(behavior_orchestrate, "invoke_composer", stub)
-
-    assert (
-        _run_add(consumer, state_root, monkeypatch, source_url=canonical, revision=head)
-        == 0
-    )
-    assert stub.calls == 1
+    _install(consumer, state_root, monkeypatch, canonical, head)
+    assert stub_check.calls == 1
 
     scratch = consumer / ".spaex" / ".constitution.d.staging" / "sentinel"
     scratch.parent.mkdir(parents=True, exist_ok=True)
     scratch.write_text("persistent scratch\n", encoding="utf-8")
+    capsys.readouterr()
 
     rc = _run_constitution_build(consumer, state_root, monkeypatch, "--check")
     assert rc == 0
-    assert stub.calls == 1, "--check must never invoke the Composer"
+    assert "is current" in capsys.readouterr().out
+    assert stub_check.calls == 1, "--check must never call the model"
     assert scratch.read_text(encoding="utf-8") == "persistent scratch\n"
 
 
-def test_check_reports_stale_without_invoking_composer(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_check_reports_out_of_date_without_calling_the_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck, capsys
 ) -> None:
     working, canonical, head, state_root = _publish_molecule(tmp_path)
     consumer = _make_consumer(tmp_path)
-    stub = _CountingStub()
-    monkeypatch.setattr(behavior_orchestrate, "invoke_composer", stub)
-
-    assert (
-        _run_add(consumer, state_root, monkeypatch, source_url=canonical, revision=head)
-        == 0
-    )
-    assert stub.calls == 1
+    _install(consumer, state_root, monkeypatch, canonical, head)
     before = (consumer / ".spaex/constitution.md").read_bytes()
 
-    new_head = _commit_modality_change(working, state_root, new_modality="SHOULD")
+    new_head = _commit_fragment_change(working, state_root, modality="SHOULD")
     _bump_consumer_revision(consumer, new_head)
+    capsys.readouterr()
 
     rc = _run_constitution_build(consumer, state_root, monkeypatch, "--check")
-    assert rc == 1, "a changed fragment set must report stale under --check"
-    assert stub.calls == 1, "--check must never invoke the Composer, even when stale"
-    assert (consumer / ".spaex/constitution.md").read_bytes() == before, (
-        "--check must not write .spaex/constitution.md"
-    )
+    assert rc == 1, "a changed fragment set must report out of date under --check"
+    assert "differs from a fresh render" in capsys.readouterr().out
+    assert stub_check.calls == 1, "--check must never call the model, even when out of date"
+    assert (consumer / ".spaex/constitution.md").read_bytes() == before
 
 
-def test_plain_build_skips_composer_when_current(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_check_reports_an_unchecked_fragment_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck, capsys
+) -> None:
+    """A file that equals the fresh render but whose fragments were never checked."""
+    _, canonical, head, state_root = _publish_molecule(tmp_path)
+    consumer = _make_consumer(tmp_path)
+    _install(consumer, state_root, monkeypatch, canonical, head)
+    (consumer / ".spaex/decisions.json").unlink()
+    capsys.readouterr()
+
+    rc = _run_constitution_build(consumer, state_root, monkeypatch, "--check")
+    assert rc == 1
+    assert "no completed contradiction check covers these fragments" in capsys.readouterr().out
+    assert stub_check.calls == 1
+
+
+def test_check_reports_a_missing_file_and_a_version_1_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck, capsys
 ) -> None:
     _, canonical, head, state_root = _publish_molecule(tmp_path)
     consumer = _make_consumer(tmp_path)
-    stub = _CountingStub()
-    monkeypatch.setattr(behavior_orchestrate, "invoke_composer", stub)
+    _install(consumer, state_root, monkeypatch, canonical, head)
+    path = consumer / ".spaex/constitution.md"
 
-    assert (
-        _run_add(consumer, state_root, monkeypatch, source_url=canonical, revision=head)
-        == 0
+    path.write_text(
+        '<!-- spaex-composed:source_hash="'
+        + "a" * 64
+        + '" build_input_hash="'
+        + "b" * 64
+        + '" version="1" -->\n## MUST\n- x. _[from `m/f`]_\n',
+        encoding="utf-8",
     )
-    assert stub.calls == 1
+    capsys.readouterr()
+    assert _run_constitution_build(consumer, state_root, monkeypatch, "--check") == 1
+    assert "format version 1" in capsys.readouterr().out
 
-    rc = _run_constitution_build(consumer, state_root, monkeypatch)
-    assert rc == 0
-    assert stub.calls == 1, "a plain rebuild must reuse the reproducibility skip"
+    path.unlink()
+    assert _run_constitution_build(consumer, state_root, monkeypatch, "--check") == 1
+    assert "is missing" in capsys.readouterr().out
+    assert stub_check.calls == 1
 
 
-def test_plain_build_recomposes_when_stale(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_plain_build_skips_the_check_when_one_covers_the_fragments(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
+) -> None:
+    _, canonical, head, state_root = _publish_molecule(tmp_path)
+    consumer = _make_consumer(tmp_path)
+    _install(consumer, state_root, monkeypatch, canonical, head)
+    before = (consumer / ".spaex/constitution.md").read_bytes()
+
+    assert _run_constitution_build(consumer, state_root, monkeypatch) == 0
+    assert stub_check.calls == 1, "a plain rebuild must not repeat a completed check"
+    assert (consumer / ".spaex/constitution.md").read_bytes() == before
+
+
+def test_plain_build_rerenders_a_provenance_change_without_a_new_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
+) -> None:
+    """The atom source is not part of what the model compares, but it is part of the
+    fragment fingerprint in the header: the file changes, the check is not repeated."""
+    working, canonical, head, state_root = _publish_molecule(tmp_path)
+    consumer = _make_consumer(tmp_path)
+    _install(consumer, state_root, monkeypatch, canonical, head)
+    before = (consumer / ".spaex/constitution.md").read_text()
+
+    new_head = _commit_fragment_change(working, state_root, atom_source="pkg.ledger-renamed")
+    _bump_consumer_revision(consumer, new_head)
+    assert _run_constitution_build(consumer, state_root, monkeypatch, "--check") == 1
+
+    assert _run_constitution_build(consumer, state_root, monkeypatch) == 0
+    assert stub_check.calls == 1
+    after = (consumer / ".spaex/constitution.md").read_text()
+    assert after != before
+    assert after.split("\n", 1)[1] == before.split("\n", 1)[1], "only the header hash changes"
+    assert _run_constitution_build(consumer, state_root, monkeypatch, "--check") == 0
+
+
+def test_plain_build_checks_again_when_the_modality_changed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
+) -> None:
+    """The declared modality is part of what the model compares, so it is checked again."""
+    working, canonical, head, state_root = _publish_molecule(tmp_path)
+    consumer = _make_consumer(tmp_path)
+    _install(consumer, state_root, monkeypatch, canonical, head)
+
+    new_head = _commit_fragment_change(working, state_root, modality="SHOULD")
+    _bump_consumer_revision(consumer, new_head)
+
+    assert _run_constitution_build(consumer, state_root, monkeypatch) == 0
+    assert stub_check.calls == 2
+    text = (consumer / ".spaex/constitution.md").read_text()
+    assert f'<!-- spaex-fragment id="{_MOL}/ledger-routing" modality="SHOULD" -->' in text
+    assert _run_constitution_build(consumer, state_root, monkeypatch, "--check") == 0
+
+
+def test_plain_build_checks_again_when_a_body_changed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
 ) -> None:
     working, canonical, head, state_root = _publish_molecule(tmp_path)
     consumer = _make_consumer(tmp_path)
-    stub = _CountingStub()
-    monkeypatch.setattr(behavior_orchestrate, "invoke_composer", stub)
+    _install(consumer, state_root, monkeypatch, canonical, head)
 
-    assert (
-        _run_add(consumer, state_root, monkeypatch, source_url=canonical, revision=head)
-        == 0
+    new_head = _commit_fragment_change(
+        working, state_root, body="**MUST** route billing through the ledger and log it.\n"
     )
-    assert stub.calls == 1
-
-    new_head = _commit_modality_change(working, state_root, new_modality="SHOULD")
     _bump_consumer_revision(consumer, new_head)
 
-    rc = _run_constitution_build(consumer, state_root, monkeypatch)
-    assert rc == 0
-    assert stub.calls == 2
-    assert b"## SHOULD" in (consumer / ".spaex/constitution.md").read_bytes()
-
-    rc = _run_constitution_build(consumer, state_root, monkeypatch, "--check")
-    assert rc == 0
-    assert stub.calls == 2
+    assert _run_constitution_build(consumer, state_root, monkeypatch) == 0
+    assert stub_check.calls == 2
+    assert "log it" in (consumer / ".spaex/constitution.md").read_text()
+    assert _run_constitution_build(consumer, state_root, monkeypatch, "--check") == 0
+    assert stub_check.calls == 2
 
 
-def test_force_rebuilds_even_when_current(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_force_checks_again_even_when_current(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
 ) -> None:
     _, canonical, head, state_root = _publish_molecule(tmp_path)
     consumer = _make_consumer(tmp_path)
-    stub = _CountingStub()
-    monkeypatch.setattr(behavior_orchestrate, "invoke_composer", stub)
+    _install(consumer, state_root, monkeypatch, canonical, head)
+    assert stub_check.calls == 1
 
-    assert (
-        _run_add(consumer, state_root, monkeypatch, source_url=canonical, revision=head)
-        == 0
-    )
-    assert stub.calls == 1
-
-    rc = _run_constitution_build(consumer, state_root, monkeypatch, "--force")
-    assert rc == 0
-    assert stub.calls == 2, "--force must invoke the Composer even when fingerprints match"
+    assert _run_constitution_build(consumer, state_root, monkeypatch, "--force") == 0
+    assert stub_check.calls == 2, "--force must run the check even when the state matches"
 
 
-def test_force_check_matches_when_rebuild_is_reproducible(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_force_check_matches_when_nothing_changed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
 ) -> None:
     _, canonical, head, state_root = _publish_molecule(tmp_path)
     consumer = _make_consumer(tmp_path)
-    stub = _CountingStub()
-    monkeypatch.setattr(behavior_orchestrate, "invoke_composer", stub)
-
-    assert (
-        _run_add(consumer, state_root, monkeypatch, source_url=canonical, revision=head)
-        == 0
-    )
-    assert stub.calls == 1
+    _install(consumer, state_root, monkeypatch, canonical, head)
     before = (consumer / ".spaex/constitution.md").read_bytes()
     _seed_check_artifacts(consumer)
     artifacts_before = _snapshot_check_artifacts(consumer)
 
-    rc = _run_constitution_build(
-        consumer, state_root, monkeypatch, "--force", "--check"
-    )
-    assert rc == 0, "a reproducible rebuild must report a match"
-    assert stub.calls == 2, "--force --check must invoke the Composer for real"
+    rc = _run_constitution_build(consumer, state_root, monkeypatch, "--force", "--check")
+    assert rc == 0, "a fresh check that finds nothing reproduces the committed file"
+    assert stub_check.calls == 2, "--force --check must run the check for real"
     assert (consumer / ".spaex/constitution.md").read_bytes() == before
     assert _snapshot_check_artifacts(consumer) == artifacts_before
 
 
-def test_force_check_reports_drift_when_rebuild_differs(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_force_check_reports_drift_when_a_fresh_check_finds_something(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    stub_check: StubCheck,
+    operator: Operator,
 ) -> None:
-    """SC-003 verification: `--force --check` catches a Composer that does
-    not reproduce byte-identical output on rebuild, even though the
-    fingerprints (fragment identity/metadata) are unchanged."""
+    """The committed file has no exclusion; a fresh check reports a contradiction and the
+    operator keeps one passage, so the fresh render differs. Nothing is persisted."""
     _, canonical, head, state_root = _publish_molecule(tmp_path)
     consumer = _make_consumer(tmp_path)
-    stub = _CountingStub(variant="nondeterministic")
-    monkeypatch.setattr(behavior_orchestrate, "invoke_composer", stub)
-
-    assert (
-        _run_add(consumer, state_root, monkeypatch, source_url=canonical, revision=head)
-        == 0
-    )
-    assert stub.calls == 1
+    _install(consumer, state_root, monkeypatch, canonical, head)
     before = (consumer / ".spaex/constitution.md").read_bytes()
     _seed_check_artifacts(consumer)
     artifacts_before = _snapshot_check_artifacts(consumer)
 
-    rc = _run_constitution_build(
-        consumer, state_root, monkeypatch, "--force", "--check"
-    )
-    assert rc == 1, "drift between the fresh rebuild and the committed file is reported"
-    assert stub.calls == 2
+    _contradiction(stub_check)
+    operator.default = Choice(kind="keep", kept=0)
+    rc = _run_constitution_build(consumer, state_root, monkeypatch, "--force", "--check")
+    assert rc == 1, "drift between the fresh result and the committed file is reported"
+    assert len(operator.asked) == 1
     assert (consumer / ".spaex/constitution.md").read_bytes() == before, (
         "--check must never persist a rebuild, even combined with --force"
     )
+    assert _snapshot_check_artifacts(consumer) == artifacts_before
+
+
+def test_force_check_refuses_to_decide_without_an_operator(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
+) -> None:
+    """Without the `operator` stand-in the real prompt runs and refuses on a non-TTY."""
+    _, canonical, head, state_root = _publish_molecule(tmp_path)
+    consumer = _make_consumer(tmp_path)
+    _install(consumer, state_root, monkeypatch, canonical, head)
+    _seed_check_artifacts(consumer)
+    artifacts_before = _snapshot_check_artifacts(consumer)
+
+    _contradiction(stub_check)
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
+    rc = _run_constitution_build(consumer, state_root, monkeypatch, "--force", "--check")
+    assert rc == 21
     assert _snapshot_check_artifacts(consumer) == artifacts_before

@@ -352,6 +352,16 @@ def run_constitution_trace(args: argparse.Namespace) -> int:
                 "run `spaex install` or `spaex constitution build`"
             ),
         )
+    if document.version != behavior_render.FORMAT_VERSION or not document.blocks:
+        return _emit_trace_result(
+            fmt,
+            matches=(),
+            error=(
+                f".spaex/constitution.md is format version {document.version}, not "
+                f"{behavior_render.FORMAT_VERSION}; run `spaex install` or "
+                "`spaex constitution build`"
+            ),
+        )
     blocks = document.blocks
     scoped_ids = {block.scoped_id for block in blocks}
     molecule_ids = {scoped_id.split("/", 1)[0] for scoped_id in scoped_ids}
@@ -609,7 +619,7 @@ def maybe_emit_no_bootstrap_hint() -> None:
 
 
 def maybe_emit_local_bootstrap_hint() -> None:
-    """Spec 029: a local behavior document needs bootstrap block version 3.
+    """Spec 029: a local behavior document needs bootstrap block version 3 or newer.
 
     Emits one stderr hint when no runtime carries the current block, so the
     operator's agents would not read `.spaex/local/constitution.md`.

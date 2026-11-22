@@ -1,5 +1,5 @@
-"""Fragment drift detection: on-disk edits without a Composer run (T050,
-User Story 6 acceptance scenario 3).
+"""Fragment drift detection: on-disk edits without an install (T050,
+User Story 6 acceptance scenario 3, spec 030).
 
 Project-local fragments configured via `.spaex/manifest.json`'s
 `constitution.local_fragments[].file` are read straight from their
@@ -7,11 +7,11 @@ referenced file on every `spaex install` invocation
 (`materialize.project_local_from_config`, FR-018's file-reference storage
 option) rather than being reconstituted from any spaex-managed cache. That
 makes them the one class of fragment whose content can drift on disk
-between installs with no Composer invocation in between -- exactly
-Acceptance Scenario 3: the fragment set and the committed `.spaex/constitution.md` fall
-out of sync, and the next `spaex install` must detect the drift (via a
-`source_hash` mismatch, FR-009) and invoke the Composer to regenerate
-`.spaex/constitution.md`.
+between installs -- exactly Acceptance Scenario 3: the fragment set and the
+committed `.spaex/constitution.md` fall out of sync (the file no longer
+equals a fresh render, `render.verify` and `state.diagnose` say so), and the
+next `spaex install` must detect the drift, run the check again and
+regenerate `.spaex/constitution.md`.
 """
 
 from __future__ import annotations
@@ -22,16 +22,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from spaex.behavior import orchestrate as behavior_orchestrate
-from spaex.behavior.composer.invoke import (
-    ComposedShape,
-    ComposerInput,
-    InvokeOptions,
-    InvokeOutcome,
-    RuntimeDescriptor,
-)
-from spaex.behavior.emit import read_header_hashes
+from spaex.behavior.fragment import BehaviorFragment
+from spaex.behavior.render import RenderError, parse, verify
+from spaex.behavior.state import assess, diagnose
 from spaex.cli import install as install_cli
+
+from ..conftest import StubCheck
 
 _FRAGMENT_HEADER = (
     "---\n"
@@ -82,77 +78,74 @@ def _run_install(
     return install_cli.run(ns)
 
 
-class _CountingStub:
-    """Counts Composer invocations; echoes the expected header hashes back
-    verbatim (contracts §Shape A) so `emit_composed`'s hash verification
-    passes."""
-
-    def __init__(self) -> None:
-        self.calls: int = 0
-
-    def __call__(
-        self,
-        composer_input: ComposerInput,
-        *,
-        repo_root: Path,
-        options: InvokeOptions | None = None,
-    ) -> InvokeOutcome:
-        self.calls += 1
-        data = json.loads(composer_input.to_json())
-        header = (
-            f'<!-- spaex-composed:source_hash="{data["expected_source_hash"]}" '
-            f'build_input_hash="{data["expected_build_input_hash"]}" version="1" -->\n'
-            "# spaex Behavior Harness\n\n"
-        )
-        bullets = []
-        for fragment in data["fragments"]:
-            scoped = f"{fragment['molecule_id']}/{fragment['fragment_id']}"
-            text = fragment["body"].strip().replace("**", "").rstrip(".")
-            bullets.append(f"- {text}. _[from `{scoped}`]_")
-        body = header + "## MUST_NOT\n\n" + "\n".join(bullets) + "\n"
-        return InvokeOutcome(
-            result=ComposedShape(body=body),
-            runtime=RuntimeDescriptor(kind="stub", identifier="test"),
-            raw_output=body,
-        )
+def _local_fragments(consumer: Path) -> list[BehaviorFragment]:
+    """The materialized fragments the install left behind."""
+    path = consumer / ".spaex" / "constitution.d" / "_project" / "data-retention.md"
+    return [BehaviorFragment.from_file(path, molecule_id="_project")]
 
 
-def test_fragment_edited_on_disk_without_composer_run_is_detected(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_fragment_edited_on_disk_without_install_is_detected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
 ) -> None:
     consumer = _make_consumer(tmp_path)
     state_root = tmp_path / "state"
-    stub = _CountingStub()
-    monkeypatch.setattr(behavior_orchestrate, "invoke_composer", stub)
 
     assert _run_install(consumer, state_root, monkeypatch) == 0
-    assert stub.calls == 1
+    assert stub_check.calls == 1
     first = (consumer / ".spaex/constitution.md").read_bytes()
-    first_hashes = read_header_hashes(consumer)
-    assert first_hashes is not None
+    first_document = parse(first.decode())
     assert b"past 30 days" in first
 
     assert _run_install(consumer, state_root, monkeypatch) == 0
-    assert stub.calls == 1, "an unchanged local fragment must skip the Composer"
+    assert stub_check.calls == 1, "an unchanged local fragment must skip the check"
 
-    # Drift: the fragment's source file is edited directly on disk. No
-    # spaex command touches `.spaex/constitution.md` or the Composer in between.
+    # Drift: the fragment's source file is edited directly on disk. No spaex
+    # command touches `.spaex/constitution.md` or the check in between.
     fragment_path = consumer / ".spaex" / "local-fragments" / "data-retention.md"
     fragment_path.write_text(_fragment_text(retention_days=7))
 
     assert _run_install(consumer, state_root, monkeypatch) == 0
-    assert stub.calls == 2, (
-        "fragment drift on disk must invalidate source_hash and force a "
-        "Composer re-invocation (FR-009, User Story 6 acceptance scenario 3)"
+    assert stub_check.calls == 2, (
+        "fragment drift on disk must change the fragment fingerprint and force a "
+        "new check (FR-005, User Story 6 acceptance scenario 3)"
     )
     second = (consumer / ".spaex/constitution.md").read_bytes()
-    second_hashes = read_header_hashes(consumer)
-    assert second_hashes is not None
-    assert second_hashes[0] != first_hashes[0], (
+    second_document = parse(second.decode())
+    assert second_document.source_hash != first_document.source_hash, (
         "editing a local fragment must change source_hash"
     )
-    assert second_hashes[1] == first_hashes[1], (
-        "editing a local fragment must preserve build_input_hash"
+    assert second_document.build_input_hash == first_document.build_input_hash, (
+        "editing a local fragment must preserve build_input_hash (no decisions changed)"
     )
     assert second != first
     assert b"past 7 days" in second
+    assert b"past 30 days" not in second
+
+
+def test_stale_composed_file_is_detected_by_verify_and_diagnose(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
+) -> None:
+    """A composed file that no longer matches its fragments fails `verify` and `diagnose`."""
+    consumer = _make_consumer(tmp_path)
+    assert _run_install(consumer, tmp_path / "state", monkeypatch) == 0
+
+    spaex_md = consumer / ".spaex/constitution.md"
+    current = spaex_md.read_text(encoding="utf-8")
+    fragments = _local_fragments(consumer)
+    assessment = assess(fragments, repo_root=consumer, spaex_dir=consumer / ".spaex")
+
+    verify(fragments, [], current)
+    assert diagnose(assessment, current) == "current"
+
+    # The fragment drifts on disk, and the copy materialized earlier is replaced.
+    drifted = _fragment_text(retention_days=7)
+    (consumer / ".spaex" / "constitution.d" / "_project" / "data-retention.md").write_text(
+        drifted
+    )
+    new_fragments = _local_fragments(consumer)
+    new_assessment = assess(new_fragments, repo_root=consumer, spaex_dir=consumer / ".spaex")
+
+    with pytest.raises(RenderError, match="body differs"):
+        verify(new_fragments, [], current)
+    assert diagnose(new_assessment, current) == "out-of-date"
+    assert new_assessment.check_needed, "the new text must also need a new check"

@@ -301,6 +301,7 @@ def verify(
 
 
 __all__ = [
+    "FORMAT_VERSION",
     "NOTICES",
     "TITLE",
     "ExcludedRange",
