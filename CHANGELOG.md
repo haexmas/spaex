@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.4.5](https://github.com/haexmas/spaex/compare/v5.4.4...v5.4.5) (2026-11-22)
+
+
+### Documentation
+
+* name the app haex-vault instead of holzi ([118099d](https://github.com/haexmas/spaex/commit/118099da3b0b70a0cea9c0aaaa958a138ab7d425))
+
 ## [5.4.4](https://github.com/haexmas/spaex/compare/v5.4.3...v5.4.4) (2026-10-19)
 
 
