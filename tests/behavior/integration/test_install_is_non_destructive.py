@@ -1,27 +1,27 @@
-"""Every behavior-harness abort leaves tracked files byte-unchanged (T041, FR-006).
+"""Every behavior-harness abort leaves tracked files byte-unchanged (T041, FR-006, FR-019).
 
-Each of the eight documented failure exit codes MUST leave `.spaex/constitution.md`,
-`.spaex/constitution.d/`, and `.spaex/clarifications.json` byte-identical to
-their pre-install snapshot:
+Each of the documented failure exit codes MUST leave `.spaex/constitution.md`,
+`.spaex/constitution.d/`, `.spaex/decisions.json` and the legacy
+`.spaex/clarifications.json` byte-identical to their pre-install snapshot:
 
 - 20: intra-molecule Case A (mechanical pre-check refuse)
-- 21: cross-molecule Case B (Composer semantic refuse)
+- 21: a finding nobody can answer (no operator on a non-interactive terminal)
 - 22: project-local additive-only refuse
-- 30: Composer timeout
-- 31: Composer runtime error
-- 32: Composer invalid output
-- 33: Composer quota
-- 34: Composer no-runtime
+- 30: check timeout
+- 31: check runtime error
+- 32: check invalid output
+- 33: check quota
+- 34: check no-runtime
 
 Each test seeds a successful first install (fragment set materialized,
-`.spaex/constitution.md` composed, `.spaex/clarifications.json` planted), snapshots the
-tracked files, triggers the specific failure on a second install, and asserts
-byte-for-byte equality. Exit 22 is exercised through
-`spaex.behavior.orchestrate.run` directly because the project-local CLI wiring
-lands in Phase 7 (T044-T046); the non-destructive contract still lives on
-`orchestrate.run`, and the same `_commit_behavior_artifacts` rollback protects
-tracked files whether the caller is `spaex install` or a direct orchestrator
-invocation.
+`.spaex/constitution.md` composed, `.spaex/decisions.json` written, a legacy
+`.spaex/clarifications.json` planted), snapshots the tracked files, triggers the
+specific failure on a second install, and asserts byte-for-byte equality. Exit
+22 is exercised through `spaex.behavior.orchestrate.run` directly; the
+non-destructive contract lives on `orchestrate.run`, and the same
+`_commit_behavior_artifacts` rollback protects tracked files whether the caller
+is `spaex install` or a direct orchestrator invocation. A successful install, in
+contrast, removes the legacy files of format version 1.
 """
 
 from __future__ import annotations
@@ -42,15 +42,6 @@ from spaex.behavior.composer.failure import (
     ComposerRuntimeError,
     ComposerTimeoutError,
 )
-from spaex.behavior.composer.invoke import (
-    ClarificationQuestion,
-    ComposedShape,
-    ComposerInput,
-    InvokeOptions,
-    InvokeOutcome,
-    QuestionsShape,
-    RuntimeDescriptor,
-)
 from spaex.behavior.fragment import PROJECT_SCOPE, BehaviorFragment, Modality
 from spaex.cli import install as install_cli
 from spaex.constitution.resolve import resolve_install_inputs
@@ -58,6 +49,8 @@ from spaex.git.cache import clone_dir
 from spaex.model.consumer_manifest import ConsumerManifest
 from spaex.util import exit_codes
 from spaex.util.errors import HaexError
+
+from ..conftest import StubCheck, make_finding
 
 pytestmark = pytest.mark.skipif(
     shutil.which("git") is None, reason="git binary required"
@@ -166,24 +159,29 @@ def _publish_seed_molecule(tmp_path: Path) -> tuple[str, str, str, Path, Path]:
     return _CANONICAL, head_good, head_case_a, state_root, target
 
 
-def _write_consumer(consumer: Path, *, source: str, revision: str) -> None:
+def _write_consumer(
+    consumer: Path,
+    *,
+    source: str,
+    revision: str,
+    local_fragments: list[dict] | None = None,
+) -> None:
     consumer.mkdir(exist_ok=True)
     (consumer / ".spaex").mkdir(exist_ok=True)
-    (consumer / ".spaex/manifest.json").write_text(
-        json.dumps(
+    manifest: dict = {
+        "spaex_version": "4",
+        "identity": "com.example.project-consumer",
+        "compounds": [
             {
-                "spaex_version": "4",
-                "identity": "com.example.project-consumer",
-                "compounds": [
-                    {
-                        "source": source,
-                        "revision": revision,
-                        "molecules": [_MOL],
-                    }
-                ],
+                "source": source,
+                "revision": revision,
+                "molecules": [_MOL],
             }
-        )
-    )
+        ],
+    }
+    if local_fragments is not None:
+        manifest["constitution"] = {"local_fragments": local_fragments}
+    (consumer / ".spaex/manifest.json").write_text(json.dumps(manifest))
 
 
 def _run_install(
@@ -194,85 +192,51 @@ def _run_install(
     return install_cli.run(ns)
 
 
-def _shape_a_stub(
-    composer_input: ComposerInput,
-    *,
-    repo_root: Path,
-    options: InvokeOptions | None = None,
-) -> InvokeOutcome:
-    data = json.loads(composer_input.to_json())
-    header = (
-        f'<!-- spaex-composed:source_hash="{data["expected_source_hash"]}" '
-        f'build_input_hash="{data["expected_build_input_hash"]}" '
-        'version="1" -->\n'
-        "# spaex Behavior Harness\n"
-        "\n"
-        "_This file is generated by `spaex install`. Do not edit by hand._\n"
-        "_Change fragments in `.spaex/constitution.d/` and re-run install._\n"
-        "\n"
-        "## MUST\n"
-        "\n"
-        "- Always run the linter before committing. "
-        f'_[from `{_MOL}/bar`]_\n'
-    )
-    return InvokeOutcome(
-        result=ComposedShape(body=header),
-        runtime=RuntimeDescriptor(kind="stub", identifier="test"),
-        raw_output=header,
-    )
-
-
 def _seed_successful_install(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> tuple[Path, Path, str, str, str, Path]:
-    """One successful Shape A install; returns (consumer, state_root, ...)."""
+    """One successful install with the check stubbed; returns (consumer, state_root, ...)."""
     canonical, head_good, head_case_a, state_root, bare_target = (
         _publish_seed_molecule(tmp_path)
     )
     consumer = tmp_path / "consumer"
     _write_consumer(consumer, source=canonical, revision=head_good)
 
-    monkeypatch.setattr(behavior_orchestrate, "invoke_composer", _shape_a_stub)
     assert _run_install(consumer, state_root, monkeypatch) == 0
-    monkeypatch.undo()
-    monkeypatch.setenv("SPAEX_STATE", str(state_root))
 
     assert (consumer / ".spaex/constitution.md").exists()
+    assert (consumer / ".spaex/decisions.json").exists()
     assert (consumer / ".spaex" / "constitution.d" / _MOL / "bar.md").exists()
 
     return consumer, state_root, canonical, head_good, head_case_a, bare_target
 
 
-def _seed_clarifications_json(consumer: Path) -> None:
-    """Plant a schema-valid empty clarifications store next to the seed."""
+def _seed_legacy_files(consumer: Path) -> None:
+    """Plant the files of format version 1 next to the seed."""
     path = consumer / ".spaex" / "clarifications.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps({"schema_version": 1, "clarifications": {}}, indent=2) + "\n",
         encoding="utf-8",
     )
+    (consumer / ".spaex" / ".stale").write_text("left over from an old add\n", encoding="utf-8")
 
 
-def _invalidate_reproducibility_skip(consumer: Path) -> None:
-    """Bump `build_input_hash` so the next install must invoke the Composer."""
-    override = consumer / ".spaex" / "composer-prompt.md"
+def _invalidate_check_state(consumer: Path) -> None:
+    """Change the effective check prompt so the next install must run the check."""
+    override = consumer / ".spaex" / "check-prompt.md"
     override.parent.mkdir(parents=True, exist_ok=True)
     override.write_text(
-        "custom prompt override for this project\n", encoding="utf-8"
+        "custom check prompt override for this project\n", encoding="utf-8"
     )
 
 
 def _snapshot_tracked(consumer: Path) -> dict[str, bytes | None]:
     """Read every tracked path FR-006 protects. `None` records absence."""
-    spaex_md = consumer / ".spaex/constitution.md"
-    constitution_d = consumer / ".spaex" / "constitution.d"
-    clarifications = consumer / ".spaex" / "clarifications.json"
-
     snapshot: dict[str, bytes | None] = {}
-    snapshot[".spaex/constitution.md"] = spaex_md.read_bytes() if spaex_md.exists() else None
-    snapshot[".spaex/clarifications.json"] = (
-        clarifications.read_bytes() if clarifications.exists() else None
-    )
+    for name in ("constitution.md", "decisions.json", "clarifications.json", ".stale"):
+        path = consumer / ".spaex" / name
+        snapshot[f".spaex/{name}"] = path.read_bytes() if path.exists() else None
+    constitution_d = consumer / ".spaex" / "constitution.d"
     if constitution_d.exists():
         for path in sorted(constitution_d.rglob("*")):
             if path.is_file():
@@ -295,61 +259,51 @@ def _assert_tracked_unchanged(
 
 
 def test_exit_20_case_a_leaves_tracked_files_untouched(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
 ) -> None:
     consumer, state_root, canonical, _head_good, head_case_a, _bare = (
         _seed_successful_install(tmp_path, monkeypatch)
     )
-    _seed_clarifications_json(consumer)
+    _seed_legacy_files(consumer)
     baseline = _snapshot_tracked(consumer)
+    calls_before = stub_check.calls
 
     _write_consumer(consumer, source=canonical, revision=head_case_a)
-
-    def sentinel_composer(*args, **kwargs):
-        raise AssertionError(
-            "Composer must not run when the mechanical pre-check rejects"
-        )
-
-    monkeypatch.setattr(behavior_orchestrate, "invoke_composer", sentinel_composer)
 
     with pytest.raises(HaexError) as excinfo:
         _run_install(consumer, state_root, monkeypatch)
     assert excinfo.value.exit_code == exit_codes.BEHAVIOR_PRECHECK_REFUSE == 20
+    assert stub_check.calls == calls_before, "the check must not run when the pre-check rejects"
 
     _assert_tracked_unchanged(consumer, baseline)
 
 
-def test_exit_21_case_b_leaves_tracked_files_untouched(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_exit_21_unanswerable_finding_leaves_tracked_files_untouched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
 ) -> None:
-    consumer, state_root, *_ = _seed_successful_install(tmp_path, monkeypatch)
-    _seed_clarifications_json(consumer)
-    _invalidate_reproducibility_skip(consumer)
+    """A finding with no operator (no TTY under pytest) aborts before anything is written."""
+    consumer, state_root, canonical, head_good, *_ = _seed_successful_install(
+        tmp_path, monkeypatch
+    )
+    _seed_legacy_files(consumer)
     baseline = _snapshot_tracked(consumer)
 
-    def shape_b_composer(
-        composer_input: ComposerInput,
-        *,
-        repo_root: Path,
-        options: InvokeOptions | None = None,
-    ) -> InvokeOutcome:
-        return InvokeOutcome(
-            result=QuestionsShape(
-                questions=(
-                    ClarificationQuestion(
-                        kind="contradiction",
-                        cited_fragments=(
-                            {"molecule_id": _MOL, "fragment_id": "bar"},
-                        ),
-                        question="operator, resolve this contradiction?",
-                    ),
-                )
-            ),
-            runtime=RuntimeDescriptor(kind="stub", identifier="test"),
-            raw_output="shape-b",
+    _write_consumer(
+        consumer,
+        source=canonical,
+        revision=head_good,
+        local_fragments=[
+            {"id": "extra", "modality": "SHOULD", "body": "**SHOULD** skip the linter."}
+        ],
+    )
+    stub_check.factory = lambda fragments: [
+        make_finding(
+            fragments,
+            "contradiction",
+            (f"{_MOL}/bar", 1, 1),
+            (f"{PROJECT_SCOPE}/extra", 1, 1),
         )
-
-    monkeypatch.setattr(behavior_orchestrate, "invoke_composer", shape_b_composer)
+    ]
 
     with pytest.raises(HaexError) as excinfo:
         _run_install(consumer, state_root, monkeypatch)
@@ -359,18 +313,13 @@ def test_exit_21_case_b_leaves_tracked_files_untouched(
 
 
 def test_exit_22_project_local_override_leaves_tracked_files_untouched(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
 ) -> None:
-    """Trigger exit 22 through `orchestrate.run` directly.
-
-    Project-local CLI wiring (`.spaex/manifest.json` -> `constitution.local_fragments`)
-    lands in Phase 7 T044-T046; the additive-only enforcement itself is Phase
-    2's `precheck` and Spec 023's non-destructive contract is Phase 5's
-    concern.
-    """
+    """Trigger exit 22 through `orchestrate.run` directly (additive-only pre-check)."""
     consumer, state_root, *_ = _seed_successful_install(tmp_path, monkeypatch)
-    _seed_clarifications_json(consumer)
+    _seed_legacy_files(consumer)
     baseline = _snapshot_tracked(consumer)
+    calls_before = stub_check.calls
 
     manifest = ConsumerManifest.from_json((consumer / ".spaex/manifest.json").read_bytes())
     _contributions, resolved = resolve_install_inputs(manifest, state_root)
@@ -397,6 +346,7 @@ def test_exit_22_project_local_override_leaves_tracked_files_untouched(
         == exit_codes.BEHAVIOR_PROJECT_LOCAL_REFUSE
         == 22
     )
+    assert stub_check.calls == calls_before
 
     _assert_tracked_unchanged(consumer, baseline)
 
@@ -404,15 +354,15 @@ def test_exit_22_project_local_override_leaves_tracked_files_untouched(
 def _run_seeded_second_install_and_expect_exit(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    stub_factory,
+    failing_check,
     expected_exit_code: int,
 ) -> None:
     consumer, state_root, *_ = _seed_successful_install(tmp_path, monkeypatch)
-    _seed_clarifications_json(consumer)
-    _invalidate_reproducibility_skip(consumer)
+    _seed_legacy_files(consumer)
+    _invalidate_check_state(consumer)
     baseline = _snapshot_tracked(consumer)
 
-    monkeypatch.setattr(behavior_orchestrate, "invoke_composer", stub_factory)
+    monkeypatch.setattr(behavior_orchestrate, "check_fragments", failing_check)
 
     with pytest.raises(HaexError) as excinfo:
         _run_install(consumer, state_root, monkeypatch)
@@ -421,8 +371,8 @@ def _run_seeded_second_install_and_expect_exit(
     _assert_tracked_unchanged(consumer, baseline)
 
 
-def test_exit_30_composer_timeout_leaves_tracked_files_untouched(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_exit_30_check_timeout_leaves_tracked_files_untouched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
 ) -> None:
     def timeout_stub(*args, **kwargs):
         raise ComposerTimeoutError(message="stubbed timeout")
@@ -435,8 +385,8 @@ def test_exit_30_composer_timeout_leaves_tracked_files_untouched(
     )
 
 
-def test_exit_31_composer_runtime_error_leaves_tracked_files_untouched(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_exit_31_check_runtime_error_leaves_tracked_files_untouched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
 ) -> None:
     def runtime_error_stub(*args, **kwargs):
         raise ComposerRuntimeError(message="stubbed runtime error")
@@ -449,8 +399,8 @@ def test_exit_31_composer_runtime_error_leaves_tracked_files_untouched(
     )
 
 
-def test_exit_32_composer_invalid_output_leaves_tracked_files_untouched(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_exit_32_check_invalid_output_leaves_tracked_files_untouched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
 ) -> None:
     def invalid_output_stub(*args, **kwargs):
         raise ComposerInvalidOutputError(message="stubbed invalid output")
@@ -463,8 +413,8 @@ def test_exit_32_composer_invalid_output_leaves_tracked_files_untouched(
     )
 
 
-def test_exit_33_composer_quota_leaves_tracked_files_untouched(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_exit_33_check_quota_leaves_tracked_files_untouched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
 ) -> None:
     def quota_stub(*args, **kwargs):
         raise ComposerQuotaError(message="stubbed quota")
@@ -477,8 +427,8 @@ def test_exit_33_composer_quota_leaves_tracked_files_untouched(
     )
 
 
-def test_exit_34_composer_no_runtime_leaves_tracked_files_untouched(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_exit_34_check_no_runtime_leaves_tracked_files_untouched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
 ) -> None:
     def no_runtime_stub(*args, **kwargs):
         raise ComposerNoRuntimeError(message="stubbed no-runtime")
@@ -489,3 +439,18 @@ def test_exit_34_composer_no_runtime_leaves_tracked_files_untouched(
         no_runtime_stub,
         exit_codes.BEHAVIOR_COMPOSER_NO_RUNTIME,
     )
+
+
+def test_successful_install_removes_the_legacy_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stub_check: StubCheck
+) -> None:
+    """Contrast to the failures above: a successful install drops format-1 leftovers."""
+    consumer, state_root, *_ = _seed_successful_install(tmp_path, monkeypatch)
+    _seed_legacy_files(consumer)
+    assert (consumer / ".spaex" / "clarifications.json").exists()
+
+    assert _run_install(consumer, state_root, monkeypatch) == 0
+
+    assert not (consumer / ".spaex" / "clarifications.json").exists()
+    assert not (consumer / ".spaex" / ".stale").exists()
+    assert (consumer / ".spaex" / "decisions.json").exists()

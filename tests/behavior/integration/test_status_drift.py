@@ -10,16 +10,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from spaex.behavior.composer.clarifications import ClarificationsStore
-from spaex.behavior.composer.prompt import (
-    COMPOSER_PROMPT_VERSION,
-    effective_prompt_sha256,
-    load_effective_prompt,
-)
-from spaex.behavior.emit import compute_build_input_hash, compute_source_hash
-from spaex.behavior.fragment import BehaviorFragment
+from spaex.behavior.fragment import Modality
 from spaex.cli.main import main
 from spaex.model.install_lock import InstallLock, MoleculeEntry
+
+from ._composed import fragment as make_fragment
+from ._composed import write_current
 
 _SOURCE = "https://github.com/example/atoms"
 _REV_A = "1" * 40
@@ -196,28 +192,17 @@ def test_fully_consistent_repository_has_no_drift(tmp_path: Path, capsys) -> Non
             ),
         ),
     )
-    fragment_dir = repo / ".spaex/constitution.d/com.example.atoms.behavior"
-    fragment_dir.mkdir(parents=True)
-    fragment_path = fragment_dir / "cmd.md"
-    fragment_path.write_text(
-        "---\nid: cmd\nkind: constitution_fragment\natom_source: pkg.tool\n"
-        "modality: MUST\n---\n**MUST** do the thing.\n",
-        encoding="utf-8",
-    )
-    fragment = BehaviorFragment.from_file(fragment_path, molecule_id="com.example.atoms.behavior")
-    source_hash = compute_source_hash([fragment])
-    prompt_hash = effective_prompt_sha256(load_effective_prompt(repo))
-    build_input_hash = compute_build_input_hash(
-        effective_prompt_sha256=prompt_hash,
-        composer_prompt_version=COMPOSER_PROMPT_VERSION,
-        valid_clarifications=ClarificationsStore().entries.values(),
-    )
-    (repo / ".spaex/constitution.md").write_text(
-        f'<!-- spaex-composed:source_hash="{source_hash}" '
-        f'build_input_hash="{build_input_hash}" version="1" -->\n'
-        "## MUST\n"
-        f"- Do the thing. _[from `{fragment.scoped_id}`]_\n",
-        encoding="utf-8",
+    write_current(
+        repo,
+        [
+            make_fragment(
+                "com.example.atoms.behavior",
+                "cmd",
+                "**MUST** do the thing.\n",
+                atom_source="pkg.tool",
+                modality=Modality.MUST,
+            )
+        ],
     )
 
     rc = main(["--repo-root", str(repo), "status", "--format", "json"])
@@ -226,6 +211,77 @@ def test_fully_consistent_repository_has_no_drift(tmp_path: Path, capsys) -> Non
     assert rc == 0
     assert payload["drift"] == []
     assert payload["constitution"]["stale"] is False
+
+
+def _consistent_repo(tmp_path: Path) -> Path:
+    repo = tmp_path / "consumer"
+    repo.mkdir()
+    _write_manifest(
+        repo,
+        compounds=[
+            {"source": _SOURCE, "revision": _REV_A, "molecules": ["com.example.atoms.behavior"]}
+        ],
+    )
+    _write_lock(
+        repo,
+        (
+            MoleculeEntry(
+                id="com.example.atoms.behavior",
+                source=_SOURCE,
+                revision=_REV_A,
+                paths=(".spaex/constitution.md",),
+            ),
+        ),
+    )
+    write_current(
+        repo,
+        [make_fragment("com.example.atoms.behavior", "cmd", "**MUST** do the thing.\n")],
+    )
+    return repo
+
+
+def _stale(repo: Path, capsys) -> bool:
+    rc = main(["--repo-root", str(repo), "status", "--format", "json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    return bool(payload["constitution"]["stale"])
+
+
+def test_constitution_is_stale_when_the_check_state_is_missing(tmp_path: Path, capsys) -> None:
+    """Spec 030: a file that matches the fragments but was never checked is stale."""
+    repo = _consistent_repo(tmp_path)
+    assert _stale(repo, capsys) is False
+    (repo / ".spaex/decisions.json").unlink()
+    assert _stale(repo, capsys) is True
+
+
+def test_constitution_is_stale_when_the_text_was_altered(tmp_path: Path, capsys) -> None:
+    repo = _consistent_repo(tmp_path)
+    path = repo / ".spaex/constitution.md"
+    path.write_text(path.read_text().replace("do the thing", "do another thing"))
+    assert _stale(repo, capsys) is True
+
+
+def test_constitution_is_stale_when_it_is_format_version_1(tmp_path: Path, capsys) -> None:
+    repo = _consistent_repo(tmp_path)
+    (repo / ".spaex/constitution.md").write_text(
+        '<!-- spaex-composed:source_hash="'
+        + "a" * 64
+        + '" build_input_hash="'
+        + "b" * 64
+        + '" version="1" -->\n## MUST\n- Do the thing. _[from `x/y`]_\n',
+        encoding="utf-8",
+    )
+    assert _stale(repo, capsys) is True
+
+
+def test_constitution_is_stale_when_a_fragment_changed_after_the_check(
+    tmp_path: Path, capsys
+) -> None:
+    repo = _consistent_repo(tmp_path)
+    fragment_file = repo / ".spaex/constitution.d/com.example.atoms.behavior/cmd.md"
+    fragment_file.write_text(fragment_file.read_text() + "One more rule.\n")
+    assert _stale(repo, capsys) is True
 
 
 def test_drift_text_rendering_includes_hint(tmp_path: Path, capsys) -> None:

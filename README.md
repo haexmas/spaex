@@ -18,13 +18,25 @@ spaex composes a coding harness for a single repo out of reusable pieces (MCPs, 
 - `spaex skills configure`: change the persisted `skill_installation` policy (mode, adapter, scope, agents) without installing anything or removing already-installed skills.
 - `spaex add --local …` / `spaex remove --local …`: adopt or retract molecules for this checkout only (see [Local scope](#local-scope)).
 
+## The composed constitution
+
+`spaex install` writes `.spaex/constitution.md` itself ([Spec 030](specs/030-verbatim-composition/), [ADR 0028](docs/adr/0028-verbatim-composition.md), format version 2). Nothing is summarized or reworded by a language model:
+
+- Every behavior fragment of every adopted molecule appears once, unchanged (CRLF becomes LF, nothing else), in a block `<!-- spaex-fragment id="<molecule>/<fragment>" -->` … `<!-- /spaex-fragment -->`, in order of the scoped id. The same fragments and decisions give a byte-identical file on any machine, and a deleted file is recreated without a model call.
+- A model runs one **check** when the fragments (or the check prompt, `.spaex/check-prompt.md` to override) changed since the last completed check. It reports contradictions and duplicates between passages of different fragments and never writes text.
+- spaex asks you about **every** finding: keep the first passage, keep the second, or keep all. The passage you do not keep is commented out in place (`<!-- spaex-excluded kept="…" … -->`, text unchanged apart from escaping a line that is exactly `-->`), so the file the agent reads is coherent. Your answer is stored in `.spaex/decisions.json`, bound to the exact passage text; an unrelated edit in the same fragment does not ask again, a change to the passage does.
+- Without an operator (CI, a non-interactive terminal) a finding stops the install with exit 21 and changes nothing. If the check cannot run, the install fails and changes nothing; spaex never writes a constitution that was not checked.
+- `spaex constitution build --check` compares the file with a fresh render and the check state without calling the model; `--force` runs the check again.
+
+**Moving from format version 1** (clause lists with `_[from …]_` provenance): run `spaex install` once. The file is rewritten as version 2, `.spaex/clarifications.json` and `.spaex/.stale` are removed, and you answer the findings once, because the old free-text answers cannot be applied to passages. Rerun `spaex install --global` so the agent instruction block (version 4) matches. `spaex status --json` reports `fragment_count`, `fragments_by_molecule`, `decision_count` and `excluded_passage_count` instead of `clause_counts`.
+
 ## Local scope
 
 Every adoption above is **project scope**: recorded in the committed `.spaex/manifest.json` and shared with the whole team. `spaex add --local <source-url> <molecule-ids>` adopts molecules for one developer in one checkout instead ([Spec 029](specs/029-local-molecule-scope/), [ADR 0027](docs/adr/0027-local-molecule-scope.md)):
 
 - The adoption lives in the uncommitted overlay `.spaex/local/manifest.json`; `.spaex/manifest.json` and every project output stay byte-identical.
 - Nothing local reaches git, and no committed ignore file is edited. Files under `.spaex/local/` are hidden by a self-ignoring `.spaex/local/.gitignore`. Local files elsewhere (exclusive atoms, files a local hook or the local Spec Kit run created) are listed in a spaex-owned, per-worktree block in git's `info/exclude`.
-- Local behavior fragments compose into `.spaex/local/constitution.md`, which agents read after `.spaex/constitution.md` (bootstrap block version 3: rerun `spaex install --global`). Project rules prevail on conflict.
+- Local behavior fragments compose into `.spaex/local/constitution.md`, which agents read after `.spaex/constitution.md` (bootstrap block version 4: rerun `spaex install --global`). Project rules prevail on conflict.
 - Project scope always wins. A molecule already adopted in project scope cannot be adopted locally, and a later project adoption shadows the local entry. A local write to a project-owned or git-tracked path, including one made by a local install hook, refuses the install and is reverted.
 - `spaex status`, `spaex trace` and `spaex constitution show` label every molecule, file and section with its scope (`status`/`trace` JSON `format_version: 2`).
 

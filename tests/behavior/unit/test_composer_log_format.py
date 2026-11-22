@@ -4,7 +4,7 @@
 invocation, truncated exactly once at the start of a fresh attempt and
 appended (flushed) thereafter, so a later step's failure can't erase
 evidence of earlier ones (research.md §5, data-model.md `ComposerLogEntry`).
-Applies uniformly whether a build has one step or many.
+Applies uniformly whether a check has one step or many.
 """
 
 from __future__ import annotations
@@ -12,16 +12,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+from spaex.behavior.composer.check import CheckInput, run_check
 from spaex.behavior.composer.invoke import (
-    ComposedShape,
-    ComposerInput,
     ComposerLogEntry,
     InvokeOptions,
-    QuestionsShape,
     append_composer_log_entry,
-    invoke_composer,
     truncate_composer_log,
 )
+from spaex.util.errors import HaexError
 
 
 def _read_entries(path: Path) -> list[dict]:
@@ -67,94 +67,79 @@ def test_truncate_clears_a_prior_attempts_entries(tmp_path: Path) -> None:
     assert log_path.read_text(encoding="utf-8") == ""
 
 
-def _shape_a_body() -> str:
-    """Return a minimal composed Shape-A response."""
+def _no_findings() -> str:
+    """Return a minimal check answer without findings."""
     return (
         "<<<SPAEX-COMPOSER-BEGIN>>>\n"
-        '{"type": "composed", "questions": []}\n'
-        "<<<SPAEX-COMPOSER-END>>>\n"
-        "\n"
-        "body\n"
-    )
-
-
-def _shape_b_body() -> str:
-    """Return a minimal clarification Shape-B response."""
-    return (
-        "<<<SPAEX-COMPOSER-BEGIN>>>\n"
-        '{"type": "questions", "questions": ['
-        '{"kind": "overlap", "cited_fragments": '
-        '[{"molecule_id": "mol", "fragment_id": "rule"}], "question": "which?"}'
-        "]}\n"
+        '{"type": "no_findings"}\n'
         "<<<SPAEX-COMPOSER-END>>>\n"
     )
 
 
-def test_invoke_composer_appends_one_independently_parseable_entry_per_step(
+def _findings_for_missing_fragment() -> str:
+    """Return a check answer that names a fragment that does not exist."""
+    return (
+        "<<<SPAEX-COMPOSER-BEGIN>>>\n"
+        '{"type": "findings", "findings": [{"kind": "duplicate", "summary": "same", '
+        '"passages": [{"fragment": "a/b", "start": 1, "end": 1}, '
+        '{"fragment": "c/d", "start": 1, "end": 1}]}]}\n'
+        "<<<SPAEX-COMPOSER-END>>>\n"
+    )
+
+
+def test_run_check_appends_one_independently_parseable_entry_per_step(
     tmp_path: Path,
 ) -> None:
-    """Log independently parseable entries for successive batch steps."""
+    """Log independently parseable entries for successive check steps."""
     (tmp_path / ".spaex").mkdir()
     log_path = tmp_path / ".spaex" / "composer.log"
     truncate_composer_log(log_path)
 
     def stub(runtime: str, prompt: str, payload: str, timeout: float) -> str:
-        """Return a successful composed response for every invocation."""
-        return _shape_a_body()
+        """Return a successful answer for every invocation."""
+        return _no_findings()
 
     options = InvokeOptions(stub_caller=stub, composer_log_path=log_path)
-    outcome1 = invoke_composer(
-        ComposerInput(fragments=()), repo_root=tmp_path, options=options, step="batch-1"
-    )
-    outcome2 = invoke_composer(
-        ComposerInput(fragments=()), repo_root=tmp_path, options=options, step="batch-2"
-    )
-
-    assert isinstance(outcome1.result, ComposedShape)
-    assert isinstance(outcome2.result, ComposedShape)
+    assert run_check(
+        CheckInput(fragments=()), repo_root=tmp_path, options=options, step="check-g1"
+    ) == ()
+    assert run_check(
+        CheckInput(fragments=()), repo_root=tmp_path, options=options, step="check-g2"
+    ) == ()
 
     entries = _read_entries(log_path)
-    assert [e["step"] for e in entries] == ["batch-1", "batch-2"]
-    assert all(e["outcome"] == "composed" for e in entries)
+    assert [e["step"] for e in entries] == ["check-g1", "check-g2"]
+    assert all(e["outcome"] == "no_findings" for e in entries)
 
 
-def test_clarification_round_trip_retains_both_ordered_records(tmp_path: Path) -> None:
-    """Retain ordered records for both sides of a clarification retry."""
+def test_a_failed_step_does_not_erase_the_entries_before_it(tmp_path: Path) -> None:
+    """Retain the earlier step's record when a later step's answer is unusable."""
     (tmp_path / ".spaex").mkdir()
     log_path = tmp_path / ".spaex" / "composer.log"
     truncate_composer_log(log_path)
 
-    responses = iter([_shape_b_body(), _shape_a_body()])
+    responses = iter([_no_findings(), _findings_for_missing_fragment()])
 
     def stub(runtime: str, prompt: str, payload: str, timeout: float) -> str:
-        """Return a question first and a composition on retry."""
+        """Return a usable answer first and an unverifiable one second."""
         return next(responses)
 
     options = InvokeOptions(stub_caller=stub, composer_log_path=log_path)
-    first = invoke_composer(
-        ComposerInput(fragments=()),
-        repo_root=tmp_path,
-        options=options,
-        step="single",
-        invocation=1,
-        phase="initial",
-    )
-    assert isinstance(first.result, QuestionsShape)
-    second = invoke_composer(
-        ComposerInput(fragments=()),
-        repo_root=tmp_path,
-        options=options,
-        step="single",
-        invocation=2,
-        phase="clarification-resolved",
-    )
-    assert isinstance(second.result, ComposedShape)
+    run_check(CheckInput(fragments=()), repo_root=tmp_path, options=options, step="check-g1")
+    with pytest.raises(HaexError) as caught:
+        run_check(
+            CheckInput(fragments=()),
+            repo_root=tmp_path,
+            options=options,
+            step="check-g2",
+            invocation=2,
+            phase="retry",
+        )
+    assert caught.value.exit_code == 32
 
     entries = _read_entries(log_path)
-    assert len(entries) == 2
-    assert entries[0]["invocation"] == 1
-    assert entries[0]["phase"] == "initial"
-    assert entries[0]["outcome"] == "questions"
-    assert entries[1]["invocation"] == 2
-    assert entries[1]["phase"] == "clarification-resolved"
-    assert entries[1]["outcome"] == "composed"
+    assert [(e["step"], e["invocation"], e["outcome"]) for e in entries] == [
+        ("check-g1", 1, "no_findings"),
+        ("check-g2", 2, "invalid-output"),
+    ]
+    assert entries[1]["phase"] == "retry"

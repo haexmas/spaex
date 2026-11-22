@@ -151,29 +151,33 @@ def run(
         if m.dedup_provenance
     }
 
-    assessment = assess(fragments, repo_root=repo_root, spaex_dir=spaex_dir)
-    store = assessment.store
-    checked_now = assessment.check_needed or force_check
-    if checked_now:
-        store = _check_and_decide(
-            assessment,
-            repo_root=repo_root,
-            invoke_options=invoke_options,
-            operator_decision=operator_decision or default_operator_decision,
-        )
-    valid = valid_decisions(store, fragments)
-    # Decisions about passages that no longer exist are dropped, not kept around.
-    store = replace(store, decisions={d.key: d for d in valid})
-
-    text = expected_text(fragments, valid, preamble=preamble)
     try:
-        verify(fragments, valid, text)
-    except RenderError as exc:
-        raise_for(
-            ComposerFailureCategory.INVALID_OUTPUT,
-            f"the rendered constitution does not carry every fragment verbatim: {exc}",
-        )
-        raise AssertionError("unreachable") from exc
+        assessment = assess(fragments, repo_root=repo_root, spaex_dir=spaex_dir)
+        store = assessment.store
+        checked_now = assessment.check_needed or force_check
+        if checked_now:
+            store = _check_and_decide(
+                assessment,
+                repo_root=repo_root,
+                invoke_options=invoke_options,
+                operator_decision=operator_decision or default_operator_decision,
+            )
+        valid = valid_decisions(store, fragments)
+        # Decisions about passages that no longer exist are dropped, not kept around.
+        store = replace(store, decisions={d.key: d for d in valid})
+
+        text = expected_text(fragments, valid, preamble=preamble)
+        try:
+            verify(fragments, valid, text)
+        except RenderError as exc:
+            raise_for(
+                ComposerFailureCategory.INVALID_OUTPUT,
+                f"the rendered constitution does not carry every fragment verbatim: {exc}",
+            )
+            raise AssertionError("unreachable") from exc
+    except BaseException:
+        _reset_scratch(staging)
+        raise
 
     _commit_behavior_artifacts(
         repo_root=repo_root,

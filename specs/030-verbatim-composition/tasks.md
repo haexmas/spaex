@@ -47,9 +47,9 @@
 
 **Independent Test**: install a set with one 32-rule fragment and a stub that returns `no_findings`; compare bodies byte for byte.
 
-- [ ] T008 [US1] Rewrite the middle of `orchestrate.run` in `src/spaex/behavior/orchestrate.py`: after precheck, load decisions, run the check when needed (no `no_findings` shortcut yet; stub returns it), render with valid decisions, `render.verify`, then `_commit_behavior_artifacts` writing the rendered text; fragment-count fast paths and the empty-set path stay as they are
-- [ ] T009 [US1] Update `src/spaex/behavior/emit.py`: `emit_rendered(text, target, ...)` replaces `emit_composed`'s header echo checks (the header is now written by `render`), version `"2"`, atomic write; keep `read_header_hashes`, `remove_if_exists`
-- [ ] T010 [US1] Integration test `tests/behavior/integration/test_verbatim_composition.py`: 32-rule fragment unchanged, every fragment once, structure intact, `_project` scope fragments included, spec 029 preamble position (SC-001)
+- [x] T008 [US1] Rewrite the middle of `orchestrate.run` in `src/spaex/behavior/orchestrate.py`: after precheck, load decisions, run the check when needed (no `no_findings` shortcut yet; stub returns it), render with valid decisions, `render.verify`, then `_commit_behavior_artifacts` writing the rendered text; fragment-count fast paths and the empty-set path stay as they are
+- [x] T009 [US1] Update `src/spaex/behavior/emit.py`: `emit_rendered(text, target, ...)` replaces `emit_composed`'s header echo checks (the header is now written by `render`), version `"2"`, atomic write; keep `read_header_hashes`, `remove_if_exists`
+- [x] T010 [US1] Integration test `tests/behavior/integration/test_verbatim_composition.py`: 32-rule fragment unchanged, every fragment once, structure intact, `_project` scope fragments included, spec 029 preamble position (SC-001)
 
 ---
 
@@ -57,8 +57,8 @@
 
 **Goal**: no model call and identical bytes when nothing changed; deleted file regenerates.
 
-- [ ] T011 [US2] In `orchestrate.run`, skip the model when `decisions.checked` equals the current `source_hash` and check prompt hash (research R5); record `checked` after a completed check
-- [ ] T012 [US2] Replace/extend `tests/behavior/integration/test_reproducibility.py` and `test_source_hash_skip.py`: three installs byte-identical, 0 stub calls after the first, deleted `constitution.md` regenerates identical with 0 calls, changing one fragment limits the diff to its block (SC-002, SC-003, SC-006)
+- [x] T011 [US2] In `orchestrate.run`, skip the model when `decisions.checked` equals the current `source_hash` and check prompt hash (research R5); record `checked` after a completed check
+- [x] T012 [US2] Replace/extend `tests/behavior/integration/test_reproducibility.py` and `test_source_hash_skip.py`: three installs byte-identical, 0 stub calls after the first, deleted `constitution.md` regenerates identical with 0 calls, changing one fragment limits the diff to its block (SC-002, SC-003, SC-006)
 
 ---
 
@@ -68,35 +68,35 @@
 
 **Independent Test**: seeded contradiction and duplicate, injected decisions.
 
-- [ ] T013 [US3] Operator interaction in `orchestrate.py` (or a small `behavior/ask.py`): print kind, summary, passages (fragment, lines, text) and numbered options (research R7); blank or non-TTY aborts with exit 21 and the hint; injectable `operator_decision` callback replaces `operator_answer`
-- [ ] T014 [US3] Apply decisions: build `Decision` from the answer, persist through `_commit_behavior_artifacts` (back up and restore `decisions.json`, remove `clarifications.json` and `.stale` inside the transaction), render exclusions; drop findings with a valid decision
-- [ ] T015 [P] [US3] `tests/behavior/integration/test_findings_decisions.py`: contradiction and duplicate each asked with both passages; keep-1 comments out passage 2 unchanged except for the required `-->` to `--&gt;` escape; keep-all comments out nothing and is not asked again; passage edit asks again; unrelated edit does not; non-interactive exits 21 with no file changed; unusable check output exits 32 with no file changed; check unavailable exits with its category and no file changed (SC-004, SC-005)
-- [ ] T016 [US3] Remove the plausibility mode: drop `abort_on_contradiction` and the `.stale` writing from `orchestrate.run`, `cli/install.py`, `cli/add.py`, `install/write_and_reinstall.py`, `install/local_publish.py`; `add`/`remove` ask like install; update `tests/behavior/integration/test_add_time_plausibility.py` and `tests/cli/test_add*.py` accordingly
-- [ ] T017 [US3] Large sets: partition by molecule with the existing size limit and run the check for every batch and every pair of batches (parallel dispatch), merging findings by key; `tests/behavior/unit/test_check_pairs.py` and an update of `tests/behavior/integration/test_composition_scales.py`
+- [x] T013 [US3] Operator interaction in `orchestrate.py` (or a small `behavior/ask.py`): print kind, summary, passages (fragment, lines, text) and numbered options (research R7); blank or non-TTY aborts with exit 21 and the hint; injectable `operator_decision` callback replaces `operator_answer`
+- [x] T014 [US3] Apply decisions: build `Decision` from the answer, persist through `_commit_behavior_artifacts` (back up and restore `decisions.json`, remove `clarifications.json` and `.stale` inside the transaction), render exclusions; drop findings with a valid decision
+- [x] T015 [P] [US3] `tests/behavior/integration/test_findings_decisions.py`: contradiction and duplicate each asked with both passages; keep-1 comments out passage 2 unchanged except for the required `-->` to `--&gt;` escape; keep-all comments out nothing and is not asked again; passage edit asks again; unrelated edit does not; non-interactive exits 21 with no file changed; unusable check output exits 32 with no file changed; check unavailable exits with its category and no file changed (SC-004, SC-005)
+- [x] T016 [US3] Remove the plausibility mode: drop `abort_on_contradiction` and the `.stale` writing from `orchestrate.run`, `cli/install.py`, `cli/add.py`, `install/write_and_reinstall.py`, `install/local_publish.py`; `add`/`remove` ask like install; update `tests/behavior/integration/test_add_time_plausibility.py` and `tests/cli/test_add*.py` accordingly
+- [x] T017 [US3] Large sets: partition by molecule with the existing size limit and run the check for every batch and every pair of batches (parallel dispatch), merging findings by key; `tests/behavior/unit/test_check_pairs.py` and an update of `tests/behavior/integration/test_composition_scales.py`
 
 ---
 
 ## Phase 6: User Story 4 — Existing repos move over once (Priority: P2)
 
-- [ ] T018 [US4] `constitution build --check` in `src/spaex/cli/behavior_commands.py`: no model call; compares the file with a fresh render and the `checked` state; messages "out of date", "version 1", "not checked"; `--force` reruns the check; add `decisions.json` to `_managed_artifact_paths`; update `tests/behavior/integration/test_constitution_build_check.py`
-- [ ] T019 [P] [US4] `tests/behavior/integration/test_v1_migration.py`: version 1 file replaced in one install, old `clarifications.json` and `.stale` removed, findings asked anew, second install changes nothing (SC-007)
-- [ ] T020 [P] [US4] `src/spaex/report/staleness.py`: stale when the file is missing, version is not 2, text differs from a fresh render, or `checked` does not match; update `tests/behavior/integration/test_status_drift.py`
+- [x] T018 [US4] `constitution build --check` in `src/spaex/cli/behavior_commands.py`: no model call; compares the file with a fresh render and the `checked` state; messages "out of date", "version 1", "not checked"; `--force` reruns the check; add `decisions.json` to `_managed_artifact_paths`; update `tests/behavior/integration/test_constitution_build_check.py`
+- [x] T019 [P] [US4] `tests/behavior/integration/test_v1_migration.py`: version 1 file replaced in one install, old `clarifications.json` and `.stale` removed, findings asked anew, second install changes nothing (SC-007)
+- [x] T020 [P] [US4] `src/spaex/report/staleness.py`: stale when the file is missing, version is not 2, text differs from a fresh render, or `checked` does not match; update `tests/behavior/integration/test_status_drift.py`
 
 ---
 
 ## Phase 7: User Story 5 — The tools keep working (Priority: P3)
 
-- [ ] T021 [US5] `spaex constitution trace` in `behavior_commands.py` on `render.parse` (scoped id, molecule id, phrase; line range; excluded marking; JSON fields per `contracts/cli-surface-delta.md`); update `tests/behavior/integration/test_provenance_trace.py` and `test_trace_path.py`
-- [ ] T022 [P] [US5] `src/spaex/report/compose.py` and `src/spaex/cli/status.py`: `ConstitutionSummary` with `fragment_count`, `fragments_by_molecule`, `decision_count`, `excluded_passage_count`; remove `clause_counts`; update `tests/behavior/integration/test_status.py`
-- [ ] T023 [P] [US5] Local scope: confirm `install/local_publish.py` uses the same run with `.spaex/local/decisions.json`; extend `tests/behavior/integration/test_local_behavior.py` (project document byte-identical, local findings asked among local fragments)
-- [ ] T024 [P] [US5] Bootstrap block: add the sentence about `spaex-excluded` comments to `src/spaex/behavior/bootstrap.py`, bump its marker version, update `specs/023-behavior-harness/contracts/bootstrap-block.md` and `tests/behavior/unit/test_bootstrap_marker.py`, `tests/behavior/integration/test_bootstrap_discoverability.py`
+- [x] T021 [US5] `spaex constitution trace` in `behavior_commands.py` on `render.parse` (scoped id, molecule id, phrase; line range; excluded marking; JSON fields per `contracts/cli-surface-delta.md`); update `tests/behavior/integration/test_provenance_trace.py` and `test_trace_path.py`
+- [x] T022 [P] [US5] `src/spaex/report/compose.py` and `src/spaex/cli/status.py`: `ConstitutionSummary` with `fragment_count`, `fragments_by_molecule`, `decision_count`, `excluded_passage_count`; remove `clause_counts`; update `tests/behavior/integration/test_status.py`
+- [x] T023 [P] [US5] Local scope: confirm `install/local_publish.py` uses the same run with `.spaex/local/decisions.json`; extend `tests/behavior/integration/test_local_behavior.py` (project document byte-identical, local findings asked among local fragments)
+- [x] T024 [P] [US5] Bootstrap block: add the sentence about `spaex-excluded` comments to `src/spaex/behavior/bootstrap.py`, bump its marker version, update `specs/023-behavior-harness/contracts/bootstrap-block.md` and `tests/behavior/unit/test_bootstrap_marker.py`, `tests/behavior/integration/test_bootstrap_discoverability.py`
 
 ---
 
 ## Phase 8: Polish and cross-cutting
 
-- [ ] T025 Remove retired code and tests: `composer/reduce.py`, `composer/clarify.py`, `composer/clarifications.py`, `composer/completeness.py`, `composer/batching.py` pieces no longer used, `clauses.py`, `stale.py`, the compose and merge prompts; delete `tests/behavior/unit/test_reduce.py`, `test_clarification_key.py`, `test_completeness_check.py`, `test_emit_format.py` (rewrite for v2), `tests/behavior/fault_injection/test_reduce_partial_failure.py`, `test_composer_incomplete_output.py`; keep and adapt the other fault-injection tests to the check
-- [ ] T026 [P] Docs: update `README.md`, `docs/` pages that describe composition, `specs/023-behavior-harness/contracts/cli-surface.md` pointers, and add the migration note (first install asks findings anew)
+- [x] T025 Remove retired code and tests: `composer/reduce.py`, `composer/clarify.py`, `composer/clarifications.py`, `composer/completeness.py`, `composer/batching.py` pieces no longer used, `clauses.py`, `stale.py`, the compose and merge prompts; delete `tests/behavior/unit/test_reduce.py`, `test_clarification_key.py`, `test_completeness_check.py`, `test_emit_format.py` (rewrite for v2), `tests/behavior/fault_injection/test_reduce_partial_failure.py`, `test_composer_incomplete_output.py`; keep and adapt the other fault-injection tests to the check
+- [x] T026 [P] Docs: update `README.md`, `docs/` pages that describe composition, `specs/023-behavior-harness/contracts/cli-surface.md` pointers, and add the migration note (first install asks findings anew)
 - [ ] T027 Run `uv run pytest -q`, `uv run ruff check .`, `uv run mypy src`; run `spaex install` on a copy of haex-vault and record the findings it reports and the result of `git diff --stat .spaex/` in the PR description (quickstart 7)
 - [ ] T028 Open the code PR with a `feat!:` commit (BREAKING CHANGE paragraph: format version 2, decisions file, retired plausibility mode, `status` JSON keys) so release-please proposes the next major version
 

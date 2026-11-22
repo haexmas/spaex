@@ -12,13 +12,13 @@ Replaces [023 `composer-interface.md`](../../023-behavior-harness/contracts/comp
     {
       "id": "<molecule-id>/<fragment-id>",
       "modality": "MUST",
-      "lines": [{"n": 1, "text": "…"}, {"n": 2, "text": "…"}]
+      "body": "1: first line\n2: second line"
     }
   ]
 }
 ```
 
-Fragments are sorted by scoped id; `lines` are the normalized body lines numbered from 1; keys sorted, `ensure_ascii=False`, as in 023.
+Fragments are sorted by scoped id; `body` is the LF-canonicalized body, one line per fragment line prefixed `<n>: ` with `n` counting from 1 (compact, so a 60 KB fragment set stays one call); keys sorted, `ensure_ascii=False`, compact JSON.
 
 ## Output
 

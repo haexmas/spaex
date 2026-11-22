@@ -1,4 +1,4 @@
-"""Progress/timing visibility for the Composer's real-CLI subprocess call.
+"""Progress/timing visibility for the check's real-CLI subprocess call.
 
 A composer invocation that runs long gave no signal at all until either
 success or the bare timeout diagnostic — indistinguishable from a genuinely
@@ -16,8 +16,9 @@ from pathlib import Path
 import pytest
 
 from spaex.behavior.composer import invoke as invoke_mod
+from spaex.behavior.composer.check import CheckInput, run_check
 from spaex.behavior.composer.failure import ComposerRuntimeError, ComposerTimeoutError
-from spaex.behavior.composer.invoke import ComposerInput, InvokeOptions, invoke_composer
+from spaex.behavior.composer.invoke import InvokeOptions
 
 
 def _fake_completed(stdout: str = "ok", returncode: int = 0) -> subprocess.CompletedProcess:
@@ -117,8 +118,8 @@ def test_cli_failure_logs_partial_output_and_identifies_step(
     )
 
     with pytest.raises(ComposerRuntimeError) as excinfo:
-        invoke_composer(
-            ComposerInput(fragments=()),
+        run_check(
+            CheckInput(fragments=()),
             repo_root=tmp_path,
             options=InvokeOptions(
                 forced_cli_runtimes=("claude",), composer_log_path=log_path
@@ -157,8 +158,8 @@ def test_cli_timeout_logs_partial_output(
     monkeypatch.setattr(invoke_mod.subprocess, "run", timed_out)
 
     with pytest.raises(ComposerTimeoutError):
-        invoke_composer(
-            ComposerInput(fragments=()),
+        run_check(
+            CheckInput(fragments=()),
             repo_root=tmp_path,
             options=InvokeOptions(
                 forced_cli_runtimes=("claude",), composer_log_path=log_path
