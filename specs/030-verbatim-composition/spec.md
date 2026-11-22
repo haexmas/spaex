@@ -35,11 +35,11 @@ An operator adopts molecules whose fragments carry long rule sets. After `spaex 
 
 **Why this priority**: This is the defect. Today the model writing the constitution condenses large fragments and silently drops rules, and nothing detects it, because the completeness check accepts a fragment that is cited once.
 
-**Independent Test**: Install a fragment set that contains one fragment of at least 30 rules and no findings. Compare each fragment body with the matching part of the composed constitution: all bodies are present byte for byte.
+**Independent Test**: Install a fragment set that contains one fragment of at least 30 rules and no findings. Normalize CRLF and CR to LF in each expected fragment body, then compare it byte for byte with the matching part of the composed constitution, preserving all other whitespace: all bodies are present.
 
 **Acceptance Scenarios**:
 
-1. **Given** a project with several molecules and a fragment of 32 rules, **When** the operator runs `spaex install`, **Then** the composed constitution contains that fragment's body unchanged, all 32 rules.
+1. **Given** a project with several molecules and a fragment of 32 rules, **When** the operator runs `spaex install`, **Then** the composed constitution contains that fragment's body unchanged (apart from LF line endings), all 32 rules.
 2. **Given** any fragment set, **When** install finishes, **Then** every fragment appears exactly once, introduced by a boundary naming its scoped id.
 3. **Given** a fragment whose body contains headings, lists and code blocks, **When** install runs, **Then** all of that structure is preserved unchanged.
 
@@ -121,6 +121,7 @@ An operator with a repo composed under the old format runs `spaex install` with 
 - The check names a passage that does not exist (line range outside the body, or another fragment). spaex rejects the finding; the check is retried as for any unusable check output (spec 026), and install fails without writing if it stays unusable.
 - The check names the same fragment twice, or passages of the same fragment. Findings are between passages of different fragments; others are rejected.
 - Excluded passages of two decisions overlap. The union is commented out once.
+- Fragments do not end with a newline, or use different line endings. Rendering canonicalizes CRLF and CR to LF, preserving all other body characters, including trailing whitespace and the number of trailing newlines. It adds separators outside the body. The whitespace normalization of spec 023 hashing MUST NOT be reused for rendering, because it also trims whitespace and trailing blank lines.
 - A fragment declares a `modality` in its header. The header is kept visible next to the fragment, not used to move it; the body decides, as before.
 - The check is unavailable (no runtime, timeout, unusable output). A coherent constitution cannot be guaranteed, so install fails without changing any tracked file, as it does for any composition failure today.
 - The fragment set is empty. Behaviour as today (the composed file is absent, spec 023 FR-017d).
@@ -130,9 +131,9 @@ An operator with a repo composed under the old format runs `spaex install` with 
 
 ### Functional Requirements
 
-- **FR-001**: The composed constitution MUST contain the body of every fragment byte for byte, with nothing summarized, reworded, merged or omitted, except passages the operator excluded (FR-009).
+- **FR-001**: The composed constitution MUST contain the complete body of every fragment, preserving all body characters except that CRLF and CR line endings are canonicalized to LF, and with nothing summarized, reworded, trimmed, merged or omitted, except passages the operator excluded (FR-009).
 - **FR-002**: Each fragment MUST appear exactly once, introduced by a machine-readable boundary that names its scoped id, in an order determined only by the scoped ids.
-- **FR-003**: The text of the composed constitution MUST be produced by spaex itself, never by a language model, and MUST depend only on the fragments, the persisted decisions and the format version.
+- **FR-003**: The text of the composed constitution, including any header metadata, MUST be produced by spaex itself, never by a language model, and MUST depend only on the fragments, the persisted decisions and the format version. The check's prompt version, results and state MUST NOT affect the composed text.
 - **FR-004**: For the same fragments and decisions, the composed constitution MUST be byte-identical across runs, machines and days.
 - **FR-005**: `spaex install` MUST NOT invoke a language model when the fragments, the decisions and the check's prompt version are unchanged since the last completed check.
 - **FR-006**: The check MUST be the only use of a language model in composition. Its result MUST be a list of findings, each naming at least two passages of different fragments, or nothing; it MUST NOT be able to change, add or remove constitution text.
@@ -165,8 +166,8 @@ An operator with a repo composed under the old format runs `spaex install` with 
 
 - **SC-001**: For the haex-vault fragment set (13 fragments, about 930 lines), 100% of the lines of every fragment appear in the composed constitution, in the open or inside an exclusion comment; today's compositions keep 10 to 12 of the 32 rules of the largest fragment.
 - **SC-002**: Three consecutive installs on unchanged fragments and decisions produce byte-identical composed files, and runs after the first make 0 language-model calls.
-- **SC-003**: After changing one fragment, the diff of the composed constitution is limited to that fragment's block and the exclusion comments of decisions that concern it.
-- **SC-004**: A seeded contradictory pair and a seeded duplicate pair are reported as questions in 100% of 5 repeated runs, each shows both passages, and in 100% of cases the passage not kept is commented out with its text unchanged.
+- **SC-003**: After changing one fragment, the diff of the composed constitution is limited to that fragment's block, derived fingerprint metadata in the header, and the exclusion comments of decisions that concern it.
+- **SC-004**: A seeded contradictory pair and a seeded duplicate pair are reported as questions in 100% of 5 independent, uncached checks, each shows both passages, and in 100% of cases the passage not kept is commented out with its text unchanged.
 - **SC-005**: With the check made unavailable, install fails in under 60 seconds with a message naming the cause and changes 0 tracked files.
 - **SC-006**: Deleting the composed constitution and running install reproduces it byte-identical without a language-model call.
 - **SC-007**: A repo with a version 1 file reaches version 2 with one `spaex install` (plus the questions of its findings), and a second install changes nothing.

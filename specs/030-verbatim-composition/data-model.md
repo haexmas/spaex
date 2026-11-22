@@ -10,10 +10,10 @@
 | --- | --- |
 | `scoped_id` | Fragment the lines belong to |
 | `start`, `end` | 1-based inclusive line range of the fragment body (derived from `text`, never persisted as identity) |
-| `text` | The lines joined with LF, no trailing newline |
+| `text` | The lines joined with LF (CRLF and CR canonicalized, trailing whitespace kept), no trailing newline |
 | `text_hash` | sha256 hex of `text` |
 
-Validation (R3): fragment exists, `1 ≤ start ≤ end ≤ len(lines)`, `text` not blank, range does not split a fenced code block.
+Validation (R3), on the LF-canonicalized body lines: fragment exists, `1 ≤ start ≤ end ≤ len(lines)`, `text` not blank, range does not split a fenced code block.
 
 ## Finding (from the check, in memory only)
 
@@ -42,7 +42,7 @@ Valid while every passage's `text` occurs exactly once, line-aligned, in the cur
 
 ## Composed document (version 2)
 
-Header (`source_hash`, `build_input_hash`, `version="2"`), title, notices, preamble, fragment blocks in scoped-id order, exclusion comments inside blocks. Layout in [contracts/spaex-md-format-v2.md](./contracts/spaex-md-format-v2.md). `build_input_hash` covers the check prompt version, its hash and the valid decisions, so any change of decisions changes the header.
+Header (`source_hash`, `build_input_hash`, `version="2"`), title, notices, preamble, fragment blocks in scoped-id order, exclusion comments inside blocks. Layout in [contracts/spaex-md-format-v2.md](./contracts/spaex-md-format-v2.md). `build_input_hash` covers the format version and the valid decisions only, so a change of decisions changes the header and a change of the check prompt does not.
 
 ## State transitions
 
