@@ -125,7 +125,7 @@ def _write_fragment(
     target_dir = staging_root / fragment.molecule_id
     target_dir.mkdir(parents=True, exist_ok=True)
     target = target_dir / f"{fragment.id}.md"
-    target.write_text(_render_fragment_file(fragment), encoding="utf-8")
+    target.write_bytes(_render_fragment_file(fragment).encode("utf-8"))
     return target
 
 
