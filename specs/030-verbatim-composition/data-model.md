@@ -36,6 +36,8 @@ Validation (R3), on the LF-canonicalized body lines: fragment exists, `1 ≤ sta
 
 Valid while every passage's `text` occurs exactly once, line-aligned, in the current body of its fragment. Otherwise it is dropped (and the finding is asked again if the check still reports it).
 
+Across valid decisions, no line may be both kept by one choice and excluded by another. A conflict is an error before publication so a prior operator choice is never silently lost.
+
 ## Check state
 
 `checked: { source_hash, prompt_hash }` in `decisions.json`: the fragment fingerprint and effective check prompt at the last completed check. Equal to the current values means no model call.

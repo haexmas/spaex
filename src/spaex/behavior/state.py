@@ -54,6 +54,7 @@ class Assessment:
     source_hash: str
     fingerprint: str
     prompt_hash: str
+    prompt_text: str
     store: DecisionStore
     valid: tuple[Decision, ...]
 
@@ -68,11 +69,13 @@ def assess(
 ) -> Assessment:
     """Load the decisions next to `spaex_dir` and relate them to `fragments`."""
     store = load_decisions(spaex_dir / DECISIONS_FILENAME)
+    prompt_text = load_effective_check_prompt(repo_root)
     return Assessment(
         fragments=tuple(fragments),
         source_hash=compute_source_hash(fragments),
         fingerprint=fragments_fingerprint(fragments),
-        prompt_hash=effective_prompt_sha256(load_effective_check_prompt(repo_root)),
+        prompt_hash=effective_prompt_sha256(prompt_text),
+        prompt_text=prompt_text,
         store=store,
         valid=valid_decisions(store, fragments),
     )

@@ -22,7 +22,7 @@ spaex writes the composed constitution itself: every fragment body verbatim, in 
 
 **Project Type**: Single Python CLI project (`src/spaex` + `tests/`).
 
-**Performance Goals**: Install with unchanged fragments and decisions does no model call and renders in well under one second for the haex-vault set (about 60 KB). A check on that set is one model call whose output is small, so it is not exposed to the output-length timeouts that motivated spec 026.
+**Performance Goals**: Install with unchanged fragments and decisions does no model call and renders in well under one second for the haex-vault set (about 60 KB of source). A check is one model call when its compact serialized UTF-8 payload is at most 150,000 bytes; its output is small, so it is not exposed to the output-length timeouts that motivated spec 026.
 
 **Constraints**: Byte-identical output for equal fragments and decisions (FR-004); no tracked file changes on any failure (FR-019); the model can never change text (FR-003, FR-006); decisions are asked, never defaulted (FR-008).
 

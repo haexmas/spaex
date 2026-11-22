@@ -10,10 +10,10 @@ Interface: contracts/check-interface.md.
 from __future__ import annotations
 
 import json
-from collections import defaultdict
 from collections.abc import Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, replace
+from itertools import chain
 from pathlib import Path
 from typing import Any
 
@@ -83,7 +83,12 @@ class CheckInput:
                 for fragment in sorted(self.fragments, key=lambda f: f.scoped_id)
             ],
         }
-        return json.dumps(payload, sort_keys=True, ensure_ascii=False)
+        return json.dumps(
+            payload,
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
 
 
 def _invalid(message: str) -> HaexError:
@@ -168,11 +173,12 @@ def run_check(
     step: str = "check",
     invocation: int = 1,
     phase: str = "initial",
+    prompt_text: str | None = None,
 ) -> tuple[Finding, ...]:
     """One check call: invoke the runtime, log the answer, return verified findings."""
     options = options or InvokeOptions()
     raw, _runtime = invoke_raw(
-        prompt_text=load_effective_check_prompt(repo_root),
+        prompt_text=prompt_text or load_effective_check_prompt(repo_root),
         payload_json=check_input.to_json(),
         repo_root=repo_root,
         options=options,
@@ -216,45 +222,109 @@ def check_fragments(
     options: InvokeOptions | None = None,
     max_bytes: int = DEFAULT_MAX_BYTES,
     max_workers: int = 4,
+    prompt_text: str | None = None,
 ) -> tuple[Finding, ...]:
     """Check all fragments: one call, or every group and every pair of groups.
 
-    A set that fits `max_bytes` is one call. A larger set is split by molecule
-    into groups of at most half the ceiling; every group and every pair of
-    groups is checked, so a conflict between any two molecules is seen by some
-    call. One runtime is chosen once and used for every call (spec 026 FR-011).
+    A set that fits `max_bytes` is one call. A larger set is split into groups
+    so every group and every pair of groups stays within the byte ceiling; each
+    group and pair is checked. One runtime is chosen once and used for every
+    call (spec 026 FR-011).
     Findings are merged by key and sorted by first passage.
     """
     options = options or InvokeOptions()
     ordered = tuple(sorted(fragments, key=lambda f: f.scoped_id))
     if len(CheckInput(fragments=ordered).to_json().encode("utf-8")) <= max_bytes:
-        return run_check(CheckInput(fragments=ordered), repo_root=repo_root, options=options)
+        return run_check(
+            CheckInput(fragments=ordered),
+            repo_root=repo_root,
+            options=options,
+            prompt_text=prompt_text,
+        )
 
-    groups = _group_by_molecule(ordered, max_bytes // 2)
+    groups = _group_fragments(ordered, max_bytes)
     runtime = resolve_runtime_name(options)
     pinned = replace(options, resolved_runtime_name=runtime)
-    jobs: list[tuple[str, tuple[BehaviorFragment, ...]]] = [
-        (f"check-g{i + 1}", group) for i, group in enumerate(groups)
-    ]
-    jobs += [
-        (f"check-g{i + 1}-g{j + 1}", groups[i] + groups[j])
-        for i in range(len(groups))
-        for j in range(i + 1, len(groups))
-    ]
+    jobs = iter(
+        chain(
+            ((f"check-g{i + 1}", group) for i, group in enumerate(groups)),
+            (
+                (f"check-g{i + 1}-g{j + 1}", groups[i] + groups[j])
+                for i in range(len(groups))
+                for j in range(i + 1, len(groups))
+            ),
+        ),
+    )
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [
-            executor.submit(
-                run_check,
-                CheckInput(fragments=group),
-                repo_root=repo_root,
-                options=pinned,
-                step=step,
-            )
-            for step, group in jobs
-        ]
-        results = [future.result() for future in futures]
+        pending: dict[Future[tuple[Finding, ...]], str] = {}
+        results: dict[str, tuple[Finding, ...]] = {}
+        for _ in range(max_workers):
+            try:
+                step, group = next(jobs)
+            except StopIteration:
+                break
+            payload = CheckInput(fragments=group)
+            size = len(payload.to_json().encode("utf-8"))
+            if size > max_bytes:
+                raise_for(
+                    ComposerFailureCategory.INVALID_OUTPUT,
+                    f"required check payload {step} is {size} bytes, above the "
+                    f"{max_bytes}-byte limit; reduce the fragment size",
+                )
+            pending[
+                executor.submit(
+                    run_check,
+                    payload,
+                    repo_root=repo_root,
+                    options=pinned,
+                    step=step,
+                    prompt_text=prompt_text,
+                )
+            ] = step
+        while pending:
+            done, _ = wait(pending, return_when=FIRST_COMPLETED)
+            failures = [future for future in done if future.exception() is not None]
+            if failures:
+                failed = min(failures, key=lambda future: pending[future])
+                for queued in pending:
+                    if queued is not failed:
+                        queued.cancel()
+                failed.result()
+            for future in done:
+                pending_step = pending.pop(future)
+                try:
+                    results[pending_step] = future.result()
+                except BaseException:
+                    for queued in pending:
+                        queued.cancel()
+                    raise
+                try:
+                    step, group = next(jobs)
+                except StopIteration:
+                    continue
+                payload = CheckInput(fragments=group)
+                size = len(payload.to_json().encode("utf-8"))
+                if size > max_bytes:
+                    for queued in pending:
+                        queued.cancel()
+                    raise_for(
+                        ComposerFailureCategory.INVALID_OUTPUT,
+                        f"required check payload {step} is {size} bytes, above the "
+                        f"{max_bytes}-byte limit; reduce the fragment size",
+                    )
+                pending[
+                    executor.submit(
+                        run_check,
+                        payload,
+                        repo_root=repo_root,
+                        options=pinned,
+                        step=step,
+                        prompt_text=prompt_text,
+                    )
+                ] = step
     merged: dict[str, Finding] = {}
-    for found in results:
+    for step in sorted(results):
+        found = results[step]
         for finding in found:
             merged.setdefault(finding.key, finding)
     return tuple(
@@ -265,25 +335,60 @@ def check_fragments(
     )
 
 
-def _group_by_molecule(
-    fragments: Sequence[BehaviorFragment], budget: int
+def _group_fragments(
+    fragments: Sequence[BehaviorFragment], max_bytes: int
 ) -> list[tuple[BehaviorFragment, ...]]:
-    by_molecule: dict[str, list[BehaviorFragment]] = defaultdict(list)
-    for fragment in fragments:
-        by_molecule[fragment.molecule_id].append(fragment)
-    groups: list[tuple[BehaviorFragment, ...]] = []
-    current: list[BehaviorFragment] = []
-    for molecule_id in sorted(by_molecule):
-        candidate = current + by_molecule[molecule_id]
-        size = len(CheckInput(fragments=tuple(candidate)).to_json().encode("utf-8"))
-        if current and size > budget:
-            groups.append(tuple(current))
-            current = list(by_molecule[molecule_id])
+    if max_bytes < 1:
+        raise ValueError("max_bytes must be positive")
+    groups = [[fragment] for fragment in sorted(fragments, key=lambda f: f.scoped_id)]
+    for group in groups:
+        size = len(CheckInput(fragments=tuple(group)).to_json().encode("utf-8"))
+        if size > max_bytes:
+            raise_for(
+                ComposerFailureCategory.INVALID_OUTPUT,
+                f"fragment {group[0].scoped_id} needs {size} bytes in a check payload, "
+                f"above the {max_bytes}-byte limit; reduce the fragment size",
+            )
+
+    index = 0
+    while index + 1 < len(groups):
+        candidate = groups[index] + groups[index + 1]
+        candidate_size = len(
+            CheckInput(fragments=tuple(candidate)).to_json().encode("utf-8")
+        )
+        fits = candidate_size <= max_bytes
+        if fits:
+            for other_index, other in enumerate(groups):
+                if other_index in (index, index + 1):
+                    continue
+                pair_size = len(
+                    CheckInput(fragments=tuple(candidate + other))
+                    .to_json()
+                    .encode("utf-8")
+                )
+                if pair_size > max_bytes:
+                    fits = False
+                    break
+        if fits:
+            groups[index : index + 2] = [candidate]
         else:
-            current = candidate
-    if current:
-        groups.append(tuple(current))
-    return groups
+            index += 1
+
+    for left in range(len(groups)):
+        for right in range(left + 1, len(groups)):
+            size = len(
+                CheckInput(fragments=tuple(groups[left] + groups[right]))
+                .to_json()
+                .encode("utf-8")
+            )
+            if size > max_bytes:
+                raise_for(
+                    ComposerFailureCategory.INVALID_OUTPUT,
+                    f"fragments in check groups {left + 1} and {right + 1} require "
+                    f"{size} bytes together, above the {max_bytes}-byte limit; "
+                    "reduce a fragment so every required comparison fits",
+                )
+    return [tuple(group) for group in groups]
 
 
 __all__ = [

@@ -36,12 +36,15 @@ def default_operator_decision(finding: Finding) -> Choice:
             exit_code=exit_codes.BEHAVIOR_SEMANTIC_REFUSE,
             hint=_HINT,
         )
-    sys.stdout.write(f"\nFinding ({finding.kind}): {finding.summary}\n")
+    summary = "\n".join(
+        f"  {line}" for line in _escape_terminal_controls(finding.summary).splitlines()
+    )
+    sys.stdout.write(f"\nFinding ({finding.kind}):\n{summary}\n")
     for number, passage in enumerate(finding.passages, start=1):
         sys.stdout.write(
             f"\n  [{number}] {passage.scoped_id}, lines {passage.start}-{passage.end}:\n"
         )
-        for line in passage.text.split("\n"):
+        for line in _escape_terminal_controls(passage.text).split("\n"):
             sys.stdout.write(f"      {line}\n")
     sys.stdout.write("\n")
     for number in range(1, len(finding.passages) + 1):
@@ -61,9 +64,31 @@ def default_operator_decision(finding: Finding) -> Choice:
             )
         if answer == "a":
             return Choice(kind="keep_all")
-        if answer.isdigit() and 1 <= int(answer) <= len(finding.passages):
-            return Choice(kind="keep", kept=int(answer) - 1)
+        try:
+            choice = int(answer)
+        except ValueError:
+            choice = 0
+        if 1 <= choice <= len(finding.passages):
+            return Choice(kind="keep", kept=choice - 1)
         sys.stdout.write("Please answer with a number from the list, or 'a'.\n")
+
+
+def _escape_terminal_controls(text: str) -> str:
+    """Make control and non-printable characters visible in terminal output."""
+    escaped: list[str] = []
+    for char in text:
+        if char.isprintable() or char == "\n":
+            escaped.append(char)
+        else:
+            codepoint = ord(char)
+            escaped.append(
+                f"\\x{codepoint:02x}"
+                if codepoint <= 0xFF
+                else f"\\u{codepoint:04x}"
+                if codepoint <= 0xFFFF
+                else f"\\U{codepoint:08x}"
+            )
+    return "".join(escaped)
 
 
 __all__ = ["OperatorDecision", "default_operator_decision"]

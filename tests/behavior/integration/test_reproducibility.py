@@ -264,7 +264,7 @@ def test_changed_fragment_changes_only_its_block_and_the_header(
     canonical, head, state_root = _publish_repro_molecule(tmp_path)
     consumer = _make_consumer(tmp_path)
     _add(consumer, state_root, monkeypatch, canonical, head)
-    before = _constitution(consumer).decode().split("\n")
+    before = _constitution(consumer).decode().splitlines()
     assert stub_check.calls == 1
 
     new_head = _edit_fragment_in_publisher(tmp_path, state_root, canonical)
@@ -273,7 +273,7 @@ def test_changed_fragment_changes_only_its_block_and_the_header(
         _run_add(consumer, state_root, monkeypatch, source_url=canonical, revision=new_head)
         == 0
     )
-    after = _constitution(consumer).decode().split("\n")
+    after = _constitution(consumer).decode().splitlines()
     assert stub_check.calls == 2, "a changed fragment triggers exactly one new check"
 
     changed = [

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from spaex.behavior.decisions import DecisionsStoreError
 from spaex.behavior.fragment import BehaviorFragment, FragmentValidationError
 from spaex.behavior.orchestrate import CONSTITUTION_D_DIRNAME
+from spaex.behavior.render import RenderError
 from spaex.behavior.state import assess, diagnose
 from spaex.paths import SPAEX_DIRNAME, composed_constitution_path
 
@@ -42,8 +44,11 @@ def check_constitution_staleness(repo_root: Path) -> bool:
     if not fragments:
         return path.exists()
 
-    assessment = assess(
-        fragments, repo_root=repo_root, spaex_dir=repo_root / SPAEX_DIRNAME
-    )
-    existing = path.read_text(encoding="utf-8") if path.exists() else None
-    return diagnose(assessment, existing) != "current"
+    try:
+        assessment = assess(
+            fragments, repo_root=repo_root, spaex_dir=repo_root / SPAEX_DIRNAME
+        )
+        existing = path.read_text(encoding="utf-8") if path.exists() else None
+        return diagnose(assessment, existing) != "current"
+    except (DecisionsStoreError, RenderError):
+        return True
