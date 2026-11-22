@@ -36,7 +36,7 @@ One blank line separates blocks. No modality sections.
 
 ## R4 — The check call
 
-**Decision**: A new prompt `CHECK_PROMPT` (prompt version `3`). Input: fragments with every body line prefixed by its number. Output envelope: `{"type":"no_findings"}` or `{"type":"findings","findings":[{"kind":"contradiction"|"duplicate","summary":"…","passages":[{"fragment":"m/f","start":N,"end":M},…]}]}`. spaex parses with the existing sentinel envelope, validates passages (R3), and treats an unusable answer as spec 026 does (retry bounded, then `invalid-output`, exit 32).
+**Decision**: A new prompt `CHECK_PROMPT` (prompt version `3`). Input: fragments with every body line prefixed by its number. Output envelope: `{"type":"no_findings"}` or `{"type":"findings","findings":[{"kind":"contradiction"|"duplicate","summary":"…","passages":[{"fragment":"m/f","start":N,"end":M},…]}]}`. spaex parses with the existing sentinel envelope, validates passages (R3), and treats an unusable answer as an unusable compose answer today: `invalid-output`, exit 32.
 
 **Why**: Output is small, so the length-driven failures of spec 026 do not apply, and the model has no way to write constitution text.
 

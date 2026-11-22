@@ -54,7 +54,7 @@ The existing sentinel envelope `<<<SPAEX-COMPOSER-BEGIN>>> {json} <<<SPAEX-COMPO
 ## What spaex does with the answer
 
 - Parses and validates every passage (data-model.md); a finding with an invalid passage or fewer than two valid passages makes the answer unusable.
-- Unusable answers are retried within the 026 bounds, then fail with `invalid-output` (exit 32); runtime failures keep their categories (31, 33, 34, 35).
+- Unusable answers fail with `invalid-output` (exit 32), as an unusable compose answer does today; runtime failures keep their categories (31, 33, 34, 35). There is no retry in the invocation layer, so none is added here.
 - Findings whose key has a valid decision are dropped; the rest go to the operator one at a time.
 
 ## Large sets
