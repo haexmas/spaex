@@ -1,5 +1,7 @@
 # Contract: Batch/Merge Composition
 
+> **Superseded for format `version="2"` by [spec 030](../../030-verbatim-composition/spec.md)**: spaex now renders fragments verbatim and the model only checks for findings (ADR 0028). This document describes format version 1.
+
 Extends `specs/023-behavior-harness/contracts/composer-interface.md`. Everything in that document remains true of every individual call this contract describes — the sentinel format, Shape A/Shape B envelope, build fingerprints, failure categories and exit codes, and determinism aids are unchanged and are not repeated here. For a fragment set spanning multiple batches, this document adds the requirement for two or more **batch calls** followed by a bounded merge reduction. A fragment set that fits in one batch keeps the existing one-call path and has no merge call.
 
 ## When this contract applies

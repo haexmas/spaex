@@ -1,5 +1,7 @@
 # Contract: `.spaex/constitution.md` (Composed Constitution) Format
 
+> **Superseded for format `version="2"` by [spec 030](../../030-verbatim-composition/spec.md)**: spaex now renders fragments verbatim and the model only checks for findings (ADR 0028). This document describes format version 1.
+
 The single spaex-owned artifact at `<repo-root>/.spaex/constitution.md`. Produced by the Composer, committed by the developer, read by any agent runtime that has run the global bootstrap.
 
 ## File location
