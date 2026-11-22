@@ -66,9 +66,10 @@ def compute_source_hash(fragments: Sequence[BehaviorFragment]) -> str:
 
 def emit_rendered(text: str, *, target: Path) -> EmitOutcome:
     """Atomically write the rendered constitution; leave an identical file alone."""
-    if target.exists() and target.read_text(encoding="utf-8") == text:
+    encoded = text.encode("utf-8")
+    if target.exists() and target.read_bytes() == encoded:
         return EmitOutcome(path=target, changed=False)
-    _atomic_write(target, text)
+    _atomic_write(target, encoded)
     return EmitOutcome(path=target, changed=True)
 
 
@@ -96,10 +97,10 @@ def _source_record(fragment: BehaviorFragment) -> _SourceRecord:
     }
 
 
-def _atomic_write(path: Path, content: str) -> None:
+def _atomic_write(path: Path, content: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(content, encoding="utf-8")
+    tmp.write_bytes(content)
     os.replace(tmp, path)
 
 

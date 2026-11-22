@@ -211,7 +211,7 @@ class ParsedDocument:
 
 def parse(text: str) -> ParsedDocument:
     """Parse a version 2 composed constitution; raise `RenderError` if malformed."""
-    lines = text.split("\n")
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
     if lines and lines[-1] == "":
         lines.pop()
     header = _HEADER_RE.match(lines[0]) if lines else None

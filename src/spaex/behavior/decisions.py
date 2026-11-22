@@ -210,7 +210,7 @@ def save(path: Path, store: DecisionStore) -> None:
     """Atomic tmp+rename write of the whole store."""
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(store.as_json(), indent=2) + "\n", encoding="utf-8")
+    tmp.write_bytes((json.dumps(store.as_json(), indent=2) + "\n").encode("utf-8"))
     os.replace(tmp, path)
 
 
