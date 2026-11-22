@@ -64,7 +64,7 @@ While rewording the phasing-discipline bullet to remove content unrelated
 to this change, its pointer to `docs/plans/2026-08-26-haex-hive-design.md`
 was dropped: that document's "phase 0 → 7" model predates specs 007-023,
 and the personal-agent-plane work it partly described has since split into
-the separate `holzi` project. The underlying MUST-NOT-implement-ahead-of-
+the separate `haex-vault` project. The underlying MUST-NOT-implement-ahead-of-
 prerequisites rule is unchanged; only the stale citation is removed.
 
 Per the Governance section's own PATCH/MINOR/MAJOR taxonomy, this is a

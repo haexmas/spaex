@@ -12,7 +12,7 @@
 
 ## Summary
 
-Add an optional `install_hook` field to molecule-manifest v4. `spaex install` invokes each declared hook as a normal subprocess (arbitrary code execution, consumer-user permissions, full env inheritance) after atom materialization and before publishing the install.lock generation. Per-molecule `on_failure: "abort" | "warn"` selects between Spec-008 transaction rollback and continue-with-`hook_status`-recorded semantics. Global `--no-install-hooks` opt-out. Additive, backwards-compatible schema addition; existing molecules without the field remain valid. Target spaex 4.1.0 (MINOR bump). Concrete downstream unblock: graphify-first-authoring 1.0.3 lets three current consumers (haex-crdt, specifyr, holzi) stop maintaining a manual `.gitignore` line per repo.
+Add an optional `install_hook` field to molecule-manifest v4. `spaex install` invokes each declared hook as a normal subprocess (arbitrary code execution, consumer-user permissions, full env inheritance) after atom materialization and before publishing the install.lock generation. Per-molecule `on_failure: "abort" | "warn"` selects between Spec-008 transaction rollback and continue-with-`hook_status`-recorded semantics. Global `--no-install-hooks` opt-out. Additive, backwards-compatible schema addition; existing molecules without the field remain valid. Target spaex 4.1.0 (MINOR bump). Concrete downstream unblock: graphify-first-authoring 1.0.3 lets three current consumers (haex-crdt, specifyr, haex-vault) stop maintaining a manual `.gitignore` line per repo.
 
 This PR contains **only the Speckit design artifacts** for the feature. The
 implementation, tests, documentation updates, and Molecule version changes
