@@ -1,5 +1,14 @@
 # Changelog
 
+## [5.4.6](https://github.com/haexmas/spaex/compare/v5.4.5...v5.4.6) (2026-11-22)
+
+
+### Documentation
+
+* **spec-030:** address review findings ([6142b1d](https://github.com/haexmas/spaex/commit/6142b1d9121245065781383991ed9c573fa6a709))
+* **spec-030:** clarify verbatim rendering contract ([c326799](https://github.com/haexmas/spaex/commit/c32679931f351272ea95e50f924474f18b5c572d))
+* **spec-030:** spec for verbatim constitution composition ([dee8795](https://github.com/haexmas/spaex/commit/dee879541f092b47ff5cc861e69d98ced2b6c577))
+
 ## [5.4.5](https://github.com/haexmas/spaex/compare/v5.4.4...v5.4.5) (2026-11-22)
 
 
