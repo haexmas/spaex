@@ -1,6 +1,6 @@
 # ADR 0023: Parallel batch dispatch
 
-**Status**: Accepted
+**Status**: Superseded by ADR 0028
 **Date**: 2026-09-17
 
 ## Context

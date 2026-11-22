@@ -1,6 +1,6 @@
 # ADR 0022: Map-reduce Composer composition for reliability at scale
 
-**Status**: Accepted; merge-ceiling detail superseded by ADR 0024
+**Status**: Superseded by ADR 0028
 **Date**: 2026-09-16
 **Related**: ADR 0024 (independent merge ceiling)
 
