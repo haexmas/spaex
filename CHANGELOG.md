@@ -1,5 +1,25 @@
 # Changelog
 
+## [6.0.0](https://github.com/haexmas/spaex/compare/v5.5.0...v6.0.0) (2026-11-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* .spaex/constitution.md has format version 2 (fragment blocks instead of clauses); the first install asks the findings anew and removes clarifications.json and .stale; the map-reduce composer, the add-time plausibility mode, the composer-prompt override and the clause grammar are gone; the bootstrap block is version 4 (rerun spaex install --global); spaex status --json reports fragment_count, fragments_by_molecule, decision_count and excluded_passage_count instead of clause_counts.
+
+### Features
+
+* render the constitution verbatim and ask the operator about findings ([74e59b0](https://github.com/haexmas/spaex/commit/74e59b0288c82b42f0fa5286b9bc0ad567d1eb86))
+
+
+### Bug Fixes
+
+* **behavior:** address PR review findings ([e85530f](https://github.com/haexmas/spaex/commit/e85530feb67dcd4cf65bea7c9e2b797ed69cba13))
+* **behavior:** align regression checks with review fixes ([49b558a](https://github.com/haexmas/spaex/commit/49b558a5ec62a2a0a287db44811385449ef444bf))
+* **behavior:** clear remaining CI findings ([e9044c0](https://github.com/haexmas/spaex/commit/e9044c0e802fe670eceb2758b01d5d967ead5402))
+* **behavior:** normalize line endings in freshness checks ([d9f14b9](https://github.com/haexmas/spaex/commit/d9f14b964fdceaff1c3d49e7dc859204014280f9))
+* **behavior:** preserve LF output across platforms ([67a2817](https://github.com/haexmas/spaex/commit/67a2817923ea4441d62e911a4ce59d39ce0fbfe7))
+
 ## [5.5.0](https://github.com/haexmas/spaex/compare/v5.4.7...v5.5.0) (2026-11-22)
 
 
