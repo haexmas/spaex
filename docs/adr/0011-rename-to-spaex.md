@@ -15,7 +15,7 @@ Two forces converged on 2026-09-07:
 
 **Scope realignment**. The project's name embedded a `hive` metaphor implying
 multi-device swarm. That vision was previously split out into a separate
-project (`holzi`). What remains here is deliberately narrower: one repo, one
+project (`haex-vault`). What remains here is deliberately narrower: one repo, one
 device, a reproducible coding harness. The `hive` metaphor no longer describes
 the tool and would mislead new adopters.
 

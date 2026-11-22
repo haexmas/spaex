@@ -16,7 +16,7 @@ Concrete case that triggered this spec: [`graphify-first-authoring`](https://git
 - Interactively offers to `pip install graphifyy` when the `graphify` CLI is missing.
 - Runs `graphify install` (registers graphify with the operator's agent harness) when the local registration marker is absent.
 
-Consumers of that molecule today (haex-crdt, specifyr, holzi as of 2026-09-08) get the constitution but **none** of the above — `spaex install` ignores `install.py`. Each consumer has to remember to run it by hand. In practice they miss steps: two of the three consumers ended up without the `graphify-out/` gitignore line until it was fixed manually per repo.
+Consumers of that molecule today (haex-crdt, specifyr, haex-vault as of 2026-09-08) get the constitution but **none** of the above — `spaex install` ignores `install.py`. Each consumer has to remember to run it by hand. In practice they miss steps: two of the three consumers ended up without the `graphify-out/` gitignore line until it was fixed manually per repo.
 
 The fix: give `spaex install` a first-class way to invoke per-molecule setup scripts.
 
@@ -375,7 +375,7 @@ Ordered timeline:
 
 1. **spaex** — implement Spec 016 (schema extension, execution, tests). Merge PR against `main`. Bump `pyproject.toml` version 4.0.1.dev0 → 4.1.0. Publish 4.1.0 to PyPI.
 2. **atoms** — new PR against `haexmas/atoms/main` (branch-protected as of 2026-09-08). Adds `install_hook` field to `graphify-first-authoring/manifest.json`, bumps molecule to 1.0.3, bumps publisher root manifest's version pin for that molecule. CodeRabbit review, merge. Record new atoms SHA.
-3. **Consumers** — in each of haex-crdt/specifyr/holzi: `spaex add --revision <atoms-1.0.3-sha> https://github.com/haexmas/atoms com.github.haexmas.atoms.graphify-first-authoring`. The manual `.gitignore` fix from 2026-09-08 becomes redundant (idempotent, harmless). Commit + push in the existing PR branches (specifyr chore/adopt-spaex #13, holzi chore/adopt-spaex #13, haex-crdt chore/update-spaex #18 — or fresh PR if those are already merged).
+3. **Consumers** — in each of haex-crdt/specifyr/haex-vault: `spaex add --revision <atoms-1.0.3-sha> https://github.com/haexmas/atoms com.github.haexmas.atoms.graphify-first-authoring`. The manual `.gitignore` fix from 2026-09-08 becomes redundant (idempotent, harmless). Commit + push in the existing PR branches (specifyr chore/adopt-spaex #13, haex-vault chore/adopt-spaex #13, haex-crdt chore/update-spaex #18 — or fresh PR if those are already merged).
 
 Migration for other existing molecules (`speckit-session-hopper`): no action required. `install_hook` is optional; molecules without it keep working unchanged.
 

@@ -124,7 +124,7 @@ An operator new to the tool wants to install it without cloning a repo. They run
 - **FR-041**: README MUST use the tagline `# spaex — reproducible coding harnesses for any repo and development environment`.
 - **FR-042**: README MUST reference `pipx install spaex` as the primary install command. Development-install `pip install -e '.[dev]'` remains as a secondary path.
 - **FR-043**: README MUST mention that molecule authors can declare any atom category name they like (the schema treats category keys as open) and that `spaex install` places declared files under participating roots by convention. Common categories today are `constitution`, `slash_commands`, `agents`, `mcps`; new categories are added by convention without a schema change. Spec 014 makes **no** naming commitment for environment-config files (`flake.nix`, `Dockerfile`, `devcontainer.json`, `.envrc`, `shell.nix`, etc.); the multi-environment vocabulary and orchestration are the scope of Spec 015. README MAY note that Spec 015 is planned and link the placeholder design doc.
-- **FR-044**: README MUST NOT promise multi-device swarm functionality. That vision moves to a linked separate project (`holzi`).
+- **FR-044**: README MUST NOT promise multi-device swarm functionality. That vision moves to a linked separate project (`haex-vault`).
 - **FR-045**: A new ADR MUST be added (next free ADR number, likely 0011) recording the rename decision and pointing at Spec 014.
 
 **Release (US3)**

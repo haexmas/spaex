@@ -6,7 +6,7 @@
 
 1. Full rebrand of the project from `haex-hive` to `spaex`. Every layer moves: PyPI package name, Python package name, CLI binary, config filename, output directory, schema version field, min-version field, environment variable, GitHub repo. This is a v4 breaking change to the manifest vocabulary. Scope was set explicitly to "Layer 3" during design.
 2. First PyPI release under the new name at version `4.0.0`, distributed via `pipx install spaex`. GitHub Actions release workflow with PyPI Trusted Publishing (OIDC), no long-lived tokens.
-3. README rewrite to match the new brand and the reduced scope. The multi-device swarm vision moves out of this project (see [holzi](https://github.com/haexmas/holzi) for the personal-agent plane). spaex is now positioned as a single-repo, single-device reproducible coding harness.
+3. README rewrite to match the new brand and the reduced scope. The multi-device swarm vision moves out of this project (see [haex-vault](https://github.com/haex-space/haex-vault) for the personal-agent plane). spaex is now positioned as a single-repo, single-device reproducible coding harness.
 
 These three changes ship together because the PyPI release is only meaningful under the new name, and the README rewrite is only meaningful once the new name is real in the code.
 
@@ -14,7 +14,7 @@ These three changes ship together because the PyPI release is only meaningful un
 - [Spec 007: Unified Manifest v3](../../specs/007-unified-manifest-v2/spec.md): defines the v3 molecule model. Spec 014 bumps the schema-version field name and value to `spaex_version: "4"` without touching the structural shape.
 - [Spec 008: Install Transaction](../../specs/008-install-transaction/): unchanged in mechanics; the paths it writes (`.haex-hive/install.lock`, `.haex-hive/pending/`) rename to `.spaex/install.lock`, `.spaex/pending/`.
 - [Spec 013: `haex add` / `haex remove` and v3 vocabulary](../../specs/013-add-cli-and-molecule-rename/): landed 2026-09-06. Its `haex_hive_version: "3"` migrate output is the input for Spec 014's `v3_to_v4` transform.
-- `holzi` (out-of-tree, separate project): absorbs the personal-agent-plane and multi-device concerns that were previously part of the haex-hive vision. Spec 014's README rewrite drops that framing entirely.
+- `haex-vault` (out-of-tree, separate project): absorbs the personal-agent-plane and multi-device concerns that were previously part of the haex-hive vision. Spec 014's README rewrite drops that framing entirely.
 
 ## Motivation
 
@@ -289,7 +289,7 @@ Requires Python 3.10+ and Git 2.30+ on `$PATH`. Only runtime dependency is `json
 
 **Migration from haex-hive v3**: one paragraph. `pipx install spaex`, then `spaex migrate` at the repo root, then adopt every `.migrated` sibling, then `spaex install`. Old `.haex-hive.json` and `.haex-hive/` get deleted after adoption.
 
-**Multi-device vision**: one line pointing at [holzi](https://github.com/haexmas/holzi). No roadmap block for a swarm in this README.
+**Multi-device vision**: one line pointing at [haex-vault](https://github.com/haex-space/haex-vault). No roadmap block for a swarm in this README.
 
 ## Success criteria
 

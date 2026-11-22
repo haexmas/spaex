@@ -224,11 +224,11 @@ Single Python CLI project (unchanged from Specs 007 and 008):
 
 ## Implementation strategy
 
-**MVP path**: Phase 1 + Phase 2 + Phase 3 delivers the smallest viable slice that unblocks holzi (or any other v3 consumer). The v3 tool speaks v3 exclusively, refuses v2 with a migrate hint, and haex-hive's own repo self-installs under v3.
+**MVP path**: Phase 1 + Phase 2 + Phase 3 delivers the smallest viable slice that unblocks haex-vault (or any other v3 consumer). The v3 tool speaks v3 exclusively, refuses v2 with a migrate hint, and haex-hive's own repo self-installs under v3.
 
 **Incremental delivery**:
 
-1. Ship Phase 1 + Phase 2 + Phase 3 first. This unblocks holzi's `haex install` even without `haex add`/`haex remove` (operators can hand-edit `.haex-hive.json`).
+1. Ship Phase 1 + Phase 2 + Phase 3 first. This unblocks haex-vault's `haex install` even without `haex add`/`haex remove` (operators can hand-edit `.haex-hive.json`).
 2. Ship Phase 4 (`haex migrate` v2→v3) so downstream consumers on v2 can transition.
 3. Ship Phase 5 (`haex add`) so the one-line adoption UX lands.
 4. Ship Phase 6 (`haex remove`) as the symmetric counterpart.

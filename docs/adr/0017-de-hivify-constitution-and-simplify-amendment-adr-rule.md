@@ -15,7 +15,7 @@ against what they actually describe today surfaced two separate problems.
 
 **Stale multi-device framing.** ADR 0011 already narrowed spaex's scope to
 "one repo, one device"; the Nostr+iroh multi-device swarm vision moved to the
-separate `holzi` project. But several Core Principles, ratified before that
+separate `haex-vault` project. But several Core Principles, ratified before that
 narrowing (2026-08-26), still described that retired architecture:
 
 - Principle VII ("Relay Unavailability Never Blocks Local Work") is entirely
@@ -105,7 +105,7 @@ as-is. Deferred until a second consumer actually wants only that subset.
 
 - The constitution describes what spaex actually is and does today, not
   what its predecessor project envisioned in August 2026 before the hive
-  vision split into `holzi`.
+  vision split into `haex-vault`.
 - No principle's enforced behavior changes: this is a documentation-fidelity
   and packaging correction, not a policy relaxation, despite the MAJOR
   version bump (which the constitution's own rules require for any

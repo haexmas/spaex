@@ -20,7 +20,7 @@ A molecule author needs to configure the consumer repository beyond simply copyi
 
 With Story 1 landed, the molecule author declares one field in their manifest pointing at the script; `spaex install` invokes it after atoms are materialised. The consumer runs `spaex add <source> <molecule>` once and the molecule's full setup happens, including any interactive prompts the script needs (e.g. "install graphify CLI now? [Y/n]").
 
-**Why this priority**: this is the whole point of the feature. Without Story 1 the gap that motivated Spec 016 is not closed. The concrete downstream unblock is graphify-first-authoring 1.0.3, which lets three current consumers (haex-crdt, specifyr, holzi) stop maintaining a manual `.gitignore` line per repo.
+**Why this priority**: this is the whole point of the feature. Without Story 1 the gap that motivated Spec 016 is not closed. The concrete downstream unblock is graphify-first-authoring 1.0.3, which lets three current consumers (haex-crdt, specifyr, haex-vault) stop maintaining a manual `.gitignore` line per repo.
 
 **Independent Test**: create a fresh consumer repo with a seed `.spaex/manifest.json`; publish a minimal molecule whose manifest declares `install_hook` pointing at a script that writes a marker file outside the spaex-managed generation; run `spaex add`; verify the marker file exists in the consumer repo after `spaex add` returns.
 

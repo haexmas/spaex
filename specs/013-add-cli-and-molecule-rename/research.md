@@ -140,7 +140,7 @@ The spec left no `NEEDS CLARIFICATION` markers, so the entries below are the loa
 
 ## D11: Publisher-manifest bump timing for `haexmas/haex-hive` and `haexmas/atoms`
 
-**Decision**: haex-hive's own root `manifest.json` (currently v2) and `.haex-hive.json` (currently v2) are migrated to v3 within the same PR that ships this spec. The `haexmas/atoms` repository is already published at v3 (verified 2026-09-04 at revision `ff6fda2180563479497e0bd5a25144653d3175fb`); no change is needed there. Once this PR lands, `holzi` (or any other v3 consumer) can `haex install` at the v3 tool version and adopt the atoms-repo molecules directly.
+**Decision**: haex-hive's own root `manifest.json` (currently v2) and `.haex-hive.json` (currently v2) are migrated to v3 within the same PR that ships this spec. The `haexmas/atoms` repository is already published at v3 (verified 2026-09-04 at revision `ff6fda2180563479497e0bd5a25144653d3175fb`); no change is needed there. Once this PR lands, `haex-vault` (or any other v3 consumer) can `haex install` at the v3 tool version and adopt the atoms-repo molecules directly.
 
 **Rationale**: The pre-user policy lets us make the transition atomic. A PR that flipped the tool to v3 while leaving haex-hive's own manifests at v2 would break haex-hive's ability to install itself. Bundling the manifest migration into the same PR keeps the repository consistent at every commit boundary.
 

@@ -141,7 +141,7 @@ This vocabulary (compounds -> molecules -> atoms) is the clean-cut spaex format.
 
 ## Multi-device delegation
 
-Not part of spaex. That is a separate project: [holzi](https://github.com/haexmas/holzi) (Nostr + iroh + MCP agent plane, single-user first). spaex is deliberately scoped to one repo, one device.
+Not part of spaex. That is a separate project: [haex-vault](https://github.com/haex-space/haex-vault) (Nostr + iroh + MCP agent plane, single-user first). spaex is deliberately scoped to one repo, one device.
 
 ## Environment variable
 

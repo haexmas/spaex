@@ -108,4 +108,4 @@ Each is a candidate for its own future spec if a real use case surfaces.
 - **spaex**: 4.0.1.dev0 → 4.1.0 (MINOR bump; additive feature; backwards-compatible schema addition).
 - **molecule-manifest schema**: remains v4 (additive, non-breaking).
 - **haexmas/atoms graphify-first-authoring**: 1.0.2 → 1.0.3 (PATCH bump; adds `install_hook` field pointing at existing install.py; no logic change in the script itself).
-- **Consumers**: haex-crdt, specifyr, holzi repin to atoms-1.0.3 SHA once atoms lands.
+- **Consumers**: haex-crdt, specifyr, haex-vault repin to atoms-1.0.3 SHA once atoms lands.

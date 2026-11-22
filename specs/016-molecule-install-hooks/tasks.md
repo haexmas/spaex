@@ -224,7 +224,7 @@ Within each user story phase, tests (T019-T022, T025-T028, T032-T034, T036-T038,
 
 **Post-implementation** (out of this task list, in a follow-up PR against haexmas/atoms):
 - Bump `graphify-first-authoring` 1.0.2 → 1.0.3 with the `install_hook` field pointing at existing install.py. atoms PR against protected main.
-- Once atoms 1.0.3 SHA is known, in each of haex-crdt/specifyr/holzi: `spaex add --revision <new-sha>` in existing PR branches. Manual gitignore commits from 2026-09-08 become redundant (idempotent, harmless; can be removed in a follow-up).
+- Once atoms 1.0.3 SHA is known, in each of haex-crdt/specifyr/haex-vault: `spaex add --revision <new-sha>` in existing PR branches. Manual gitignore commits from 2026-09-08 become redundant (idempotent, harmless; can be removed in a follow-up).
 
 ## Format validation
 
