@@ -54,7 +54,7 @@ One blank line separates blocks. No modality sections.
 
 **Decision**: If the serialized payload fits the existing size limit (`composer/batching.py`), one call. Otherwise split by molecule into batches and run the check for every batch and every pair of batches, with the existing parallel dispatch.
 
-**Why**: Cross-batch findings are the case spec 026's merge step existed for; running pairs covers them without a merge step. haex-vault (60 KB) stays one call.
+**Why**: Cross-batch findings are the case spec 026's merge step existed for; running pairs covers them without a merge step. A set stays one call when its compact serialized UTF-8 payload is at most 150,000 bytes.
 
 **Rejected**: Dropping the limit (risks model context). A merge step over partial findings (needs the text again anyway).
 

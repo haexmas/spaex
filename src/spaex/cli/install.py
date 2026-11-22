@@ -336,13 +336,19 @@ def run(
                         remove_prev=True,
                     )
                     sys.stdout.write("no changes\n")
-                    _run_behavior_pipeline(
-                        repo_root=repo_root,
-                        state_root=state_root,
-                        resolved=resolved,
-                        project_local=project_local,
-                        local_plan=local_plan,
-                    )
+                    with _preserve_generation_for_behavior(
+                        repo_root,
+                        resolved,
+                        project_local,
+                        local_active=local_plan.active,
+                    ):
+                        _run_behavior_pipeline(
+                            repo_root=repo_root,
+                            state_root=state_root,
+                            resolved=resolved,
+                            project_local=project_local,
+                            local_plan=local_plan,
+                        )
                     local_scope.reconcile_exclusions(repo_root)
                     return exit_codes.SUCCESS
                 generation_context = _preserve_generation_for_behavior(
@@ -515,13 +521,19 @@ def run(
                     remove_prev=True,
                 )
                 sys.stdout.write("no changes\n")
-                _run_behavior_pipeline(
-                    repo_root=repo_root,
-                    state_root=state_root,
-                    resolved=resolved,
-                    project_local=project_local,
-                    local_plan=local_plan,
-                )
+                with _preserve_generation_for_behavior(
+                    repo_root,
+                    resolved,
+                    project_local,
+                    local_active=local_plan.active,
+                ):
+                    _run_behavior_pipeline(
+                        repo_root=repo_root,
+                        state_root=state_root,
+                        resolved=resolved,
+                        project_local=project_local,
+                        local_plan=local_plan,
+                    )
                 local_scope.reconcile_exclusions(repo_root)
                 return exit_codes.SUCCESS
 

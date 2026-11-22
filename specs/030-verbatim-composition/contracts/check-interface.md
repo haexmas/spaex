@@ -18,7 +18,7 @@ Replaces [023 `composer-interface.md`](../../023-behavior-harness/contracts/comp
 }
 ```
 
-Fragments are sorted by scoped id; `body` is the LF-canonicalized body, one line per fragment line prefixed `<n>: ` with `n` counting from 1 (compact, so a 60 KB fragment set stays one call); keys sorted, `ensure_ascii=False`, compact JSON.
+Fragments are sorted by scoped id; `body` is the LF-canonicalized body, one line per fragment line prefixed `<n>: ` with `n` counting from 1. A set is sent in one call when its compact JSON payload, encoded as UTF-8, is at most 150,000 bytes; larger sets are split into calls that stay within that limit. Keys are sorted, with `ensure_ascii=False` and compact JSON separators.
 
 ## Output
 

@@ -29,6 +29,7 @@ from spaex.behavior.fragment import (
     FragmentValidationError,
 )
 from spaex.behavior.materialize import project_local_from_config
+from spaex.behavior.passages import canonical_lines
 from spaex.cli.install import _load_consumer_manifest
 from spaex.constitution.resolve import ResolvedMolecule, resolve_install_inputs
 from spaex.io.state import default_state_root
@@ -158,7 +159,14 @@ def _check_build(
         )
         return 1
     existing = path.read_text(encoding="utf-8") if path.exists() else None
-    diagnosis = behavior_state.diagnose(assessment, existing)
+    try:
+        diagnosis = behavior_state.diagnose(assessment, existing)
+    except behavior_render.RenderError as exc:
+        sys.stdout.write(
+            "spaex constitution build --check: saved decisions conflict; "
+            f"{exc}\n"
+        )
+        return 1
     if diagnosis == "current":
         sys.stdout.write(
             "spaex constitution build --check: .spaex/constitution.md is current\n"
@@ -386,7 +394,7 @@ def run_constitution_trace(args: argparse.Namespace) -> int:
             ),
         )
     else:
-        matches = _phrase_matches(text, blocks, query)
+        matches = _phrase_matches(blocks, query, repo_root=repo_root)
 
     if not matches:
         return _emit_trace_result(fmt, matches=(), error=f"no fragment matches {query!r}")
@@ -408,24 +416,59 @@ class _TraceMatch:
 
 
 def _phrase_matches(
-    text: str, blocks: Sequence[behavior_render.ParsedBlock], phrase: str
+    blocks: Sequence[behavior_render.ParsedBlock],
+    phrase: str,
+    *,
+    repo_root: Path,
 ) -> list[_TraceMatch]:
-    lines = text.split("\n")
     found: list[_TraceMatch] = []
     for block in blocks:
-        for number in range(block.start_line, block.end_line + 1):
-            line = lines[number - 1]
+        molecule_id, _, fragment_id = block.scoped_id.partition("/")
+        fragment_path = (
+            repo_root
+            / ".spaex"
+            / CONSTITUTION_D_DIRNAME
+            / molecule_id
+            / f"{fragment_id}.md"
+        )
+        try:
+            fragment = BehaviorFragment.from_file(
+                fragment_path, molecule_id=molecule_id
+            )
+            lines = canonical_lines(fragment.body)
+        except (OSError, UnicodeError, FragmentValidationError):
+            lines = block.body.split("\n")
+            if lines and lines[-1] == "":
+                lines.pop()
+        excluded_offsets: list[tuple[int, int, tuple[str, ...]]] = []
+        prior_markers = 0
+        for exclusion in block.exclusions:
+            start = exclusion.file_start - block.start_line + 1 - prior_markers * 2
+            end = start + len(exclusion.text_lines) - 1
+            excluded_offsets.append((start, end, exclusion.kept))
+            prior_markers += 1
+        for source_number, line in enumerate(lines, start=1):
             if phrase not in line:
                 continue
             inside = next(
-                (e for e in block.exclusions if e.file_start < number < e.file_end), None
+                (
+                    (start, end, kept)
+                    for start, end, kept in excluded_offsets
+                    if start <= source_number <= end
+                ),
+                None,
             )
+            extra_markers = sum(
+                1 if start <= source_number <= end else 2 if end < source_number else 0
+                for start, end, _kept in excluded_offsets
+            )
+            number = block.start_line + source_number - 1 + extra_markers
             found.append(
                 _TraceMatch(
                     block,
                     line=number,
                     line_text=line,
-                    excluded_kept=inside.kept if inside is not None else None,
+                    excluded_kept=inside[2] if inside is not None else None,
                 )
             )
     return found

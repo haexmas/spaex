@@ -62,6 +62,7 @@ def excluded_ranges(
     """Ranges to comment out per fragment, overlapping ranges merged, in line order."""
     index = {fragment.scoped_id: fragment for fragment in fragments}
     per_fragment: dict[str, list[ExcludedRange]] = {}
+    kept_ranges: list[tuple[str, int, int, str]] = []
     for decision in sorted(decisions, key=lambda d: d.key):
         if decision.choice.kind != "keep":
             continue
@@ -75,6 +76,7 @@ def excluded_ranges(
                 )
             located.append((ref.scoped_id, span[0], span[1]))
         kept_id, kept_start, kept_end = located[decision.choice.kept or 0]
+        kept_ranges.append((kept_id, kept_start, kept_end, decision.key))
         kept_ref = f"{kept_id}:{kept_start}-{kept_end}"
         for position, (scoped_id, start, end) in enumerate(located):
             if position == decision.choice.kept:
@@ -88,6 +90,26 @@ def excluded_ranges(
                     decisions=(decision.key[:12],),
                 )
             )
+    for scoped_id, ranges in per_fragment.items():
+        for excluded in ranges:
+            conflicting = next(
+                (
+                    (start, end, key)
+                    for kept_id, start, end, key in kept_ranges
+                    if kept_id == scoped_id
+                    and start <= excluded.end
+                    and excluded.start <= end
+                ),
+                None,
+            )
+            if conflicting is not None:
+                start, end, key = conflicting
+                raise RenderError(
+                    f"decisions {key[:12]} and {', '.join(excluded.decisions)} "
+                    f"both keep and exclude {scoped_id} lines "
+                    f"{max(excluded.start, start)}-{min(excluded.end, end)}; "
+                    "edit .spaex/decisions.json and rerun `spaex install`"
+                )
     return {scoped_id: _merge(ranges) for scoped_id, ranges in per_fragment.items()}
 
 

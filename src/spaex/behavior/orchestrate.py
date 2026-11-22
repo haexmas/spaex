@@ -57,6 +57,8 @@ from spaex.constitution.resolve import ResolvedMolecule
 from spaex.git import molecule_store
 from spaex.io.transaction import CONSTITUTION_NAME
 from spaex.model.molecule_manifest import MoleculeManifest
+from spaex.util import exit_codes
+from spaex.util.errors import HaexError
 
 SPAEX_DIR = ".spaex"
 CONSTITUTION_D_DIRNAME = "constitution.d"
@@ -166,10 +168,17 @@ def run(
         # Decisions about passages that no longer exist are dropped, not kept around.
         store = replace(store, decisions={d.key: d for d in valid})
 
-        text = expected_text(fragments, valid, preamble=preamble)
         try:
+            text = expected_text(fragments, valid, preamble=preamble)
             verify(fragments, valid, text)
         except RenderError as exc:
+            if "both keep and exclude" in str(exc):
+                raise HaexError(
+                    message=f"saved operator decisions conflict: {exc}",
+                    diagnostic_key="behavior-clarification-required",
+                    exit_code=exit_codes.BEHAVIOR_SEMANTIC_REFUSE,
+                    hint="Edit `.spaex/decisions.json` to resolve the conflict, then rerun `spaex install`.",
+                ) from exc
             raise_for(
                 ComposerFailureCategory.INVALID_OUTPUT,
                 f"the rendered constitution does not carry every fragment verbatim: {exc}",
@@ -238,7 +247,10 @@ def _check_and_decide(
         resolve_composer_log_path(invoke_options or InvokeOptions(), repo_root)
     )
     findings = check_fragments(
-        assessment.fragments, repo_root=repo_root, options=invoke_options
+        assessment.fragments,
+        repo_root=repo_root,
+        options=invoke_options,
+        prompt_text=assessment.prompt_text,
     )
     decided = {decision.key for decision in assessment.valid}
     store = assessment.store
