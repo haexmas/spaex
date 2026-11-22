@@ -24,8 +24,8 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Write `docs/adr/0028-verbatim-composition.md` (context: measured condensing and nondeterminism; decision: spaex renders, model checks, operator decides, exclusions as comments; consequences: longer file, breaking format; supersedes ADRs 0022 to 0025) and mark ADRs 0022 to 0025 "Superseded by 0028"
-- [ ] T002 [P] Add a "Superseded for `version="2"` by specs/030" note at the top of `specs/023-behavior-harness/contracts/spaex-md-format.md` and `composer-interface.md`, and at the top of `specs/026-reliable-fragment-composition/contracts/batch-merge-composer-interface.md`
+- [x] T001 Write `docs/adr/0028-verbatim-composition.md` (context: measured condensing and nondeterminism; decision: spaex renders, model checks, operator decides, exclusions as comments; consequences: longer file, breaking format; supersedes ADRs 0022 to 0025) and mark ADRs 0022 to 0025 "Superseded by 0028"
+- [x] T002 [P] Add a "Superseded for `version="2"` by specs/030" note at the top of `specs/023-behavior-harness/contracts/spaex-md-format.md` and `composer-interface.md`, and at the top of `specs/026-reliable-fragment-composition/contracts/batch-merge-composer-interface.md`
 
 ---
 

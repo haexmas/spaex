@@ -1,5 +1,7 @@
 # Contract: Composer Interface
 
+> **Superseded for format `version="2"` by [spec 030](../../030-verbatim-composition/spec.md)**: spaex now renders fragments verbatim and the model only checks for findings (ADR 0028). This document describes format version 1.
+
 Defines how spaex invokes the LLM Composer, what the Composer's canonical system prompt requires, and what it returns.
 
 > **Spec 026 extension**: for a fragment set spanning more than one batch, [`../../026-reliable-fragment-composition/contracts/batch-merge-composer-interface.md`](../../026-reliable-fragment-composition/contracts/batch-merge-composer-interface.md) adds batch calls and a bounded merge reduction on top of everything below, which remains true of every individual call. A fragment set that fits in one batch is unaffected and keeps following this document alone.
