@@ -59,4 +59,4 @@ The existing sentinel envelope `<<<SPAEX-COMPOSER-BEGIN>>> {json} <<<SPAEX-COMPO
 
 ## Large sets
 
-Payloads above the size limit are split by molecule into batches; the check runs for every batch and every pair of batches (dispatched in parallel as in ADR 0023). Findings are merged by key.
+Payloads above the size limit are partitioned into fragment batches so each batch and each pair of batches stays within the byte limit; the check runs for every batch and every pair (dispatched in parallel as in ADR 0023). A fragment is never split across calls. Findings are merged by key.

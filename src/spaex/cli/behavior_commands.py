@@ -441,12 +441,10 @@ def _phrase_matches(
             if lines and lines[-1] == "":
                 lines.pop()
         excluded_offsets: list[tuple[int, int, tuple[str, ...]]] = []
-        prior_markers = 0
-        for exclusion in block.exclusions:
+        for prior_markers, exclusion in enumerate(block.exclusions):
             start = exclusion.file_start - block.start_line + 1 - prior_markers * 2
             end = start + len(exclusion.text_lines) - 1
             excluded_offsets.append((start, end, exclusion.kept))
-            prior_markers += 1
         for source_number, line in enumerate(lines, start=1):
             if phrase not in line:
                 continue

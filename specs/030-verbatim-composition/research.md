@@ -52,7 +52,7 @@ One blank line separates blocks. No modality sections.
 
 ## R6 — Large fragment sets
 
-**Decision**: If the serialized payload fits the existing size limit (`composer/batching.py`), one call. Otherwise split by molecule into batches and run the check for every batch and every pair of batches, with the existing parallel dispatch.
+**Decision**: If the compact serialized UTF-8 payload fits the 150,000-byte limit, one call. Otherwise partition whole fragments into batches so each batch and each pair of batches fits the limit, then check every batch and every pair with bounded parallel dispatch. A fragment is never split across calls.
 
 **Why**: Cross-batch findings are the case spec 026's merge step existed for; running pairs covers them without a merge step. A set stays one call when its compact serialized UTF-8 payload is at most 150,000 bytes.
 
