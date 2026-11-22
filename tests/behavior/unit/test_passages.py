@@ -52,6 +52,13 @@ def test_validate_range_rejects_cutting_a_fenced_block() -> None:
     assert validate_range(fragment, 6, 9).text.startswith("```sh")
 
 
+def test_validate_range_only_closes_with_a_matching_fence() -> None:
+    fragment = make_fragment("m", "f", "````\n```\nrule\n````\n")
+    with pytest.raises(PassageError, match="start inside"):
+        validate_range(fragment, 3, 3)
+    assert validate_range(fragment, 1, 4).text == "````\n```\nrule\n````"
+
+
 def test_locate_requires_exactly_one_line_aligned_occurrence() -> None:
     fragment = make_fragment("m", "f", "a\nb\na\nb\nc\n")
     assert locate(fragment, "b\nc") == (4, 5)

@@ -75,11 +75,12 @@ def test_render_is_deterministic_and_independent_of_input_order() -> None:
     assert _render([a, b]) == _render([b, a])
 
 
-def test_preamble_follows_the_header_line() -> None:
+def test_preamble_follows_the_notices() -> None:
     text = _render([make_fragment("m", "a", "one\n")], preamble="<!-- note -->\n")
     lines = text.split("\n")
-    assert lines[1] == "<!-- note -->"
-    assert lines[2] == "# spaex Behavior Harness"
+    assert lines[1] == "# spaex Behavior Harness"
+    assert lines[6] == "<!-- note -->"
+    assert lines[7] == ""
     verify([make_fragment("m", "a", "one\n")], [], text)
 
 
@@ -108,11 +109,12 @@ def test_keep_all_comments_out_nothing() -> None:
 
 def test_a_line_that_would_close_the_comment_is_escaped_and_restored() -> None:
     first = make_fragment("m", "a", "keep me\n")
-    second = make_fragment("m", "b", "start\n-->\nend\n")
-    decision = _decision(_ref("m/a", "keep me"), _ref("m/b", "start\n-->\nend"), kept=0)
+    source = "start --> inline\n-->\n--&gt;\n--&amp;gt;\nend\n"
+    second = make_fragment("m", "b", source)
+    decision = _decision(_ref("m/a", "keep me"), _ref("m/b", source.removesuffix("\n")), kept=0)
     text = _render([first, second], [decision])
     assert "--&gt;" in text
-    assert parse(text).blocks[1].body == "start\n-->\nend\n"
+    assert parse(text).blocks[1].body == source
     verify([first, second], [decision], text)
 
 

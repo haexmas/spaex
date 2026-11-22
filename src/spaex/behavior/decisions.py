@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from spaex.behavior.fragment import BehaviorFragment
-from spaex.behavior.passages import fragment_index, locate
+from spaex.behavior.passages import PassageError, fragment_index, locate, validate_range
 
 SCHEMA_VERSION = 1
 DECISIONS_FILENAME = "decisions.json"
@@ -68,7 +68,11 @@ class Choice:
         kind = obj.get("kind")
         if kind == "keep_all":
             return Choice(kind="keep_all")
-        if kind == "keep" and isinstance(obj.get("kept"), int):
+        if (
+            kind == "keep"
+            and isinstance(obj.get("kept"), int)
+            and not isinstance(obj.get("kept"), bool)
+        ):
             return Choice(kind="keep", kept=int(obj["kept"]))
         raise DecisionsStoreError(f"unknown choice {dict(obj)!r}")
 
@@ -98,8 +102,16 @@ class Decision:
     @staticmethod
     def from_json(key: str, obj: Mapping[str, Any]) -> Decision:
         try:
-            passages = tuple(PassageRef.from_json(p) for p in obj["passages"])
-            choice = Choice.from_json(obj["choice"])
+            raw_passages = obj["passages"]
+            if not isinstance(raw_passages, list) or any(
+                not isinstance(passage, Mapping) for passage in raw_passages
+            ):
+                raise DecisionsStoreError(f"decision {key!r}: passages must be a list of objects")
+            raw_choice = obj["choice"]
+            if not isinstance(raw_choice, Mapping):
+                raise DecisionsStoreError(f"decision {key!r}: choice must be an object")
+            passages = tuple(PassageRef.from_json(p) for p in raw_passages)
+            choice = Choice.from_json(raw_choice)
             if choice.kind == "keep" and not (
                 choice.kept is not None and 0 <= choice.kept < len(passages)
             ):
@@ -213,11 +225,22 @@ def valid_decisions(
     valid: list[Decision] = []
     for key in sorted(store.decisions):
         decision = store.decisions[key]
-        if all(
-            (fragment := index.get(ref.scoped_id)) is not None
-            and locate(fragment, ref.text) is not None
-            for ref in decision.passages
-        ):
+        retained = True
+        for ref in decision.passages:
+            fragment = index.get(ref.scoped_id)
+            if fragment is None:
+                retained = False
+                break
+            span = locate(fragment, ref.text)
+            if span is None:
+                retained = False
+                break
+            try:
+                validate_range(fragment, *span)
+            except PassageError:
+                retained = False
+                break
+        if retained:
             valid.append(decision)
     return tuple(valid)
 

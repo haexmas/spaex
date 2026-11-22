@@ -122,7 +122,7 @@ def test_check_prompt_override_and_hash(tmp_path: Path) -> None:
     assert load_effective_check_prompt(tmp_path).strip() == CHECK_PROMPT.strip()
     override = tmp_path / ".spaex" / "check-prompt.md"
     override.parent.mkdir()
-    override.write_text("custom\r\nprompt\r\n")
+    override.write_bytes(b"custom\r\nprompt\r\n")
     assert load_effective_check_prompt(tmp_path) == "custom\nprompt\n"
     assert effective_prompt_sha256("custom\r\nprompt") == effective_prompt_sha256(
         "custom\nprompt\n"

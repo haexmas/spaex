@@ -14,7 +14,7 @@ _Change fragments in `.spaex/constitution.d/` and re-run install. Text inside a 
 
 - `source_hash`: unchanged from spec 023 (canonical records of all fragments).
 - `build_input_hash`: sha256 of the format version and the valid decisions (key and choice, sorted by key). It contains no prompt or check data; the check state lives only in `decisions.json`.
-- Spec 029 preamble, when present, follows the notices as today.
+- Spec 029 preamble, when present, follows the title and notices, before the fragment blocks.
 
 ## Fragment blocks
 
@@ -41,7 +41,7 @@ A passage the operator did not keep stays at its place, replaced by one comment:
 ```
 
 - `kept` names the passage that was kept (several, comma-separated, if more than two passages were involved and one was kept).
-- The comment ends at the first line that is exactly `-->`. A line of the excluded text that is exactly `-->` is written as `--&gt;`; this is the only change to text, and only inside an exclusion.
+- The comment ends at the first line that is exactly `-->`. Inside excluded lines, `&` is written as `&amp;` and every `-->` as `--&gt;`, in that order. Parsing reverses both escapes, so literal entity-looking text and embedded or whole-line terminators round-trip exactly. These changes occur only inside an exclusion.
 - Overlapping exclusions are merged into one comment.
 
 ## Empty set
