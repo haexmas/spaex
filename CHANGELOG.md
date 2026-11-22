@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.5.0](https://github.com/haexmas/spaex/compare/v5.4.7...v5.5.0) (2026-11-22)
+
+
+### Features
+
+* **behavior:** add passages, decisions, verbatim rendering and the check parser ([663d9f4](https://github.com/haexmas/spaex/commit/663d9f47300205d37e91a0d59efbbdbdebcf2fa6))
+
+
+### Bug Fixes
+
+* **behavior:** address review findings in composition ([cb46600](https://github.com/haexmas/spaex/commit/cb46600563600d7ca0920c19fc23ca0443b2f7b3))
+
 ## [5.4.7](https://github.com/haexmas/spaex/compare/v5.4.6...v5.4.7) (2026-11-22)
 
 
