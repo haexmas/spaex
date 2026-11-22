@@ -12,7 +12,7 @@
 
 - **Fragment**: one constitution fragment file contributed by a molecule (spec 023), identified by its scoped id `<molecule-id>/<fragment-id>`.
 - **Composed constitution**: the single document an agent reads at the start of a session (`.spaex/constitution.md`, and the local document of spec 029).
-- **Verbatim**: the characters of a fragment body appear in the composed constitution exactly as in the fragment, with nothing summarized, reworded, reordered or dropped.
+- **Verbatim**: a fragment body is emitted without summarizing, rewording, reordering, trimming whitespace or dropping content. Line endings are canonicalized to LF for stable output across checkouts.
 - **Contradiction check**: the one step that still uses a language model. It reads the fragments, and either reports pairs that contradict each other or reports nothing. It never produces constitution text.
 - **Resolution**: the operator's persisted answer to a contradiction question (spec 023 clarifications).
 
@@ -104,7 +104,7 @@ An operator with a repo composed under the old format runs `spaex install` with 
 
 - A fragment body contains text that looks like a boundary marker. Boundary markers use the reserved `spaex-` comment form that spec 023 already rejects inside fragment bodies, so a fragment can never contain one.
 - A fragment declares a `modality` in its header. The header is kept visible next to the fragment, not used to move the fragment to another place; the body decides, as before.
-- Fragments do not end with a newline, or use different line endings. The rendering normalizes only what spec 023 already normalizes for hashing and adds exactly one blank line between fragments.
+- Fragments do not end with a newline, or use different line endings. Rendering canonicalizes CRLF and CR to LF, preserving all other body characters, including trailing whitespace and the number of trailing newlines. It adds separators outside the body. Hash normalization from spec 023 MUST NOT be reused for rendering because it also trims whitespace and trailing blank lines.
 - The contradiction check is unavailable (no runtime, timeout, bad output). The composed constitution does not depend on it, so it is still written in full and marked as not checked, and the operator is told (see FR-009).
 - The fragment set is empty. Behaviour as today (the composed file is absent, spec 023 FR-017d).
 - Two fragments say the same thing in different words. That is no longer a question: nothing is merged, both appear verbatim.
@@ -114,15 +114,15 @@ An operator with a repo composed under the old format runs `spaex install` with 
 
 ### Functional Requirements
 
-- **FR-001**: The composed constitution MUST contain the body of every fragment byte for byte, with nothing summarized, reworded, merged or omitted.
+- **FR-001**: The composed constitution MUST contain the complete body of every fragment, preserving all body characters except that CRLF and CR line endings are canonicalized to LF. It MUST NOT summarize, reword, trim whitespace, merge or omit body content.
 - **FR-002**: Each fragment MUST appear exactly once, introduced by a machine-readable boundary that names its scoped id, in an order determined only by the scoped ids.
-- **FR-003**: The text of the composed constitution MUST be produced by spaex itself, never by a language model, and MUST depend only on the fragments, the persisted resolutions and the format version.
+- **FR-003**: The text of the composed constitution, including any header metadata, MUST be produced by spaex itself, never by a language model, and MUST depend only on the fragments, the persisted resolutions and the format version. Contradiction-check prompt versions, results and check state MUST NOT affect the composed text.
 - **FR-004**: For the same fragments and resolutions, the composed constitution MUST be byte-identical across runs, machines and days.
 - **FR-005**: `spaex install` MUST NOT invoke a language model when the fragments, the resolutions and the contradiction-check prompt version are unchanged since the last completed check.
 - **FR-006**: The contradiction check MUST be the only use of a language model in composition. Its result MUST be either contradiction questions naming the fragments involved, or no findings; it MUST NOT be able to change, add or remove constitution text.
 - **FR-007**: A contradiction question MUST be handled as today: interactive prompt, persisted answer, documented non-zero exit when no operator can answer, and the answer invalidated when a fragment it concerns changes.
 - **FR-008**: Persisted resolutions MUST be rendered verbatim in a resolutions section of the composed constitution, each naming the scoped ids it concerns, after the fragments, in a deterministic order.
-- **FR-009**: When the contradiction check cannot run, `spaex install` MUST still write the full composed constitution, MUST say plainly that the contradiction check did not run, and MUST record that state so the next install retries; `spaex constitution build --check` MUST report the unchecked state.
+- **FR-009**: When the contradiction check cannot run, `spaex install` MUST still write the full composed constitution, MUST say plainly that the contradiction check did not run, and MUST record that state outside the composed constitution so the next install retries; `spaex constitution build --check` MUST report the unchecked state. Check state MUST NOT affect the composed constitution's text.
 - **FR-010**: Overlapping fragments MUST NOT cause questions or merging; only contradictions are questions.
 - **FR-011**: The composed constitution MUST carry format version 2 in its header; a file with another version MUST be treated as out of date and rewritten by `spaex install`.
 - **FR-012**: A mechanical completeness check MUST confirm after composing that every fragment body is present verbatim, and `spaex install` MUST fail without writing any tracked file if it is not (replaces the citation-based check).
@@ -147,8 +147,8 @@ An operator with a repo composed under the old format runs `spaex install` with 
 
 - **SC-001**: For the haex-vault fragment set (13 fragments from the coding, devshell and spaex molecules, about 930 lines), 100% of fragment lines appear in the composed constitution unchanged; today's compositions keep 10 to 12 of the 32 rules of the largest fragment.
 - **SC-002**: Three consecutive installs on an unchanged fragment set produce byte-identical composed files, and runs after the first make 0 language-model calls.
-- **SC-003**: After changing one fragment, the diff of the composed constitution is limited to that fragment's block (and its resolutions).
-- **SC-004**: A deliberately contradictory pair of fragments is reported as a question in 100% of 5 repeated runs, and the answer given appears verbatim in the composed constitution.
+- **SC-003**: After changing one fragment, the diff of the composed constitution is limited to that fragment's block, derived fingerprint metadata in the header, and any affected resolutions.
+- **SC-004**: A deliberately contradictory pair of fragments is reported as a question in 100% of 5 independent, uncached contradiction checks, and the answer given appears verbatim in the composed constitution.
 - **SC-005**: With the contradiction check made unavailable, install still finishes and writes a complete composed constitution in under 10 seconds for the haex-vault set, and reports the unchecked state.
 - **SC-006**: A repo with a version 1 file reaches version 2 with one `spaex install` and a second install changes nothing.
 - **SC-007**: `trace` and `status` produce correct output on a version 2 file for every fragment of the haex-vault set.
