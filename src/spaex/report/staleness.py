@@ -48,7 +48,7 @@ def check_constitution_staleness(repo_root: Path) -> bool:
         assessment = assess(
             fragments, repo_root=repo_root, spaex_dir=repo_root / SPAEX_DIRNAME
         )
-        existing = path.read_bytes().decode("utf-8") if path.exists() else None
+        existing = path.read_text(encoding="utf-8") if path.exists() else None
         return diagnose(assessment, existing) != "current"
     except (DecisionsStoreError, RenderError):
         return True

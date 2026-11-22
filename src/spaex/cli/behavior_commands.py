@@ -158,7 +158,7 @@ def _check_build(
             "no fragment is active; run `spaex constitution build` to remove it\n"
         )
         return 1
-    existing = path.read_bytes().decode("utf-8") if path.exists() else None
+    existing = path.read_text(encoding="utf-8") if path.exists() else None
     try:
         diagnosis = behavior_state.diagnose(assessment, existing)
     except behavior_render.RenderError as exc:
