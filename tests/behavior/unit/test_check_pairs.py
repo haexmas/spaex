@@ -164,13 +164,15 @@ def test_a_failing_group_call_fails_the_whole_check(tmp_path: Path) -> None:
         )
 
 
-def test_molecules_are_grouped_into_halves_of_the_ceiling() -> None:
-    groups = check_mod._group_by_molecule(
-        tuple(sorted(FRAGMENTS, key=lambda f: f.scoped_id)), _size(F["m2/b"]) + 5
-    )
+def test_groups_and_group_pairs_stay_within_the_payload_limit() -> None:
+    max_bytes = _size(*FRAGMENTS) - 1
+    groups = check_mod._group_fragments(FRAGMENTS, max_bytes)
 
     flattened = [f.scoped_id for group in groups for f in group]
     assert sorted(flattened) == sorted(F)
-    # A molecule is never split across groups.
-    for molecule in ("m1", "m2", "m3"):
-        assert sum(1 for g in groups if any(f.molecule_id == molecule for f in g)) == 1
+    assert all(_size(*group) <= max_bytes for group in groups)
+    assert all(
+        _size(*(groups[left] + groups[right])) <= max_bytes
+        for left in range(len(groups))
+        for right in range(left + 1, len(groups))
+    )

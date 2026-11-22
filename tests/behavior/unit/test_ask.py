@@ -114,7 +114,7 @@ def test_prompt_shows_kind_summary_and_both_passages_with_lines(
     default_operator_decision(_two())
 
     out = capsys.readouterr().out
-    assert "Finding (contradiction): they disagree" in out
+    assert "Finding (contradiction):\n  they disagree" in out
     assert "[1] m/a, lines 2-2:" in out
     assert "always use tabs" in out
     assert "[2] m/b, lines 1-1:" in out
@@ -133,7 +133,7 @@ def test_three_passage_prompt_says_the_others(
 
     out = capsys.readouterr().out
     assert "3: keep [3], comment out the others" in out
-    assert "Finding (duplicate): same rule" in out
+    assert "Finding (duplicate):\n  same rule" in out
 
 
 def test_multi_line_passage_text_is_shown_line_by_line(
