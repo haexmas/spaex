@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "checked": {
-    "source_hash": "849ce63ae53da5be37829a35045a6c9999a6bb93d1fb6439af5d779fc98cd8fc",
+    "source_hash": "26772b67eb0404d6062e9f62a027c333c4a97c765869d4c14b325dfd0e2de3dc",
     "prompt_hash": "aad1b9eb44b8d38d2bb92a30d9806c85710edad91159543012d0d3a0c686372a"
   },
   "decisions": {
@@ -46,27 +46,6 @@
       },
       "asked_at": "2026-11-22T23:36:39Z",
       "answered_at": "2026-11-22T23:36:39Z"
-    },
-    "fbd22043b9628a5a9f4f7074803d2f9bd138c34657cdadb0098d874f3904a648": {
-      "kind": "duplicate",
-      "summary": "Both fragments state that regenerating or writing the git-ignored graphify-out/ cache is not an authored change and may happen on the primary/tracked-branch checkout, restating the same carve-out twice.",
-      "passages": [
-        {
-          "scoped_id": "com.github.haexmas.atoms.general-coding/general-coding",
-          "text_hash": "0421d29a66af9b4bd036d22f6f6ce8bb307c0ee27e11ca3ea4090826cf90b9fe",
-          "text": "- Regenerating git-ignored tool output or caches (for example a code-graph\n  index such as `graphify-out/`) is not authoring a change. It may run in any\n  checkout, including the primary one."
-        },
-        {
-          "scoped_id": "com.github.haexmas.atoms.graphify-first-authoring/graphify-first-authoring",
-          "text_hash": "79b609889144ee4c93f9161437535d13bf7022ce43fb3e575bff9f4ad6237c00",
-          "text": "   - Where the project requires authoring in a linked worktree, the worktree you author in is a linked worktree and takes the snapshot path. The tracked-branch bootstrap and refresh below apply to a checkout on a tracked branch, typically the primary one. Their only write is the git-ignored `graphify-out/` cache, which is generated output: it is not part of any change and not an instruction artifact."
-        }
-      ],
-      "choice": {
-        "kind": "keep_all"
-      },
-      "asked_at": "2026-11-23T10:38:29Z",
-      "answered_at": "2026-11-23T10:38:29Z"
     }
   }
 }
